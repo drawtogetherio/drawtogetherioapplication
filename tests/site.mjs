@@ -39,15 +39,16 @@ async function signUp(page, name, status) {
 // ---- Landing ----
 const visitor = await newPage('visitor');
 await visitor.goto(base + '/');
-check(await visitor.getByRole('heading', { name: 'Drawing together with friends' }).isVisible(), 'landing headline');
+await visitor.getByRole('heading', { name: 'Drawing together with friends' }).waitFor().then(() => check(true, 'landing headline'), () => check(false, 'landing headline'));
 check(await visitor.locator('a.btn', { hasText: 'Open in browser' }).first().getAttribute('href') === '/app', 'Open in browser goes to /app');
+check(await visitor.locator('header').count() === 0, 'no top nav bar');
 check(await visitor.locator('.btn', { hasText: 'Download for Mac' }).count() >= 1 && await visitor.locator('.btn', { hasText: 'Download for Windows' }).count() >= 1, 'Mac and Windows download buttons');
 await visitor.screenshot({ path: `${out}/01-landing.png`, fullPage: true });
 const phone = await newPage('phone', { width: 390, height: 844 });
 await phone.goto(base + '/');
 await phone.screenshot({ path: `${out}/02-landing-phone.png`, fullPage: true });
 check(await phone.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll on a phone');
-await visitor.locator('header a', { hasText: 'Log in' }).click();
+await visitor.locator('.account-line a', { hasText: 'Log in' }).click();
 await visitor.waitForURL(/\/login/);
 await visitor.waitForSelector('#dev-name');
 await visitor.screenshot({ path: `${out}/03-login.png` });

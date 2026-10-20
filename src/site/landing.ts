@@ -2,20 +2,14 @@ import './site.css';
 import { api } from '../net/api';
 import { initTheme } from '../ui/theme';
 import { APPLE_SVG, GLOBE_SVG, WINDOWS_SVG, brandHtml } from './brand';
-import { esc, headerUser } from './common';
+import { esc } from './common';
 
 initTheme();
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform) || /Mac OS/.test(navigator.userAgent);
 
-const ICON = {
-  room: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="15" rx="3"/><path d="M12 8.5v7M8.5 12h7"/></svg>',
-  link: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
-  draw: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20c4-1 5-4 9-9l4-4 3 3-4 4c-5 4-8 5-9 9"/><path d="M15 6l3 3"/></svg>',
-};
-
 function downloadButton(os: 'mac' | 'windows', url: string | null | undefined) {
-  const label = os === 'mac' ? 'Download for Mac' : 'Download for Windows';
+  const label = `<span class="long">Download for </span>${os === 'mac' ? 'Mac' : 'Windows'}`;
   const icon = os === 'mac' ? APPLE_SVG : WINDOWS_SVG;
   if (url) return `<a class="btn" href="${esc(url)}">${icon}<span>${label}</span></a>`;
   return `<span class="btn" aria-disabled="true" title="The desktop app is on its way">${icon}<span>${label}</span><span class="soon">soon</span></span>`;
@@ -25,90 +19,46 @@ function render(downloads: { mac: string | null; windows: string | null } | unde
   const dl = isMac
     ? downloadButton('mac', downloads?.mac) + downloadButton('windows', downloads?.windows)
     : downloadButton('windows', downloads?.windows) + downloadButton('mac', downloads?.mac);
-  const ctas = `<a class="btn primary" href="/app">${GLOBE_SVG}<span>Open in browser</span></a>${dl}`;
 
   document.getElementById('site')!.innerHTML = `
-  <header class="site-header">
-    <div class="header-left">${brandHtml('/')}</div>
-    <div class="header-right" id="header-right"><a class="btn small primary" href="/login">Log in</a></div>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div class="hive-bg"></div>
-      <div class="hero-inner">
-        <div>
-          <span class="eyebrow">One canvas, all your friends</span>
-          <h1>Drawing together <em>with friends</em></h1>
-          <p class="lede">Start a room, send the link, and watch everyone’s strokes show up live on the same canvas.
-            Each person gets their own layers, so nobody draws over your work.</p>
-          <div class="cta-row">${ctas}</div>
-          <p class="cta-note">Works with Apple Pencil, Wacom and other pens, plus a mouse or finger.</p>
-        </div>
-        ${mockCanvas()}
-      </div>
-    </section>
-
-    <section class="section" id="how">
-      <h2>From “wanna draw?” to drawing in seconds</h2>
-      <p class="sub">No setup and no file juggling. Log in with Discord, make a room, and your friends are one click away.</p>
-      <div class="steps">
-        <div class="step">
-          <div class="step-icon">${ICON.room}</div>
-          <h3>Create a room</h3>
-          <p>Pick a canvas size, or go unlimited like a whiteboard, and you’re in.</p>
-        </div>
-        <div class="step">
-          <div class="step-icon">${ICON.link}</div>
-          <h3>Share the link</h3>
-          <p>Copy the invite link and drop it in your group chat or Discord server.</p>
-          <div class="share-demo"><span>doodlehive.net/app?room=k7mq2xpa</span><b>Copied</b></div>
-        </div>
-        <div class="step">
-          <div class="step-icon">${ICON.draw}</div>
-          <h3>Draw together</h3>
-          <p>See where friends are drawing, chat in the corner, and keep going whenever you like. Your canvases are saved.</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="features">
-        <div class="feature"><strong>Pen pressure</strong><span>Size and opacity follow your pen, with smoothing for clean lines.</span></div>
-        <div class="feature"><strong>Your own layers</strong><span>Everyone gets a folder in their favourite colour. Hosts can tidy up.</span></div>
-        <div class="feature"><strong>Draw alone too</strong><span>Private canvases for solo sketching, saved to your account.</span></div>
-        <div class="feature"><strong>Take it with you</strong><span>Export PNG, JPG or a layered PSD with everyone’s layers.</span></div>
-      </div>
-    </section>
-
-    <div class="cta-band">
-      <h2>Ready to doodle?</h2>
-      <p>Open Doodlehive in your browser now, or grab the desktop app.</p>
-      <div class="cta-row">${ctas}</div>
+  <main class="intro">
+    <div class="intro-brand">${brandHtml('/')}</div>
+    <h1>Drawing together with friends</h1>
+    <p class="lede">Make a room, send the link, and you’re all drawing on the same canvas.</p>
+    <div class="stage">
+      <div class="cta-row"><a class="btn primary" href="/app">${GLOBE_SVG}<span>Open in browser</span></a>${dl}</div>
+      ${scene()}
     </div>
+    <p class="account-line" id="account-line">Already have an account? <a href="/login">Log in</a></p>
   </main>
-
-  <footer class="site-footer">
-    <span>© ${new Date().getFullYear()} Doodlehive</span>
-    <span><a href="/app">Open app</a> · <a href="/login">Log in</a></span>
-  </footer>`;
+  <footer class="intro-footer">© ${new Date().getFullYear()} Doodlehive</footer>`;
 }
 
-function mockCanvas() {
+/** People drawing on one canvas. Bubble positions are percentages of the 960×540 scene. */
+function scene() {
   return `<div class="mock" aria-hidden="true">
-    <div class="mock-bar"><i></i><i></i><i></i></div>
-    <svg class="doodles" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
-      <path d="M70 210c18-60 52-92 92-88s48 52 18 70-62-8-40-40 82-40 112-10" fill="none" stroke="#2b2b33" stroke-width="5" stroke-linecap="round"/>
-      <path d="M232 92c24-14 56-8 70 14s2 52-22 58" fill="none" stroke="#e8578a" stroke-width="7" stroke-linecap="round"/>
-      <circle cx="300" cy="196" r="34" fill="#f4c25b" opacity=".85"/>
-      <path d="M286 192c4 6 10 8 16 6M290 182h.1M308 182h.1" fill="none" stroke="#2b1f04" stroke-width="4" stroke-linecap="round"/>
-      <path d="M120 250c30 8 70 6 104-4" fill="none" stroke="#3fbf7f" stroke-width="6" stroke-linecap="round"/>
+    <svg class="doodles" viewBox="0 0 960 540">
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="780" cy="150" r="58" fill="#f4c25b" stroke="#e8b13f" stroke-width="5"/>
+        <path d="M780 62v-22M780 238v22M692 150h-22M868 150h22M718 88l-15-15M842 88l15-15M718 212l-15 15M842 212l15 15" stroke="#e8b13f" stroke-width="6"/>
+        <path d="M760 140h.1M800 140h.1M762 166c10 10 26 10 36 0" stroke="#2b1f04" stroke-width="6"/>
+        <path d="M120 150c-20-20-40 5 0 30 40-25 20-50 0-30" stroke="#e8578a" stroke-width="5"/>
+        <path d="M210 430V320l65-58 65 58v110zM262 430v-50h30v50M300 340h24v22h-24z" stroke="#2b2b33" stroke-width="5"/>
+        <path d="M40 440C200 370 360 390 520 440S760 470 860 418" stroke="#3fbf7f" stroke-width="7"/>
+        <path d="M380 170C350 168 345 128 375 122 380 92 425 88 437 112 457 94 492 108 490 135 508 140 510 165 494 170" stroke="#5aa9ff" stroke-width="6"/>
+        <path d="M640 440c-4-30 2-50 0-80" stroke="#3fbf7f" stroke-width="5"/>
+        <circle cx="640" cy="316" r="14" stroke="#e8578a" stroke-width="5"/>
+        <circle cx="618" cy="338" r="14" stroke="#e8578a" stroke-width="5"/>
+        <path d="M662 324a14 14 0 1 1-2 28" stroke="#e8578a" stroke-width="5"/>
+        <circle cx="640" cy="338" r="8" fill="#f4c25b" stroke="none"/>
+      </g>
     </svg>
-    <div class="mock-bubble" style="--c:#e8578a;left:75%;top:52%"><b>M</b>Mochi</div>
-    <div class="mock-bubble" style="--c:#3fbf7f;left:56%;top:81%"><b>P</b>Pasta</div>
+    <div class="mock-bubble" style="--c:#5aa9ff;left:51.5%;top:31.5%"><b>K</b>Kiwi</div>
+    <div class="mock-bubble" style="--c:#e8578a;left:68.8%;top:65.2%"><b>M</b>Mochi</div>
+    <div class="mock-bubble" style="--c:#3fbf7f;left:89.6%;top:77.4%"><b>P</b>Pasta</div>
     <div class="mock-chat">
-      <span style="--c:#e8578a"><strong>Mochi</strong>add a sun?</span>
-      <span style="--c:#3fbf7f"><strong>Pasta</strong>on it ☀️</span>
+      <span style="--c:#e8578a"><strong>Mochi</strong>flowers by the house?</span>
+      <span style="--c:#5aa9ff"><strong>Kiwi</strong>on it, doing clouds</span>
     </div>
   </div>`;
 }
@@ -118,6 +68,9 @@ async function main() {
   render(cfg?.downloads);
   if (!cfg) return;
   const me = await api.me().catch(() => null);
-  if (me) document.getElementById('header-right')!.replaceChildren(headerUser(me));
+  if (me) {
+    document.getElementById('account-line')!.innerHTML =
+      `Signed in as ${esc(me.displayName)}. <a href="/app">Open your canvases</a>`;
+  }
 }
 main();
