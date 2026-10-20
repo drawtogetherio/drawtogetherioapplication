@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
 import { HANDLE_FOODS, HANDLE_WORDS, MyProfile, PublicProfile } from '../src/shared/profile.ts';
+import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 export const db = new DatabaseSync(config.dbPath);
@@ -48,10 +49,14 @@ db.exec(`
   );
 `);
 
+// Columns added after the first release.
+const userCols = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
+if (!userCols.includes('theme')) db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT '${DEFAULT_THEME}'`);
+
 export interface UserRow {
   id: string; provider: string; provider_id: string; handle: string; display_name: string;
   favorite_color: string; links: string; avatar: Uint8Array | null; avatar_type: string | null;
-  avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number;
+  avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
 }
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
@@ -71,7 +76,9 @@ export function publicProfile(u: UserRow): PublicProfile {
 }
 
 export function myProfile(u: UserRow): MyProfile {
-  return { ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as 'discord' | 'dev' };
+  // A premium theme falls back to the default once premium runs out.
+  const theme = canUseTheme(u.theme, isPremium(u)) ? u.theme : DEFAULT_THEME;
+  return { ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as 'discord' | 'dev', theme };
 }
 
 export function getUser(id: string): UserRow | undefined {

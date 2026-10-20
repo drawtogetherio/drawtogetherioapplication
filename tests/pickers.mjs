@@ -82,6 +82,21 @@ check(z1 > z0 * 2, `Z + drag zoomed in (${z0.toFixed(2)} → ${z1.toFixed(2)})`)
 check(await ed((e) => e.doc.log.length) <= 1, 'no paint was added while dragging the view');
 await page.screenshot({ path: `${out}/05-rotated-zoomed.png` });
 
+// ---- Themes ----
+const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+check(await accent() === '#f4c25b', 'default theme is Honey');
+await page.locator('[aria-label="Menu"]').click();
+await page.screenshot({ path: `${out}/06-menu-honey.png` });
+await page.locator('.theme-swatch[aria-label^="Lavender"]').click();
+check(await accent() === '#f4c25b', 'premium theme stays locked without premium');
+await page.locator('.theme-swatch[aria-label="Blueberry"]').click();
+check(await accent() === '#4f8cff', 'switching to Blueberry recolours the app');
+await page.reload();
+await page.waitForSelector('.modal');
+check(await accent() === '#4f8cff', 'theme is remembered after reload');
+await page.screenshot({ path: `${out}/07-blueberry.png` });
+await page.evaluate(() => localStorage.removeItem('doodlehive.theme'));
+
 console.log(errors.length ? 'Errors:\n' + errors.join('\n') : 'No page errors');
 await browser.close();
 process.exit(failed || errors.length ? 1 : 0);

@@ -1,9 +1,11 @@
 import './style.css';
 import { DrawDoc } from './core/document';
 import { App } from './ui/app';
+import { initTheme } from './ui/theme';
 import { setSaveHandler } from './io/platform';
 import { zipSingle } from './io/zip';
 
+initTheme();
 const root = document.getElementById('app')!;
 // Start with an unlimited canvas behind the first dialog so the app is usable immediately.
 const app = new App(root, DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' }));

@@ -5,13 +5,14 @@ import crypto from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, myProfile, publicProfile, sessionUser, UserRow,
+  createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isPremium, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
 import { createRoom, getRoom, roomsWithUser } from './rooms.ts';
 import {
   AVATAR_MAX_BYTES, LINK_PLATFORMS, isValidHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX } from '../src/shared/protocol.ts';
+import { THEMES, canUseTheme } from '../src/shared/themes.ts';
 
 type Req = http.IncomingMessage;
 type Res = http.ServerResponse;
@@ -168,7 +169,7 @@ async function route(req: Req, res: Res) {
     }
     if (b.favoriteColor !== undefined) {
       const c = normalizeColor(String(b.favoriteColor));
-      if (!c) throw new HttpError(400, 'Use a 6-digit hex colour like #4f8cff.', 'favoriteColor');
+      if (!c) throw new HttpError(400, 'Use a 6-digit hex colour like #f4c25b.', 'favoriteColor');
       sets.push('favorite_color = ?'); vals.push(c);
     }
     if (b.links !== undefined) {
@@ -180,6 +181,12 @@ async function route(req: Req, res: Res) {
         if (n) links[k] = n;
       }
       sets.push('links = ?'); vals.push(JSON.stringify(links));
+    }
+    if (b.theme !== undefined) {
+      const t = String(b.theme);
+      if (!THEMES.some((x) => x.id === t)) throw new HttpError(400, 'Unknown theme.', 'theme');
+      if (!canUseTheme(t, isPremium(u))) throw new HttpError(403, 'That theme is part of premium.', 'theme');
+      sets.push('theme = ?'); vals.push(t);
     }
     if (b.done === true) sets.push('needs_setup = 0');
     if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, u.id);

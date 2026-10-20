@@ -113,6 +113,8 @@ export interface MyProfile extends PublicProfile {
   /** True until the person has confirmed their profile once. */
   needsSetup: boolean;
   provider: 'discord' | 'dev';
+  /** App colour theme id (see shared/themes.ts). */
+  theme: string;
 }
 
 /** Avatars are stored at this size; they are only ever shown small. */

@@ -49,6 +49,13 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Layers with 17 blend modes, opacity, lock transparency, merge, clear; folders
 - Export PNG, JPG and layered PSD (folders become PSD groups)
 
+**Themes**
+- Default **Honey** (soft yellow) accent; switch in Menu → Theme. Saved to the account when logged in,
+  otherwise on the device.
+- Themes live in `src/shared/themes.ts` (accent, hover, tint, text-on-accent). Add one there and it
+  shows up in the menu. Themes flagged `premium` are locked without premium, and the server enforces it.
+  Blueberry (the old blue) is free; Lavender, Mint and Peach are flagged premium as examples.
+
 **Accounts (v0.2)**
 - Discord login creates the account; no passwords stored
 - First login opens profile setup: picture, display name, handle, favourite colour, links

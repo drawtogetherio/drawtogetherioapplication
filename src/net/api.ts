@@ -35,7 +35,7 @@ export const api = {
   devLogin: (name: string) => call<MyProfile>('POST', '/auth/dev', { name }),
   logout: () => call('POST', '/auth/logout'),
   discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
-  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean }>) =>
+  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string }>) =>
     call<MyProfile>('PATCH', '/api/me', patch),
   uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),

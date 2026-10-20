@@ -2,6 +2,7 @@ import { Point, Rect, dist, pointInPoly, polyPath, rectFromPoints, uid } from '.
 import { Selection } from '../core/model';
 import { Floating, liftSelection, transformPoly } from '../engine/transform';
 import type { Editor } from '../editor';
+import { accentColor } from '../ui/theme';
 import { PointerInfo, Tool } from './tool';
 
 interface Xform {
@@ -286,7 +287,7 @@ export class SelectTool implements Tool {
     const rotate = hs.find((h) => h.kind === 'rotate')!;
     const topMid = hs[1];
     const a = M.transformPoint(topMid.pos), b = M.transformPoint(rotate.pos);
-    ctx.strokeStyle = 'rgba(80,140,255,0.9)';
+    ctx.strokeStyle = accentColor();
     ctx.lineWidth = 1.5;
     ctx.setLineDash([]);
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -294,9 +295,9 @@ export class SelectTool implements Tool {
       const s = M.transformPoint(h.pos);
       ctx.beginPath();
       ctx.arc(s.x, s.y, h.kind === 'edge' ? 5 : 7, 0, Math.PI * 2);
-      ctx.fillStyle = h.kind === 'rotate' ? '#4f8cff' : '#fff';
+      ctx.fillStyle = h.kind === 'rotate' ? accentColor() : '#fff';
       ctx.fill();
-      ctx.strokeStyle = h.kind === 'rotate' ? '#fff' : '#4f8cff';
+      ctx.strokeStyle = h.kind === 'rotate' ? '#fff' : accentColor();
       ctx.lineWidth = 2;
       ctx.stroke();
     }

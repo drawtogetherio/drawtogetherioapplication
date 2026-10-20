@@ -16,7 +16,10 @@ import { Slider } from './slider';
 import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
-import { avatarEl, nameLine } from './people';
+import { avatarEl, badges, nameLine } from './people';
+import { THEMES, canUseTheme } from '../shared/themes';
+import { api } from '../net/api';
+import { applyTheme, theme } from './theme';
 import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } from './toolPicker';
 
 /** Tools whose button opens a drop-down when tapped while already selected. */
@@ -147,7 +150,37 @@ export class App {
   }
 
   /** Account section of the menu changes after login / logout. */
-  refreshAccount() { this.renderMenuDyn(); }
+  refreshAccount() {
+    // The account's saved theme wins over the one remembered on this device.
+    const me = this.ed.me;
+    if (me) applyTheme(canUseTheme(me.theme, me.premium) ? me.theme : null);
+    this.renderMenuDyn();
+  }
+
+  /** Swatches for the app colour theme. Premium themes are locked without premium. */
+  private themeRow(): HTMLElement {
+    const me = this.ed.me;
+    const row = h('div.theme-row', {}, h('div.menu-label', {}, 'Theme'));
+    for (const t of THEMES) {
+      const allowed = canUseTheme(t.id, !!me?.premium);
+      const title = t.name + (t.premium ? (allowed ? ' (premium)' : ' (premium only)') : '');
+      const b = h(`button.theme-swatch${t.id === theme().id ? '.active' : ''}${allowed ? '' : '.locked'}` as 'button', {
+        title, 'aria-label': title, style: `--sw:${t.accent}`, 'aria-pressed': String(t.id === theme().id),
+        onclick: async () => {
+          if (!allowed) { this.toast(`${t.name} is a premium theme`); return; }
+          applyTheme(t.id);
+          this.renderMenuDyn();
+          this.ed.view.requestRender();
+          if (me) {
+            try { this.ed.me = await api.updateMe({ theme: t.id }); } catch { this.toast('Couldn’t save your theme'); }
+          }
+        },
+      });
+      if (t.premium) b.append(badges(undefined, true));
+      row.append(b);
+    }
+    return row;
+  }
 
   /** Room dock (bottom right): connection state, members, chat, invite link. */
   refreshRoom() {
@@ -411,6 +444,7 @@ export class App {
         h('div.menu-sep'),
       );
     }
+    d.append(this.themeRow(), h('div.menu-sep'));
   }
 
   async newCanvas() {

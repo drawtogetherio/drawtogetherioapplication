@@ -96,7 +96,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     colorIn.addEventListener('input', () => { hexIn.value = colorIn.value; showErr('favoriteColor', ''); renderAvatar(); });
     hexIn.addEventListener('input', () => {
       const c = normalizeColor(hexIn.value);
-      if (c) { colorIn.value = c; showErr('favoriteColor', ''); renderAvatar(); } else showErr('favoriteColor', 'Use 6 hex digits, like #4f8cff (no transparency).');
+      if (c) { colorIn.value = c; showErr('favoriteColor', ''); renderAvatar(); } else showErr('favoriteColor', 'Use 6 hex digits, like #f4c25b (no transparency).');
     });
 
     // Links (usernames only)
