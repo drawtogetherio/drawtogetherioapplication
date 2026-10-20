@@ -80,7 +80,7 @@ export class App {
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
     const left = h('div.bar-group', {},
-      h('div.brand', {}, 'drawwith', h('span', {}, '.us')),
+      h('div.brand', {}, 'doodle', h('span', {}, 'hive')),
       menuBtn,
       btn('download', 'Export (Ctrl+Shift+E)', () => exportDialog(ed)),
       h('span.sep'),

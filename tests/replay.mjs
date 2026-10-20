@@ -13,7 +13,7 @@ await page.keyboard.press('m'); await m.move(450, 350); await m.down(); await m.
 await m.move(650, 500); await m.down(); await m.move(700, 560, { steps: 4 }); await m.up(); await page.keyboard.press('Enter');
 await page.keyboard.press('e'); await m.move(300, 500); await m.down(); await m.move(900, 450, { steps: 10 }); await m.up();
 const res = await page.evaluate(() => {
-  const ed = window.drawwithus.ed, Doc = ed.doc.constructor;
+  const ed = window.doodlehive.ed, Doc = ed.doc.constructor;
   const copy = new Doc({ ...ed.doc.settings });
   for (const op of ed.doc.log) copy.apply(JSON.parse(JSON.stringify(op)), { undoable: false });
   const px = (d) => { const l = d.layers[0].surface; const c = document.createElement('canvas'); c.width = 2048; c.height = 2048; const x = c.getContext('2d'); l.drawTo(x); return x.getImageData(0, 0, 2048, 2048).data; };

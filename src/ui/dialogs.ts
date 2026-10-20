@@ -95,7 +95,7 @@ export function exportDialog(ed: Editor) {
   ed.commitPending();
   const r = exportRect(ed.doc);
   let format: ExportFormat = 'png';
-  const name = h('input', { type: 'text', value: 'drawwithus-' + new Date().toISOString().slice(0, 10), 'aria-label': 'File name' });
+  const name = h('input', { type: 'text', value: 'doodlehive-' + new Date().toISOString().slice(0, 10), 'aria-label': 'File name' });
   const transparent = h('input', { type: 'checkbox' });
   const quality = h('input', { type: 'range', min: 50, max: 100, value: 92, 'aria-label': 'JPG quality' });
   const qualityRow = h('label.row', {}, 'JPG quality', quality);

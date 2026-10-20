@@ -6,7 +6,7 @@ await page.goto(process.argv[2] ?? 'http://localhost:4173/');
 await page.getByText('Create canvas').click();
 const r = await page.evaluate(async () => {
   const c = document.querySelector('canvas.stage');
-  const ed = window.drawwithus.ed;
+  const ed = window.doodlehive.ed;
   const fire = (type, id, x, y) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y, isPrimary: id === 1, bubbles: true, buttons: type === 'pointerup' ? 0 : 1 }));
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   // finger stroke

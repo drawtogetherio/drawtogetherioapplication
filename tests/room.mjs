@@ -30,7 +30,7 @@ async function person(name, color, target = url) {
   return page;
 }
 
-const ed = (page, fn, arg) => page.evaluate(([src, a]) => new Function('ed', 'a', `return (${src})(ed, a)`)(window.drawwithus.ed, a), [fn.toString(), arg]);
+const ed = (page, fn, arg) => page.evaluate(([src, a]) => new Function('ed', 'a', `return (${src})(ed, a)`)(window.doodlehive.ed, a), [fn.toString(), arg]);
 
 async function stroke(page, pts, hold = 0) {
   const box = await page.locator('canvas.stage').boundingBox();
@@ -53,7 +53,7 @@ await alice.locator('.home-card', { hasText: 'Start a shared room' }).click();
 await alice.fill('#room-name', 'Sketch night');
 await alice.getByText('Unlimited').first().click().catch(() => {});
 await alice.getByRole('button', { name: 'Create room' }).click();
-await alice.waitForFunction(() => window.drawwithus.ed.room?.status === 'open');
+await alice.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
 const roomId = await ed(alice, (e) => e.room.id);
 check(/^[a-z0-9]{8}$/.test(roomId), 'room created: ' + roomId);
 await alice.screenshot({ path: `${out}/01-alice-room.png` });
@@ -64,8 +64,8 @@ execSync(`npx tsx server/admin.ts premium ${aliceHandle} 30`, { stdio: 'ignore' 
 
 // ---- Bob joins by invite link ----
 const bob = await person('Bob', '#3fbf7f', `${url}?room=${roomId}`);
-await bob.waitForFunction(() => window.drawwithus.ed.room?.status === 'open');
-await alice.waitForFunction(() => window.drawwithus.ed.room.members.length === 2);
+await bob.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+await alice.waitForFunction(() => window.doodlehive.ed.room.members.length === 2);
 check(true, 'Bob joined; Alice sees 2 members');
 
 const folders = await ed(alice, (e) => [...e.doc.nodes.values()].filter((n) => n.kind === 'folder' && n.props.user).map((n) => n.props.owner));
@@ -81,7 +81,7 @@ const liveCount = await ed(bob, (e) => e.view.remoteLive.size);
 check(liveCount === 1, 'Bob sees Alice’s stroke while she draws');
 await bob.screenshot({ path: `${out}/02-bob-sees-bubble.png` });
 await pending;
-await bob.waitForFunction((id) => window.drawwithus.ed.doc.layer(id)?.surface.size > 0, aliceLayer);
+await bob.waitForFunction((id) => window.doodlehive.ed.doc.layer(id)?.surface.size > 0, aliceLayer);
 check(await ed(bob, (e) => e.view.remoteLive.size) === 0, 'live preview replaced by the real stroke');
 
 // ---- Permissions ----
@@ -90,7 +90,7 @@ check(!canEdit, 'Bob cannot edit Alice’s layer');
 const hostCan = await ed(alice, (e, id) => e.canEdit(id), bobLayer.id);
 check(hostCan, 'Alice (owner) can edit Bob’s layer');
 // Bob tries anyway via a raw op; server must reject it.
-await bob.evaluate((id) => window.drawwithus.ed.room.send({ type: 'op', op: { t: 'layer.props', id: 'hack1', layer: id, props: { visible: false } } }), aliceLayer);
+await bob.evaluate((id) => window.doodlehive.ed.room.send({ type: 'op', op: { t: 'layer.props', id: 'hack1', layer: id, props: { visible: false } } }), aliceLayer);
 await alice.waitForTimeout(400);
 check(await ed(alice, (e, id) => e.doc.layer(id).props.visible, aliceLayer), 'server rejects edits to someone else’s layer');
 
@@ -99,7 +99,7 @@ await stroke(alice, line(400, 500, 700, 520));
 await bob.waitForTimeout(300);
 const before = await ed(bob, (e, id) => e.doc.log.length, aliceLayer);
 await alice.keyboard.press('Control+z');
-await bob.waitForFunction((n) => window.drawwithus.ed.doc.log.length > n, before);
+await bob.waitForFunction((n) => window.doodlehive.ed.doc.log.length > n, before);
 check(true, 'Alice’s undo reached Bob');
 
 // ---- Chat + typing ----
@@ -155,7 +155,7 @@ const av = await alice.evaluate(async () => {
 });
 check(av.w === 128 && av.h === 128 && av.bytes < 48 * 1024, `avatar stored small: ${av.w}x${av.h} ${av.type} ${(av.bytes / 1024).toFixed(1)}KB (upload was ${(bigPng.length / 1024).toFixed(0)}KB)`);
 await alice.getByRole('button', { name: 'Save' }).click();
-await bob.waitForFunction(() => !!window.drawwithus.ed.room.members.find((m) => m.displayName.startsWith('Alice'))?.avatar, null, { timeout: 4000 })
+await bob.waitForFunction(() => !!window.doodlehive.ed.room.members.find((m) => m.displayName.startsWith('Alice'))?.avatar, null, { timeout: 4000 })
   .then(() => check(true, 'Bob sees Alice’s new picture'), () => check(false, 'Bob sees Alice’s new picture'));
 
 // ---- Kick ----
@@ -164,7 +164,7 @@ await alice.locator('.member-row', { hasText: 'Bob' }).click();
 await alice.getByRole('button', { name: 'Remove from room' }).click();
 await alice.getByRole('button', { name: 'Remove', exact: true }).click();
 await bob.waitForSelector('text=You were removed', { timeout: 4000 }).then(() => check(true, 'Bob sees he was removed'), () => check(false, 'Bob sees he was removed'));
-await alice.waitForFunction(() => window.drawwithus.ed.room.members.length === 1);
+await alice.waitForFunction(() => window.doodlehive.ed.room.members.length === 1);
 check(true, 'Alice’s member list updated');
 await bob.screenshot({ path: `${out}/07-bob-kicked.png` });
 

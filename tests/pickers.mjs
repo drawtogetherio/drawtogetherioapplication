@@ -11,7 +11,7 @@ const errors = [];
 let failed = 0;
 page.on('pageerror', (e) => errors.push(e.message));
 const check = (ok, msg) => { console.log((ok ? 'ok   ' : 'FAIL ') + msg); if (!ok) failed++; };
-const ed = (fn) => page.evaluate(`(${fn})(window.drawwithus.ed, window.drawwithus)`);
+const ed = (fn) => page.evaluate(`(${fn})(window.doodlehive.ed, window.doodlehive)`);
 
 await page.goto(url);
 await page.getByText('Create canvas').click();

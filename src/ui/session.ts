@@ -84,7 +84,7 @@ export class Session {
     }
     body.append(err);
     const offline = h('button.btn', {}, 'Draw offline');
-    close = modal('Welcome to drawwith.us', body, [offline], undefined, false);
+    close = modal('Welcome to Doodlehive', body, [offline], undefined, false);
     offline.addEventListener('click', () => { close(); this.setUrlRoom(null); newCanvasDialog((doc) => this.ed.setDoc(doc)); });
   }
 

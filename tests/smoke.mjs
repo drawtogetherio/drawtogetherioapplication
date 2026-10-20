@@ -77,7 +77,7 @@ await page.mouse.click(10, 300);
 await page.locator('.color-btn').click();
 await page.locator('.cp-swatch[title="#1e88e5"]').first().click();
 await page.mouse.click(10, 300);
-const st = await page.evaluate(() => { const a = window.drawwithus; a.ed.settings.brush.size = 60; return a.ed.doc.layers.length; });
+const st = await page.evaluate(() => { const a = window.doodlehive; a.ed.settings.brush.size = 60; return a.ed.doc.layers.length; });
 await page.mouse.move(cx - 260, cy); await page.mouse.down(); await page.mouse.move(cx + 260, cy, { steps: 20 }); await page.mouse.up();
 await page.getByTitle('Layers (L)').click();
 await page.screenshot({ path: `${out}/04-layers.png` });
@@ -103,7 +103,7 @@ for (const f of ['PNG', 'JPG', 'PSD (layers)']) {
   sizes[dl.suggestedFilename()] = fs.statSync(p).size;
 }
 const info = await page.evaluate(() => {
-  const d = window.drawwithus.ed.doc;
+  const d = window.doodlehive.ed.doc;
   return { layers: d.layers.map((l) => [l.props.name, l.props.blend, l.surface.size]), ops: d.log.map((o) => o.t), undo: d.history.canUndo };
 });
 console.log(JSON.stringify({ layersBefore: st, info, sizes, errors }, null, 1));

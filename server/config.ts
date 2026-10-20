@@ -25,6 +25,17 @@ const port = Number(env.PORT || 8787);
 const discordId = env.DISCORD_CLIENT_ID || '';
 const discordSecret = env.DISCORD_CLIENT_SECRET || '';
 
+/** server/data/doodlehive.db; an older database from before the rename is renamed to match. */
+function defaultDbPath() {
+  const dir = path.join(here, 'data');
+  const file = path.join(dir, 'doodlehive.db');
+  const old = path.join(dir, 'drawwithus.db');
+  if (!fs.existsSync(file) && fs.existsSync(old)) {
+    for (const ext of ['', '-wal', '-shm']) if (fs.existsSync(old + ext)) fs.renameSync(old + ext, file + ext);
+  }
+  return file;
+}
+
 export const config = {
   port,
   /** Public URL of this server (used for the Discord redirect). */
@@ -34,7 +45,7 @@ export const config = {
   discord: discordId && discordSecret ? { clientId: discordId, clientSecret: discordSecret } : null,
   /** Fake logins for local testing. On by default until Discord is configured. */
   devLogin: env.DEV_LOGIN ? env.DEV_LOGIN === '1' : !(discordId && discordSecret),
-  dbPath: env.DB_PATH || path.join(here, 'data', 'drawwithus.db'),
+  dbPath: env.DB_PATH || defaultDbPath(),
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
   secureCookies: (env.PUBLIC_URL || '').startsWith('https://'),
 };

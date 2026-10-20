@@ -280,7 +280,7 @@ setInterval(() => {
 wss.on('connection', (ws) => { const w = ws as typeof ws & { alive?: boolean }; w.alive = true; ws.on('pong', () => { w.alive = true; }); });
 
 server.listen(config.port, () => {
-  console.log(`drawwith.us server on ${config.publicUrl}`);
+  console.log(`Doodlehive server on ${config.publicUrl}`);
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID/SECRET in server/.env)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
 });

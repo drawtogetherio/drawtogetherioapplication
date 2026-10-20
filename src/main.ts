@@ -11,7 +11,7 @@ const app = new App(root, DrawDoc.create({ width: 2048, height: 2048, infinite: 
 app.session.start();
 
 // Expose for debugging and automated tests.
-(window as unknown as { drawwithus: App }).drawwithus = app;
+(window as unknown as { doodlehive: App }).doodlehive = app;
 
 // When running inside a claude.ai Artifact preview, downloads go through the host's save prompt.
 type Downloads = { save(r: { filename: string; data: Blob }): Promise<unknown> };

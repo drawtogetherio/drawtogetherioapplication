@@ -1,4 +1,6 @@
-# drawwith.us (working name)
+# Doodlehive
+
+https://doodlehive.net
 
 A drawing app for web, Windows, Mac and iPad where people can draw on the same canvas together.
 
@@ -27,9 +29,9 @@ npm run admin -- premium BurntoutPasta 30       # premium for 30 days (or "forev
 
 ### Discord login
 
-1. Create an application at https://discord.com/developers/applications.
+1. Create an application named **Doodlehive** at https://discord.com/developers/applications.
 2. Under **OAuth2**, add the redirect `http://localhost:8787/auth/discord/callback`
-   (in production: `https://your-domain/auth/discord/callback`).
+   (in production: `https://doodlehive.net/auth/discord/callback`, with `PUBLIC_URL=https://doodlehive.net`).
 3. Put the **Client ID** and **Client Secret** in `server/.env`. Never commit that file.
 4. Restart `npm run dev`. Dev login turns off automatically once Discord is configured
    (force it with `DEV_LOGIN=1` or `0`).
@@ -121,6 +123,6 @@ node tests/pickers.mjs http://localhost:4180/   # brush library, mode drop-downs
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev
-DB_PATH=/tmp/dw-test.db node tests/room.mjs   # 21 checks; screenshots in test-results/room/
+DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room/
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.
