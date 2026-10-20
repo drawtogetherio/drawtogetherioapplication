@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
-import { HANDLE_FOODS, HANDLE_WORDS, MyProfile, PublicProfile } from '../src/shared/profile.ts';
+import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isValidHandle, suggestHandle } from '../src/shared/profile.ts';
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -12,7 +12,7 @@ db.exec(`
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    provider TEXT NOT NULL,            -- 'discord' | 'dev'
+    provider TEXT NOT NULL,            -- 'discord' | 'dev' | 'guest'
     provider_id TEXT NOT NULL,
     handle TEXT NOT NULL,
     display_name TEXT NOT NULL,
@@ -105,13 +105,14 @@ export function publicProfile(u: UserRow): PublicProfile {
     // Premium extras only show while premium is active.
     gradient: isPremium(u) && u.gradient ? (u.gradient.split(',') as [string, string]) : null,
     avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
+    guest: u.provider === 'guest',
   };
 }
 
 export function myProfile(u: UserRow): MyProfile {
   // A premium theme falls back to the default once premium runs out.
   const theme = canUseTheme(u.theme, isPremium(u)) ? u.theme : DEFAULT_THEME;
-  return { ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as 'discord' | 'dev', theme };
+  return { ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme };
 }
 
 export function getUser(id: string): UserRow | undefined {
@@ -123,7 +124,7 @@ export function handleTaken(handle: string, exceptUser?: string) {
   return !!row && row.id !== exceptUser;
 }
 
-/** A free <Word><Food> handle, adding a number if every tried pair is taken. */
+/** A free <Word><Food> handle for a guest, adding a number if every tried pair is taken. */
 export function freeHandle(): string {
   for (let i = 0; i < 40; i++) {
     const h = HANDLE_WORDS[crypto.randomInt(HANDLE_WORDS.length)] + HANDLE_FOODS[crypto.randomInt(HANDLE_FOODS.length)];
@@ -135,12 +136,35 @@ export function freeHandle(): string {
   }
 }
 
-export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string, displayName: string): UserRow {
+/** `base` if it's free, otherwise base2, base3… (trimmed to fit), so new accounts start with their own name. */
+export function freeHandleLike(base: string): string {
+  const b = suggestHandle(base) || 'artist';
+  if (!handleTaken(b)) return b;
+  for (let n = 2; ; n++) {
+    const tail = String(n);
+    const h = (b.slice(0, HANDLE_MAX - tail.length).replace(/\.+$/, '') || 'artist') + tail;
+    if (isValidHandle(h) && !handleTaken(h)) return h;
+  }
+}
+
+/**
+ * Log in (or sign up) through Discord or dev login. New accounts get a handle based on their
+ * Discord username (`handleHint`), which they can change during profile setup.
+ */
+export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string, displayName: string, handleHint: string): UserRow {
   const existing = db.prepare(`SELECT ${USER_COLS} FROM users WHERE provider = ? AND provider_id = ?`).get(provider, providerId) as UserRow | undefined;
   if (existing) return existing;
   const id = newId('u_');
   db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, provider, providerId, freeHandle(), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now());
+    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, provider, providerId, freeHandleLike(handleHint), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now());
+  return getUser(id)!;
+}
+
+/** Someone joining a room without logging in: random handle, straight in (no profile setup). */
+export function createGuest(displayName: string): UserRow {
+  const id = newId('u_');
+  db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, needs_setup, created_at)
+    VALUES (?, 'guest', ?, ?, ?, ?, 0, ?)`).run(id, id, freeHandle(), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now());
   return getUser(id)!;
 }
 

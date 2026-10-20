@@ -6,12 +6,12 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isPremium, myProfile, publicProfile, sessionUser, UserRow,
+  createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isPremium, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
 import { createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser } from './rooms.ts';
 import { FriendError, acceptFriend, listFriends, removeFriend, requestFriend, touch } from './social.ts';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, isValidHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX } from '../src/shared/protocol.ts';
 import { THEMES, canUseTheme } from '../src/shared/themes.ts';
@@ -67,6 +67,13 @@ function requireUser(req: Req): UserRow {
   const u = sessionUser(cookies(req)[COOKIE]);
   if (!u) throw new HttpError(401, 'Please log in.');
   touch(u.id);
+  return u;
+}
+
+/** Logged in with an account (not a guest). Guests can draw in rooms they're invited to, nothing more. */
+function requireMember(req: Req, what: string): UserRow {
+  const u = requireUser(req);
+  if (u.provider === 'guest') throw new HttpError(403, `Log in with Discord to ${what}.`);
   return u;
 }
 
@@ -168,7 +175,7 @@ async function route(req: Req, res: Res) {
     if (!me.ok) return redirect(res, failed);
     const d = await me.json() as { id: string; username: string; global_name?: string | null };
     const name = sanitizeDisplayName(d.global_name || d.username).slice(0, 32) || 'Artist';
-    const user = findOrCreateUser('discord', d.id, name);
+    const user = findOrCreateUser('discord', d.id, name, d.username);
     login(res, user);
     setCookie(res, 'dw_oauth', '', 0);
     return redirect(res, config.clientUrl + next);
@@ -179,7 +186,17 @@ async function route(req: Req, res: Res) {
     const name = sanitizeDisplayName(String(b.name ?? ''));
     const err = validateDisplayName(name);
     if (err) throw new HttpError(400, err, 'name');
-    const user = findOrCreateUser('dev', name.toLowerCase(), name);
+    const user = findOrCreateUser('dev', name.toLowerCase(), name, name);
+    login(res, user);
+    return json(res, 200, myProfile(user));
+  }
+  // Join a room without an account: a guest with a random handle.
+  if (p === '/auth/guest' && m === 'POST') {
+    const b = await jsonBody(req);
+    const name = sanitizeDisplayName(String(b.name ?? ''));
+    const err = validateDisplayName(name);
+    if (err) throw new HttpError(400, err, 'name');
+    const user = createGuest(name);
     login(res, user);
     return json(res, 200, myProfile(user));
   }
@@ -204,9 +221,14 @@ async function route(req: Req, res: Res) {
       sets.push('display_name = ?'); vals.push(name);
     }
     if (b.handle !== undefined && b.handle !== u.handle) {
-      const h = String(b.handle);
-      if (!isValidHandle(h)) throw new HttpError(400, 'Handles are a word plus a food, like BurntoutPasta.', 'handle');
-      if (handleTaken(h, u.id)) throw new HttpError(409, 'Someone already has that handle. Try another pair.', 'handle');
+      const h = String(b.handle).trim().replace(/^@/, '');
+      if (u.provider === 'guest') {
+        if (!isRandomHandle(h)) throw new HttpError(403, 'Log in with Discord to pick your own handle.', 'handle');
+      } else {
+        const herr = handleError(h);
+        if (herr) throw new HttpError(400, herr, 'handle');
+      }
+      if (handleTaken(h, u.id)) throw new HttpError(409, `@${h} is taken. Try another.`, 'handle');
       sets.push('handle = ?'); vals.push(h);
     }
     if (b.favoriteColor !== undefined) {
@@ -274,11 +296,16 @@ async function route(req: Req, res: Res) {
     notifyRooms(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
-  if (p === '/api/handle/random' && m === 'GET') { requireUser(req); return json(res, 200, { handle: freeHandle() }); }
+  if (p === '/api/handle/random' && m === 'GET') {
+    if (requireUser(req).provider !== 'guest') throw new HttpError(403, 'Pick any handle you like.');
+    return json(res, 200, { handle: freeHandle() });
+  }
   if (p === '/api/handle/check' && m === 'GET') {
     const u = requireUser(req);
-    const h = url.searchParams.get('h') ?? '';
-    return json(res, 200, { valid: isValidHandle(h), available: isValidHandle(h) && !handleTaken(h, u.id) });
+    const h = (url.searchParams.get('h') ?? '').trim().replace(/^@/, '');
+    const error = handleError(h);
+    const available = !error && !handleTaken(h, u.id);
+    return json(res, 200, { valid: !error, available, error: error ?? (available ? null : `@${h} is taken.`) });
   }
   let mm = /^\/avatars\/([\w-]+)$/.exec(p);
   if (mm && m === 'GET') {
@@ -298,14 +325,14 @@ async function route(req: Req, res: Res) {
   // ---- Friends ----
   if (p === '/api/friends' && m === 'GET') return json(res, 200, listFriends(requireUser(req).id));
   if (p === '/api/friends' && m === 'POST') {
-    const u = requireUser(req);
+    const u = requireMember(req, 'add friends');
     const b = await jsonBody(req);
     try { return json(res, 200, { result: requestFriend(u, String(b.handle ?? '')), ...listFriends(u.id) }); }
     catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message, 'handle'); throw e; }
   }
   mm = /^\/api\/friends\/([\w-]+)(\/accept)?$/.exec(p);
   if (mm && (m === 'POST' || m === 'DELETE')) {
-    const u = requireUser(req);
+    const u = requireMember(req, 'add friends');
     try {
       if (m === 'POST' && mm[2]) acceptFriend(u.id, mm[1]);
       else if (m === 'DELETE' && !mm[2]) removeFriend(u.id, mm[1]);
@@ -324,7 +351,7 @@ async function route(req: Req, res: Res) {
 
   // ---- Rooms ----
   if (p === '/api/rooms' && m === 'POST') {
-    const u = requireUser(req);
+    const u = requireMember(req, 'make your own canvases');
     const b = await jsonBody(req);
     const s = (b.settings ?? {}) as Record<string, unknown>;
     const infinite = !!s.infinite;

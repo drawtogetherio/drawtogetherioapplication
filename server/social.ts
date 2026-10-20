@@ -52,6 +52,7 @@ export function requestFriend(me: UserRow, handle: string): 'requested' | 'accep
   const them = db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(handle) = lower(?)`).get(h) as UserRow | undefined;
   if (!them) throw new FriendError(404, `No one has the handle @${h}.`);
   if (them.id === me.id) throw new FriendError(400, 'That’s you!');
+  if (them.provider === 'guest') throw new FriendError(400, `@${them.handle} is a guest. Guests can’t be added as friends.`);
   const existing = row(me.id, them.id);
   if (existing?.accepted) throw new FriendError(409, `You’re already friends with ${them.display_name}.`);
   if (existing && existing.requested_by === me.id) throw new FriendError(409, 'Request already sent.');

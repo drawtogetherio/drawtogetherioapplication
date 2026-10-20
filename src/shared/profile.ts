@@ -17,20 +17,40 @@ export const HANDLE_FOODS = [
   'Hotdog', 'Pizza', 'Scone', 'Crumpet', 'Kimchi', 'Tamale', 'Empanada', 'Flan', 'Risotto', 'Dango',
 ] as const;
 
-const HANDLE_RE = new RegExp(`^(${HANDLE_WORDS.join('|')})(${HANDLE_FOODS.join('|')})(\\d{0,4})$`);
+const RANDOM_HANDLE_RE = new RegExp(`^(${HANDLE_WORDS.join('|')})(${HANDLE_FOODS.join('|')})(\\d{0,4})$`);
 
+/** Guests (people who join a room without logging in) get a random <Word><Food> handle. */
 export function randomHandle(rand: () => number = Math.random): string {
   const w = HANDLE_WORDS[Math.floor(rand() * HANDLE_WORDS.length)];
   const f = HANDLE_FOODS[Math.floor(rand() * HANDLE_FOODS.length)];
   return w + f;
 }
 
-/** "BurntoutPasta" or "BurntoutPasta42" (a number is added when the pair is taken). */
-export function isValidHandle(h: string) { return HANDLE_RE.test(h); }
+/** "BurntoutPasta" or "BurntoutPasta42": the guest handle format. */
+export function isRandomHandle(h: string) { return RANDOM_HANDLE_RE.test(h); }
 
-export function splitHandle(h: string): { word: string; food: string; num: string } | null {
-  const m = HANDLE_RE.exec(h);
-  return m ? { word: m[1], food: m[2], num: m[3] } : null;
+export const HANDLE_MIN = 2;
+export const HANDLE_MAX = 24;
+
+/**
+ * Handles people with an account pick themselves: 2–24 letters, numbers, underscores and
+ * periods, like Discord usernames. No period at the start or end, and no two in a row.
+ * Returns an error message, or null when the handle is fine. Uniqueness ignores case.
+ */
+export function handleError(h: string): string | null {
+  if (h.length < HANDLE_MIN) return `Use at least ${HANDLE_MIN} characters.`;
+  if (h.length > HANDLE_MAX) return `Keep it to ${HANDLE_MAX} characters or fewer.`;
+  if (!/^[A-Za-z0-9_.]+$/.test(h)) return 'Use letters, numbers, underscores and periods only.';
+  if (/^\.|\.$|\.\./.test(h)) return 'Periods can’t start or end a handle, or sit next to each other.';
+  return null;
+}
+
+export function isValidHandle(h: string) { return handleError(h) === null; }
+
+/** Turn a Discord username (or any name) into a handle suggestion, or '' if nothing usable is left. */
+export function suggestHandle(name: string): string {
+  const h = name.normalize('NFKD').replace(/[^A-Za-z0-9_.]/g, '').replace(/\.{2,}/g, '.').replace(/^\.+|\.+$/g, '').slice(0, HANDLE_MAX).replace(/\.+$/, '');
+  return h.length >= HANDLE_MIN ? h : '';
 }
 
 export const DISPLAY_NAME_MAX = 32;
@@ -121,12 +141,14 @@ export interface PublicProfile {
   gradient: [string, string] | null;
   /** Premium: animated (GIF) picture URL, or null. `avatar` stays a small still version. */
   avatarAnimated: string | null;
+  /** Joined a room without logging in: random handle, no friends or saved canvases. */
+  guest: boolean;
 }
 
 export interface MyProfile extends PublicProfile {
   /** True until the person has confirmed their profile once. */
   needsSetup: boolean;
-  provider: 'discord' | 'dev';
+  provider: 'discord' | 'dev' | 'guest';
   /** App colour theme id (see shared/themes.ts). */
   theme: string;
 }

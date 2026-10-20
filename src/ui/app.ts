@@ -463,7 +463,8 @@ export class App {
       }
       d.append(item('home', 'Back to home', () => s.leaveRoom()));
     } else if (me) {
-      d.append(item('home', 'Home', () => s.showHome()), item('plus', 'Create new…', () => s.createNew()));
+      d.append(item('home', 'Home', () => s.showHome()));
+      if (!this.ed.me?.guest) d.append(item('plus', 'Create new…', () => s.createNew()));
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }

@@ -66,11 +66,15 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 **Accounts (v0.2)**
 - Discord login creates the account; no passwords stored
 - First login opens profile setup: picture, display name, handle, favourite colour, links
-- Handles are always `<ArtWord><Food>` (e.g. `@BurntoutPasta`, `@ArtblockedSandwich`), pre-generated
-  and changeable with two pickers + Shuffle. A number is added only when the random pick keeps landing on taken pairs (2,500 combos).
+- Handles: people with an account pick any free handle (2–24 letters, numbers, `_` and `.`, unique
+  ignoring case), with a live availability check. New Discord accounts start with their Discord username
+  (plus a number if it's taken).
+- Guests: someone opening an invite link can **Join as guest** without Discord. They get a random
+  `<ArtWord><Food>` handle (e.g. `@BurntoutPasta`), can draw in rooms they're invited to, and can't make
+  canvases, add friends or choose a handle.
 - Display names: anything up to 32 characters. Zalgo/stacked accents, invisible and control
   characters, and fancy-Unicode tricks are cleaned out (checked on the server too).
-- Pictures are cropped to a 128×128 square and compressed (WebP, ~1–10 KB) in the browser before
+- Uploading a picture opens a cropper (drag to move; slider, scroll or pinch to zoom), then it's cut to a 128×128 square and compressed (WebP, ~1–10 KB) in the browser before
   upload; animated images become static. The server rejects anything over 48 KB.
 - Links to Twitter, Instagram, YouTube, DeviantArt, Bluesky, Twitch, ArtStation, TikTok, Tumblr,
   pixiv: just a typed username, nothing connected.

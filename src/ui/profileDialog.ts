@@ -1,31 +1,13 @@
 import { ApiError, api } from '../net/api';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, AVATAR_SIZE, DISPLAY_NAME_MAX, STATUS_MAX, cleanStatus, HANDLE_FOODS, HANDLE_WORDS, LINK_PLATFORMS, MyProfile,
-  graphemeCount, normalizeColor, normalizeLink, sanitizeDisplayName, splitHandle, validateDisplayName,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, DISPLAY_NAME_MAX, HANDLE_MAX, STATUS_MAX, cleanStatus, LINK_PLATFORMS, MyProfile,
+  graphemeCount, handleError, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../shared/profile';
+import { cropAvatar, makeAvatar } from './avatarCrop';
 import { h } from './dom';
 import { icon } from './icons';
 import { avatarEl, badges, gradientStyle } from './people';
 import { modal } from './dialogs';
-
-/** Scale any picture down to a small square (first frame only, so GIFs become static). */
-export async function makeAvatar(file: Blob): Promise<Blob> {
-  const bmp = await createImageBitmap(file);
-  const s = Math.min(bmp.width, bmp.height);
-  const c = document.createElement('canvas');
-  c.width = c.height = AVATAR_SIZE;
-  const ctx = c.getContext('2d')!;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
-  bmp.close();
-  const encode = (type: string, q: number) => new Promise<Blob | null>((r) => c.toBlob(r, type, q));
-  for (const q of [0.85, 0.7, 0.5]) {
-    let b = await encode('image/webp', q);
-    if (!b || b.type !== 'image/webp') b = await encode('image/jpeg', q); // older Safari can't encode WebP
-    if (b && b.size <= AVATAR_MAX_BYTES) return b;
-  }
-  throw new Error('Couldn’t shrink that picture enough. Try a different one.');
-}
 
 /**
  * Profile editor. Used once after the first login (setup) and later from the account menu.
@@ -57,33 +39,55 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       if (!f) return;
       try {
         upload.disabled = true;
-        current = await api.uploadAvatar(await makeAvatar(f));
+        const crop = await cropAvatar(f);
+        if (!crop) return;
+        current = await api.uploadAvatar(await makeAvatar(f, crop));
         showErr('avatar', '');
         renderAvatar();
       } catch (e) { showErr('avatar', (e as Error).message); } finally { upload.disabled = false; }
     });
     remove.addEventListener('click', async () => { current = await api.deleteAvatar(); renderAvatar(); });
 
-    // Handle: <word><food>
-    const parts = splitHandle(me.handle) ?? { word: HANDLE_WORDS[0], food: HANDLE_FOODS[0], num: '' };
-    let num = parts.num;
-    const wordSel = h('select', { id: 'handle-word', 'aria-label': 'Handle word' });
-    for (const w of HANDLE_WORDS) wordSel.append(h('option', { value: w }, w));
-    const foodSel = h('select', { id: 'handle-food', 'aria-label': 'Handle food' });
-    for (const f of HANDLE_FOODS) foodSel.append(h('option', { value: f }, f));
-    wordSel.value = parts.word; foodSel.value = parts.food;
-    const handlePreview = h('strong.handle-preview');
-    const handle = () => wordSel.value + foodSel.value + num;
-    const updateHandle = () => { handlePreview.textContent = '@' + handle(); };
-    wordSel.addEventListener('change', () => { num = ''; updateHandle(); });
-    foodSel.addEventListener('change', () => { num = ''; updateHandle(); });
+    // Handle. Accounts pick any free handle (new Discord accounts start with their Discord
+    // username); guests keep a random <Word><Food> one and can only shuffle it.
+    const guest = me.provider === 'guest';
+    const handleIn = h('input', { type: 'text', id: 'handle', value: me.handle, maxlength: HANDLE_MAX, spellcheck: 'false', autocapitalize: 'off', autocomplete: 'username', 'aria-label': 'Handle' });
+    const handleState = h('small.handle-state', { 'aria-live': 'polite' });
+    let checkTimer = 0, checkSeq = 0;
+    const setState = (kind: '' | 'ok' | 'bad' | 'wait', text: string) => { handleState.className = 'handle-state ' + kind; handleState.textContent = text; };
+    const checkHandle = () => {
+      clearTimeout(checkTimer);
+      const v = handleIn.value.trim().replace(/^@/, '');
+      if (v.toLowerCase() === current.handle.toLowerCase()) { setState('ok', v === current.handle ? 'This is your handle.' : 'Available'); return; }
+      const bad = handleError(v);
+      if (bad) { setState('bad', bad); return; }
+      setState('wait', 'Checking…');
+      const seq = ++checkSeq;
+      checkTimer = window.setTimeout(async () => {
+        try {
+          const r = await api.checkHandle(v);
+          if (seq !== checkSeq) return;
+          setState(r.available ? 'ok' : 'bad', r.available ? `@${v} is available` : r.error ?? `@${v} is taken.`);
+        } catch { if (seq === checkSeq) setState('', ''); }
+      }, 300);
+    };
+    handleIn.addEventListener('input', () => { showErr('handle', ''); checkHandle(); });
     const shuffle = h('button.btn', { type: 'button', html: icon('rotate', 16) + '<span>Shuffle</span>' });
-    shuffle.addEventListener('click', async () => {
-      const { handle: hd } = await api.randomHandle();
-      const p = splitHandle(hd);
-      if (p) { wordSel.value = p.word; foodSel.value = p.food; num = p.num; updateHandle(); }
-    });
-    updateHandle();
+    shuffle.addEventListener('click', async () => { handleIn.value = (await api.randomHandle()).handle; });
+    if (guest) handleIn.readOnly = true;
+    const handle = () => handleIn.value.trim().replace(/^@/, '');
+    const handleHint = guest
+      ? 'Guests get a random handle. Log in with Discord to choose your own.'
+      : setup && me.provider === 'discord'
+        ? 'We suggested your Discord username. Change it to anything you like.'
+        : 'Letters, numbers, underscores and periods. This is how friends find you.';
+    const handleField = h('div.field', {},
+      h('label.field-label', { for: 'handle' }, 'Handle'),
+      h('div.row.handle-row', {}, h('span.handle-input', {}, h('span.at', {}, '@'), handleIn), guest ? shuffle : null),
+      guest ? null : handleState,
+      h('small.muted', {}, handleHint), err('handle'),
+    );
+    if (!guest) checkHandle();
 
     // Display name
     const nameIn = h('input', { type: 'text', id: 'display-name', value: me.displayName, maxlength: DISPLAY_NAME_MAX * 2, autocomplete: 'nickname', 'aria-label': 'Display name' });
@@ -172,7 +176,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       ),
       h('div.field', {}, h('label.field-label', { for: 'display-name' }, 'Display name ', counter), nameIn, h('small.muted', {}, 'Anything you like. Letters, numbers, emoji and accents are fine.'), err('displayName')),
       h('div.field', {}, h('label.field-label', { for: 'status' }, 'Status ', statusCount), statusIn, h('small.muted', {}, 'Shown to your friends next to your name.'), err('status')),
-      h('div.field', {}, h('span.field-label', {}, 'Handle ', handlePreview), h('div.row.handle-row', {}, wordSel, foodSel, shuffle), err('handle')),
+      handleField,
       h('div.field', {}, h('label.field-label', { for: 'fav-hex' }, 'Favourite colour'), h('div.row', {}, colorIn, hexIn), h('small.muted', {}, 'Colours your folder and name bubble in rooms.'), err('favoriteColor')),
       premiumBox,
       h('details.field', { open: setup ? null : true }, h('summary.field-label', {}, 'Your other profiles'), h('small.muted', {}, 'Type a username to show a link on your profile. Nothing gets connected.'), links),

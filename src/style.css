@@ -314,8 +314,22 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .profile-form input[type="text"] { width: 100% !important; max-width: none !important; }
 .profile-top { display: flex; align-items: center; gap: 16px; }
 .profile-top-fields { flex: 1; min-width: 0; }
-.handle-preview { font-weight: 600; color: var(--accent); }
-.handle-row select { flex: 1; min-width: 0; }
+.handle-input { flex: 1; min-width: 0; display: flex; align-items: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding-left: 10px; }
+.handle-input:focus-within { border-color: var(--accent); }
+.handle-input .at { color: var(--muted); font-weight: 600; }
+.handle-input input { border: 0 !important; background: transparent !important; flex: 1; min-width: 0; padding-left: 2px !important; outline: none; }
+.handle-input input[readonly] { color: var(--muted); }
+.handle-state { font-size: 12.5px; min-height: 1.3em; }
+.handle-state.ok { color: #3fbf7f; }
+.handle-state.bad { color: var(--danger); }
+.handle-state.wait { color: var(--muted); }
+/* Picture cropper */
+.crop-body { align-items: center; }
+.crop-stage { width: 280px; height: 280px; max-width: 100%; border-radius: 14px; background: #111; touch-action: none; cursor: grab; display: block; margin: 0 auto; }
+.crop-stage:active { cursor: grabbing; }
+.crop-zoom { display: flex !important; align-items: center; gap: 10px; width: 280px; max-width: 100%; margin: 0 auto; color: var(--muted); font-weight: 700; }
+.crop-zoom input { flex: 1; accent-color: var(--accent); }
+.crop-body small { text-align: center; display: block; }
 .profile-form input[type="color"] { width: 44px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); flex: none; }
 .profile-form #fav-hex { width: 120px !important; font-family: ui-monospace, monospace; }
 .profile-form details summary { cursor: pointer; list-style: revert; }
@@ -529,3 +543,8 @@ button.friend-row:hover { background: var(--panel-2); }
   .project-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 }
 @media (max-width: 480px) { .home-join { display: none; } }
+
+/* Guest home */
+.guest-card { grid-column: 1 / -1; max-width: 520px; padding: 22px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line); }
+.guest-card p { margin: 0 0 12px; line-height: 1.5; }
+.home.guest .home-body { grid-template-columns: 1fr; }

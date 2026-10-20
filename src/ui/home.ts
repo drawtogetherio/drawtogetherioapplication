@@ -32,10 +32,13 @@ export class Home {
   private accountBtn = h('button.account-btn', { type: 'button', 'aria-label': 'Your account' });
   private accountPop = h('div.popover.account-pop', { hidden: true });
   private timer = 0;
+  private plus: HTMLButtonElement;
+  private friendsPanel: HTMLElement;
+  private projectsHead = h('h1', {}, 'Recent');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
 
   constructor(private app: App) {
-    const plus = h('button.icon-btn.plus-btn', { title: 'Create new', 'aria-label': 'Create new', html: icon('plus', 22), onclick: () => this.app.session.createNew() });
+    const plus = this.plus = h('button.icon-btn.plus-btn', { title: 'Create new', 'aria-label': 'Create new', html: icon('plus', 22), onclick: () => this.app.session.createNew() });
     const joinIn = h('input', { type: 'text', placeholder: 'Paste a room link or code', 'aria-label': 'Room link or code', autocomplete: 'off' });
     const joinForm = h('form.home-join', {}, joinIn, h('button.btn', { type: 'submit' }, 'Join'));
     joinForm.addEventListener('submit', (e) => {
@@ -48,7 +51,7 @@ export class Home {
     this.accountBtn.addEventListener('click', () => { this.renderAccountMenu(); this.accountPop.hidden = !this.accountPop.hidden; });
     dismissOnOutside(this.accountPop, [this.accountBtn], () => { this.accountPop.hidden = true; });
 
-    const addIn = h('input', { type: 'text', placeholder: '@BurntoutPasta', 'aria-label': 'Friend’s handle', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off' });
+    const addIn = h('input', { type: 'text', placeholder: '@handle', 'aria-label': 'Friend’s handle', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off' });
     const addForm = h('form.add-friend', {}, addIn, h('button.icon-btn', { type: 'submit', title: 'Send friend request', 'aria-label': 'Send friend request', html: icon('plus', 18) }));
     const addErr = h('p.field-error', { role: 'alert' });
     addForm.addEventListener('submit', async (e) => {
@@ -70,14 +73,14 @@ export class Home {
         h('div.home-top-right', {}, joinForm, this.accountBtn),
       ),
       h('div.home-body', {},
-        h('aside.friends-panel', { 'aria-label': 'Friends' },
+        this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
           h('div.panel-head', {}, h('span.panel-title', {}, 'Friends ', this.friendCount)),
           addForm, addErr,
           this.requestsEl,
           this.friendsEl,
         ),
         h('main.projects', {},
-          h('div.projects-head', {}, h('h1', {}, 'Recent')),
+          h('div.projects-head', {}, this.projectsHead),
           this.grid,
         ),
       ),
@@ -90,6 +93,12 @@ export class Home {
   show() {
     this.el.hidden = false;
     this.renderAccount();
+    // Guests only draw in rooms they're invited to: no friends, no canvases of their own.
+    const guest = !!this.app.ed.me?.guest;
+    this.el.classList.toggle('guest', guest);
+    this.plus.hidden = this.friendsPanel.hidden = guest;
+    if (guest) { this.renderGuest(); return; }
+    this.projectsHead.textContent = 'Recent';
     this.loadProjects();
     this.loadFriends();
     clearInterval(this.timer);
@@ -196,6 +205,18 @@ export class Home {
       },
     });
     close = modal('Friend', profileCardBody(p, undefined, h('p.muted.small', {}, p.online ? 'Online now' : 'Offline')), [remove]);
+  }
+
+  private renderGuest() {
+    const me = this.app.ed.me!;
+    clearInterval(this.timer);
+    this.projectsHead.textContent = 'You’re a guest';
+    clear(this.grid);
+    this.grid.append(h('div.guest-card', {},
+      h('p', {}, 'You’re drawing as ', h('strong', {}, me.displayName), ' (@' + me.handle + '). Paste a room link above to join a friend’s canvas.'),
+      h('p.muted', {}, 'Log in with Discord to make your own canvases, add friends and choose your own handle.'),
+      h('button.btn.primary', { type: 'button', onclick: () => this.app.session.logout('/login?next=/app') }, 'Log in with Discord'),
+    ));
   }
 
   // ---- Projects ----

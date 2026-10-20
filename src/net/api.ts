@@ -36,6 +36,7 @@ export const api = {
     try { return await call<MyProfile>('GET', '/api/me'); } catch (e) { if (e instanceof ApiError && e.status === 401) return null; throw e; }
   },
   devLogin: (name: string) => call<MyProfile>('POST', '/auth/dev', { name }),
+  guestLogin: (name: string) => call<MyProfile>('POST', '/auth/guest', { name }),
   logout: () => call('POST', '/auth/logout'),
   discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
   updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null }>) =>
@@ -43,7 +44,7 @@ export const api = {
   uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),
   randomHandle: () => call<{ handle: string }>('GET', '/api/handle/random'),
-  checkHandle: (h: string) => call<{ valid: boolean; available: boolean }>('GET', '/api/handle/check?h=' + encodeURIComponent(h)),
+  checkHandle: (h: string) => call<{ valid: boolean; available: boolean; error: string | null }>('GET', '/api/handle/check?h=' + encodeURIComponent(h)),
   uploadAnimatedAvatar: (gif: Blob) => call<MyProfile>('PUT', '/api/me/avatar-animated', undefined, gif),
   deleteAnimatedAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar-animated'),
   createRoom: (name: string, settings: Omit<DocSettings, 'id'>, isPrivate = false) =>

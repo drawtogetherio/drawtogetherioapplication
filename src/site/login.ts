@@ -57,6 +57,27 @@ async function main() {
     });
     body.append(form);
   }
-  body.insertAdjacentHTML('beforeend', '<p class="login-alt">Just want to sketch? <a href="/app?offline=1">Draw without an account</a></p>');
+  if (joining) body.append(guestForm());
+  else body.insertAdjacentHTML('beforeend', '<p class="login-alt">Just want to sketch? <a href="/app?offline=1">Draw without an account</a></p>');
+}
+
+/** Joining a friend's room without Discord: pick a name, get a random handle. */
+function guestForm() {
+  const form = document.createElement('form');
+  form.className = 'guest-login';
+  form.innerHTML = `<div class="or"><span>or join as a guest</span></div>
+    <label for="guest-name">Your name in the room</label>
+    <div class="row"><input id="guest-name" type="text" maxlength="32" placeholder="What should friends call you?" autocomplete="nickname" required><button class="btn small" type="submit">Join as guest</button></div>
+    <p class="fine">Guests get a random handle like @SketchyPasta. Log in with Discord to keep your canvases, add friends and choose your own handle.</p>
+    <p class="login-error" role="alert" hidden></p>`;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = form.querySelector('.login-error') as HTMLElement;
+    try {
+      await api.guestLogin((form.querySelector('#guest-name') as HTMLInputElement).value);
+      location.replace(next);
+    } catch (ex) { err.hidden = false; err.textContent = (ex as ApiError).message; }
+  });
+  return form;
 }
 main();

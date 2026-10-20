@@ -148,6 +148,10 @@ const bigPng = await alice.screenshot({ fullPage: false });
 await alice.locator('[aria-label="Menu"]').click();
 await alice.getByRole('button', { name: 'Edit profile' }).click();
 await alice.setInputFiles('#avatar-file', { name: 'big.png', mimeType: 'image/png', buffer: bigPng });
+await alice.waitForSelector('.crop-stage');
+await alice.locator('#crop-zoom').fill('1.6');
+await alice.screenshot({ path: `${out}/07a-crop.png` });
+await alice.getByRole('button', { name: 'Use picture' }).click();
 await alice.waitForSelector('.avatar-edit img');
 const av = await alice.evaluate(async () => {
   const src = document.querySelector('.avatar-edit img').src;

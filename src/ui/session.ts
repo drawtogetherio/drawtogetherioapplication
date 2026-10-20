@@ -73,6 +73,7 @@ export class Session {
 
   /** "Create new": draw alone (a private canvas) or a shared room. */
   createNew() {
+    if (this.me?.guest) { this.app.toast('Log in with Discord to make your own canvases'); return; }
     let close = () => {};
     const card = (title: string, text: string, ic: string, solo: boolean) =>
       h('button.preset-card.home-card', {
@@ -161,8 +162,8 @@ export class Session {
     if (saved) { this.ed.me = saved as MyProfile; this.app.refreshAccount(); }
   }
 
-  async logout() {
+  async logout(then = '/') {
     await api.logout().catch(() => {});
-    location.href = '/';
+    location.href = then;
   }
 }
