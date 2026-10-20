@@ -9,12 +9,19 @@ A drawing app for web, Windows, Mac and iPad where people can draw on the same c
 ```bash
 npm install
 cp server/.env.example server/.env   # optional: add Discord keys here (see below)
-npm run dev                          # app on http://localhost:5173, server on :8787
+npm run dev                          # site on http://localhost:5173 (app at /app), server on :8787
 ```
 
-`npm run dev` starts both the web app (Vite) and the server. Without Discord keys the login screen
+`npm run dev` starts both the web app (Vite) and the server. Without Discord keys the login page
 offers **Dev login** (type any name), which is handy for testing with two browser windows.
 The app also still works with no server at all: it just skips login and draws offline.
+
+Pages:
+- `/` landing page: brand, Log in, "Drawing together with friends", Open in browser + Mac/Windows downloads
+  (the download buttons say "soon" until `DOWNLOAD_MAC_URL` / `DOWNLOAD_WINDOWS_URL` are set)
+- `/login` login with Discord (plus Dev login locally); `?next=` returns you where you were
+- `/app` the app. Logged out, it sends you to `/login`. `/app?room=code` opens a room; `/app?offline=1`
+  draws without an account. Desktop clients should open `https://doodlehive.net/app`.
 
 Other commands:
 
@@ -70,6 +77,15 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Favourite colour as a 6-digit hex (no alpha)
 - `premium` + `premium_until` stored per user for later; set with `npm run admin`
 
+**Home screen (v0.5)**
+- Friends on the left, online first (seen in the last ~75 s), with presence dots and status messages.
+  Add by @handle, accept/decline requests. Premium friends show the star, their name gradient and GIF avatar.
+- Recent canvases in the middle with thumbnails; the first tile is always **Create new**, and the
+  **+** in the top-left does the same: choose **Draw alone** (a private canvas) or **Shared room**.
+- Every saved canvas is a room. Private ones only open for their owner; share one any time from the
+  canvas or the tile's ⋯ menu (rename, share, make private, delete).
+- Status message (80 characters) in Edit profile. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
+
 **Shared rooms (v0.2)**
 - Start a room, share the invite link (`?room=code`), others join after logging in
 - Each person gets a folder named after them, coloured with their favourite colour. Their layers
@@ -123,13 +139,14 @@ Easy to move to Postgres later; all queries are in `server/db.ts`.
 ```bash
 # Solo drawing (static build, no server):
 npm run build && (cd dist && python3 -m http.server 4180)
-node tests/smoke.mjs http://localhost:4180/
-node tests/touch.mjs http://localhost:4180/
-node tests/replay.mjs http://localhost:4180/
-node tests/pickers.mjs http://localhost:4180/   # brush library, mode drop-downs, R/Z view keys
+node tests/smoke.mjs http://localhost:4180/app/
+node tests/touch.mjs http://localhost:4180/app/
+node tests/replay.mjs http://localhost:4180/app/
+node tests/pickers.mjs http://localhost:4180/app/   # brush library, mode drop-downs, R/Z view keys
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev
 DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room/
+DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, private canvases
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

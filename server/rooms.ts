@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { db, getUser, newId, publicProfile, UserRow } from './db.ts';
+import { touch } from './social.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
-import { CHAT_MAX, ChatMsg, ClientMsg, Member, Role, RoomInfo, ServerMsg, userFolderId } from '../src/shared/protocol.ts';
+import { CHAT_MAX, ChatMsg, ClientMsg, Member, ProjectInfo, Role, RoomInfo, ServerMsg, userFolderId } from '../src/shared/protocol.ts';
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
 
@@ -54,6 +55,12 @@ export class Room {
   }
 
   join(ws: WebSocket, user: UserRow) {
+    if (this.info.private && user.id !== this.info.ownerId) {
+      ws.send(JSON.stringify({ type: 'error', message: 'This canvas is private.' } satisfies ServerMsg));
+      ws.close(4003, 'private');
+      return;
+    }
+    touch(user.id);
     const until = this.kicked.get(user.id);
     if (until && until > Date.now()) {
       ws.send(JSON.stringify({ type: 'error', message: 'You were removed from this room. Try again later.' } satisfies ServerMsg));
@@ -100,6 +107,7 @@ export class Room {
   }
 
   private handle(c: Client, msg: ClientMsg) {
+    touch(c.userId);
     switch (msg.type) {
       case 'op': {
         const op = msg.op;
@@ -246,12 +254,15 @@ export class Room {
   }
 
   private seq = 0;
+  private savedAt = 0;
   private commit(op: Op, from?: Client) {
     this.track(op);
     const json = JSON.stringify(op);
     this.ops.push(json);
     if (!this.seq) this.seq = (db.prepare('SELECT max(seq) AS s FROM room_ops WHERE room_id = ?').get(this.info.id) as { s: number | null }).s ?? 0;
     db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)').run(this.info.id, ++this.seq, json);
+    const now = Date.now();
+    if (now - this.savedAt > 5000) { this.savedAt = now; db.prepare('UPDATE rooms SET updated_at = ? WHERE id = ?').run(now, this.info.id); }
     this.broadcast({ type: 'op', op, from: from?.userId ?? 'server' }, from);
   }
 
@@ -263,31 +274,71 @@ export class Room {
 
   systemChat(text: string) { this.pushChat({ id: newId('m_'), from: 'system', text, at: Date.now(), system: true }); }
 
+  /** The owner renamed the canvas or changed who can join. */
+  updateInfo(patch: { name?: string; private?: boolean }) {
+    Object.assign(this.info, patch);
+    if (this.info.private) {
+      for (const c of this.clients) {
+        if (c.userId === this.info.ownerId) continue;
+        this.send(c, { type: 'error', message: 'The owner made this canvas private.' });
+        c.ws.close(4003, 'private');
+      }
+    }
+    this.broadcast({ type: 'room', room: this.info });
+  }
+
+  /** The canvas was deleted: disconnect everyone. */
+  close() {
+    for (const c of this.clients) { this.send(c, { type: 'error', message: 'This canvas was deleted.' }); c.ws.close(4003, 'deleted'); }
+    for (const t of this.leaving.values()) clearTimeout(t);
+  }
+
   /** A member changed their profile: refresh the member list for everyone. */
   profileChanged() { this.broadcast({ type: 'members', members: this.members() }); }
 }
 
 const rooms = new Map<string, Room>();
 
-export function createRoom(owner: UserRow, name: string, settings: DocSettings): RoomInfo {
+export function createRoom(owner: UserRow, name: string, settings: DocSettings, isPrivate = false): RoomInfo {
   // Short, readable room codes.
   const id = Array.from(crypto.randomBytes(8), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
-  const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id } };
-  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at) VALUES (?, ?, ?, ?, ?)')
-    .run(id, name, owner.id, JSON.stringify(info.settings), Date.now());
+  const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: isPrivate };
+  const now = Date.now();
+  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, private) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, name, owner.id, JSON.stringify(info.settings), now, now, isPrivate ? 1 : 0);
   return info;
 }
 
 export function getRoom(id: string): Room | undefined {
   let r = rooms.get(id);
   if (r) return r;
-  const row = db.prepare('SELECT * FROM rooms WHERE id = ?').get(id) as { id: string; name: string; owner_id: string; settings: string; hosts: string } | undefined;
+  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, private FROM rooms WHERE id = ?').get(id) as
+    { id: string; name: string; owner_id: string; settings: string; hosts: string; private: number } | undefined;
   if (!row) return undefined;
-  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings) }, JSON.parse(row.hosts));
+  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: !!row.private }, JSON.parse(row.hosts));
   rooms.set(id, r);
   return r;
 }
 
 export function roomsWithUser(userId: string): Room[] {
   return [...rooms.values()].filter((r) => [...r.clients].some((c) => c.userId === userId));
+}
+
+/** Canvases someone started, newest activity first (the home screen's "Recent"). */
+export function projectsOf(userId: string, limit = 60): ProjectInfo[] {
+  const rows = db.prepare(`SELECT id, name, private, created_at, updated_at, thumb_version, thumb IS NOT NULL AS has_thumb
+    FROM rooms WHERE owner_id = ? ORDER BY coalesce(updated_at, created_at) DESC LIMIT ?`).all(userId, limit) as
+    { id: string; name: string; private: number; created_at: number; updated_at: number | null; thumb_version: number; has_thumb: number }[];
+  return rows.map((r) => ({
+    id: r.id, name: r.name, private: !!r.private, createdAt: r.created_at, updatedAt: r.updated_at ?? r.created_at,
+    thumb: r.has_thumb ? `/thumbs/${r.id}?v=${r.thumb_version}` : null,
+    online: rooms.get(r.id)?.members().length ?? 0,
+  }));
+}
+
+export function deleteRoom(id: string) {
+  rooms.get(id)?.close();
+  rooms.delete(id);
+  db.prepare('DELETE FROM room_ops WHERE room_id = ?').run(id);
+  db.prepare('DELETE FROM rooms WHERE id = ?').run(id);
 }

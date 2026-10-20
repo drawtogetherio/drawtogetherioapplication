@@ -54,6 +54,8 @@ export const config = {
   dbPath: env.DB_PATH || (env.RAILWAY_VOLUME_MOUNT_PATH ? path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'doodlehive.db') : defaultDbPath()),
   /** False when a production server would keep its database on a disk that is wiped every deploy. */
   persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
+  /** Desktop app download links shown on the landing page (unset = "coming soon"). */
+  downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
   secureCookies: publicUrl.startsWith('https://'),
 };

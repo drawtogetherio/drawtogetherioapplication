@@ -36,7 +36,7 @@ export interface CanvasChoice { width: number; height: number; infinite: boolean
  * Pick a canvas size. In 'room' mode it also asks for a room name and hands back the settings
  * (the server creates the room); otherwise it creates a local document.
  */
-export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = true, room?: { onCreate: (c: CanvasChoice) => Promise<void> }) {
+export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = true, room?: { onCreate: (c: CanvasChoice) => Promise<void>; solo?: boolean }) {
   let choice: 'unlimited' | Preset = 'unlimited';
   const wIn = h('input', { type: 'number', min: 16, max: 16384, value: 2048, 'aria-label': 'Width' });
   const hIn = h('input', { type: 'number', min: 16, max: 16384, value: 2048, 'aria-label': 'Height' });
@@ -68,11 +68,12 @@ export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = tru
   const err = h('p.error', { role: 'alert' });
   const custom = h('div.row.custom-size', {}, h('label', {}, 'Width', wIn), h('span', {}, '×'), h('label', {}, 'Height', hIn), h('span.muted', {}, 'px'));
   custom.hidden = true;
-  const roomName = h('input', { type: 'text', id: 'room-name', maxlength: 48, placeholder: 'Sketch night', 'aria-label': 'Room name' });
-  const body = h('div.modal-body', {}, room ? h('label.row', {}, 'Room name', roomName) : null, grid, custom, h('div.row', {}, h('label', {}, 'Background', bg)), err);
+  const solo = !!room?.solo;
+  const roomName = h('input', { type: 'text', id: 'room-name', maxlength: 48, placeholder: solo ? 'Untitled sketch' : 'Sketch night', 'aria-label': solo ? 'Name' : 'Room name' });
+  const body = h('div.modal-body', {}, room ? h('label.row', {}, solo ? 'Name' : 'Room name', roomName) : null, grid, custom, h('div.row', {}, h('label', {}, 'Background', bg)), err);
 
-  const create = h('button.btn.primary', {}, room ? 'Create room' : 'Create canvas');
-  const close = modal(room ? 'New shared room' : 'New canvas', body, [create], undefined, closable);
+  const create = h('button.btn.primary', {}, room && !solo ? 'Create room' : 'Create canvas');
+  const close = modal(room && !solo ? 'New shared room' : 'New canvas', body, [create], undefined, closable);
   create.addEventListener('click', async () => {
     const infinite = choice === 'unlimited';
     const w = Math.max(16, Math.min(16384, Math.round(+wIn.value || 2048)));

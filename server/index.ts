@@ -8,9 +8,10 @@ import { config } from './config.ts';
 import {
   createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isPremium, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
-import { createRoom, getRoom, roomsWithUser } from './rooms.ts';
+import { createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser } from './rooms.ts';
+import { FriendError, acceptFriend, listFriends, removeFriend, requestFriend, touch } from './social.ts';
 import {
-  AVATAR_MAX_BYTES, LINK_PLATFORMS, isValidHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, isValidHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX } from '../src/shared/protocol.ts';
 import { THEMES, canUseTheme } from '../src/shared/themes.ts';
@@ -65,6 +66,35 @@ class HttpError extends Error {
 function requireUser(req: Req): UserRow {
   const u = sessionUser(cookies(req)[COOKIE]);
   if (!u) throw new HttpError(401, 'Please log in.');
+  touch(u.id);
+  return u;
+}
+
+/** Image size from a GIF header (logical screen width/height). */
+function gifSize(buf: Buffer): { w: number; h: number } | null {
+  const sig = buf.subarray(0, 6).toString('latin1');
+  if (sig !== 'GIF87a' && sig !== 'GIF89a') return null;
+  return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) };
+}
+
+/** Accept a small thumbnail image for a canvas. */
+function checkThumb(buf: Buffer): string {
+  if (buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  throw new HttpError(400, 'Thumbnails must be WebP, PNG or JPEG.');
+}
+
+/** Where to go after logging in: a path on this site only (never "//other.site"). */
+function safeNext(next: string | null | undefined) {
+  return next && /^\/(?![/\\])/.test(next) ? next.slice(0, 200) : '/app';
+}
+
+function ownRoom(req: Req, id: string) {
+  const u = requireUser(req);
+  const row = db.prepare('SELECT owner_id FROM rooms WHERE id = ?').get(id) as { owner_id: string } | undefined;
+  if (!row) throw new HttpError(404, 'That canvas doesn’t exist.');
+  if (row.owner_id !== u.id) throw new HttpError(403, 'Only the owner can do that.');
   return u;
 }
 
@@ -105,12 +135,12 @@ async function route(req: Req, res: Res) {
 
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
-    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id) });
+    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });
     const state = crypto.randomBytes(16).toString('base64url');
-    setCookie(res, 'dw_oauth', state + '|' + (url.searchParams.get('next') ?? '/').slice(0, 200), 600);
+    setCookie(res, 'dw_oauth', state + '|' + safeNext(url.searchParams.get('next')), 600);
     const q = new URLSearchParams({
       client_id: config.discord.clientId, redirect_uri: config.publicUrl + '/auth/discord/callback',
       response_type: 'code', scope: 'identify', state, prompt: 'none',
@@ -119,9 +149,11 @@ async function route(req: Req, res: Res) {
   }
   if (p === '/auth/discord/callback' && m === 'GET') {
     if (!config.discord) return redirect(res, config.clientUrl);
-    const [state, next = '/'] = (cookies(req).dw_oauth ?? '').split('|');
+    const [state, rawNext] = (cookies(req).dw_oauth ?? '').split('|');
+    const next = safeNext(rawNext);
+    const failed = config.clientUrl + '/login?error=1&next=' + encodeURIComponent(next);
     const code = url.searchParams.get('code');
-    if (!code || !state || state !== url.searchParams.get('state')) return redirect(res, config.clientUrl + '/?login=failed');
+    if (!code || !state || state !== url.searchParams.get('state')) return redirect(res, failed);
     const tok = await fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -130,16 +162,16 @@ async function route(req: Req, res: Res) {
         code, redirect_uri: config.publicUrl + '/auth/discord/callback',
       }),
     });
-    if (!tok.ok) return redirect(res, config.clientUrl + '/?login=failed');
+    if (!tok.ok) return redirect(res, failed);
     const { access_token } = await tok.json() as { access_token: string };
     const me = await fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${access_token}` } });
-    if (!me.ok) return redirect(res, config.clientUrl + '/?login=failed');
+    if (!me.ok) return redirect(res, failed);
     const d = await me.json() as { id: string; username: string; global_name?: string | null };
     const name = sanitizeDisplayName(d.global_name || d.username).slice(0, 32) || 'Artist';
     const user = findOrCreateUser('discord', d.id, name);
     login(res, user);
     setCookie(res, 'dw_oauth', '', 0);
-    return redirect(res, config.clientUrl + (next.startsWith('/') ? next : '/'));
+    return redirect(res, config.clientUrl + next);
   }
   if (p === '/auth/dev' && m === 'POST') {
     if (!config.devLogin) return json(res, 404, { error: 'Not available.' });
@@ -198,6 +230,20 @@ async function route(req: Req, res: Res) {
       if (!canUseTheme(t, isPremium(u))) throw new HttpError(403, 'That theme is part of premium.', 'theme');
       sets.push('theme = ?'); vals.push(t);
     }
+    if (b.status !== undefined) {
+      const st = cleanStatus(String(b.status ?? ''));
+      if (st === null) throw new HttpError(400, `Keep your status to ${STATUS_MAX} characters.`, 'status');
+      sets.push('status = ?'); vals.push(st);
+    }
+    if (b.gradient !== undefined) {
+      if (b.gradient === null) { sets.push('gradient = NULL'); }
+      else {
+        if (!isPremium(u)) throw new HttpError(403, 'Name gradients are part of premium.', 'gradient');
+        const g = Array.isArray(b.gradient) ? b.gradient.map((c) => normalizeColor(String(c))) : [];
+        if (g.length !== 2 || g.some((c) => !c)) throw new HttpError(400, 'Pick two colours for the gradient.', 'gradient');
+        sets.push('gradient = ?'); vals.push(g.join(','));
+      }
+    }
     if (b.done === true) sets.push('needs_setup = 0');
     if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, u.id);
     notifyRooms(u.id);
@@ -210,6 +256,20 @@ async function route(req: Req, res: Res) {
       const buf = await body(req, AVATAR_MAX_BYTES);
       const type = checkAvatar(buf);
       db.prepare('UPDATE users SET avatar = ?, avatar_type = ?, avatar_version = avatar_version + 1 WHERE id = ?').run(buf, type, u.id);
+    }
+    notifyRooms(u.id);
+    return json(res, 200, myProfile(getUser(u.id)!));
+  }
+  if (p === '/api/me/avatar-animated' && (m === 'PUT' || m === 'DELETE')) {
+    const u = requireUser(req);
+    if (m === 'DELETE') db.prepare('UPDATE users SET avatar_anim = NULL WHERE id = ?').run(u.id);
+    else {
+      if (!isPremium(u)) throw new HttpError(403, 'Animated pictures are part of premium.');
+      const buf = await body(req, AVATAR_ANIM_MAX_BYTES);
+      const size = gifSize(buf);
+      if (!size) throw new HttpError(400, 'Animated pictures need to be GIFs.');
+      if (size.w > AVATAR_ANIM_MAX_SIZE || size.h > AVATAR_ANIM_MAX_SIZE) throw new HttpError(400, `Use a GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} pixels.`);
+      db.prepare('UPDATE users SET avatar_anim = ?, avatar_anim_version = avatar_anim_version + 1 WHERE id = ?').run(buf, u.id);
     }
     notifyRooms(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
@@ -227,6 +287,34 @@ async function route(req: Req, res: Res) {
     res.writeHead(200, { 'Content-Type': row.avatar_type, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
     return res.end(Buffer.from(row.avatar));
   }
+  mm = /^\/avatars\/([\w-]+)\/anim$/.exec(p);
+  if (mm && m === 'GET') {
+    const row = db.prepare('SELECT avatar_anim FROM users WHERE id = ?').get(mm[1]) as { avatar_anim: Uint8Array | null } | undefined;
+    if (!row?.avatar_anim) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'image/gif', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(Buffer.from(row.avatar_anim));
+  }
+
+  // ---- Friends ----
+  if (p === '/api/friends' && m === 'GET') return json(res, 200, listFriends(requireUser(req).id));
+  if (p === '/api/friends' && m === 'POST') {
+    const u = requireUser(req);
+    const b = await jsonBody(req);
+    try { return json(res, 200, { result: requestFriend(u, String(b.handle ?? '')), ...listFriends(u.id) }); }
+    catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message, 'handle'); throw e; }
+  }
+  mm = /^\/api\/friends\/([\w-]+)(\/accept)?$/.exec(p);
+  if (mm && (m === 'POST' || m === 'DELETE')) {
+    const u = requireUser(req);
+    try {
+      if (m === 'POST' && mm[2]) acceptFriend(u.id, mm[1]);
+      else if (m === 'DELETE' && !mm[2]) removeFriend(u.id, mm[1]);
+      else return json(res, 404, { error: 'Not found.' });
+    } catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message); throw e; }
+    return json(res, 200, listFriends(u.id));
+  }
+  if (p === '/api/presence' && m === 'POST') { requireUser(req); return json(res, 200, { ok: true }); }
+
   mm = /^\/api\/users\/([\w-]+)$/.exec(p);
   if (mm && m === 'GET') {
     requireUser(req);
@@ -244,14 +332,54 @@ async function route(req: Req, res: Res) {
     if (!infinite && !(width >= 16 && height >= 16 && width <= 16384 && height <= 16384 && width * height <= 100e6)) throw new HttpError(400, 'Invalid canvas size.');
     const bg = s.background === null ? null : normalizeColor(String(s.background ?? '#ffffff'));
     const name = sanitizeDisplayName(String(b.name ?? '')).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
-    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg });
+    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, !!b.private);
     return json(res, 200, info);
   }
-  mm = /^\/api\/rooms\/([a-z0-9]+)$/.exec(p);
+  if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));
+  mm = /^\/api\/rooms\/([a-z0-9]+)\/thumb$/.exec(p);
+  if (mm && m === 'PUT') {
+    ownRoom(req, mm[1]);
+    const buf = await body(req, 96 * 1024);
+    checkThumb(buf);
+    db.prepare('UPDATE rooms SET thumb = ?, thumb_version = thumb_version + 1 WHERE id = ?').run(buf, mm[1]);
+    return json(res, 200, { ok: true });
+  }
+  mm = /^\/thumbs\/([a-z0-9]+)$/.exec(p);
   if (mm && m === 'GET') {
-    requireUser(req);
+    ownRoom(req, mm[1]);
+    const row = db.prepare('SELECT thumb FROM rooms WHERE id = ?').get(mm[1]) as { thumb: Uint8Array | null };
+    if (!row.thumb) { res.writeHead(404); return res.end(); }
+    const buf = Buffer.from(row.thumb);
+    res.writeHead(200, { 'Content-Type': checkThumb(buf), 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+    return res.end(buf);
+  }
+  mm = /^\/api\/rooms\/([a-z0-9]+)$/.exec(p);
+  if (mm && m === 'PATCH') {
+    ownRoom(req, mm[1]);
+    const b = await jsonBody(req);
+    const patch: { name?: string; private?: boolean } = {};
+    if (b.name !== undefined) {
+      const name = sanitizeDisplayName(String(b.name)).slice(0, ROOM_NAME_MAX);
+      if (!name) throw new HttpError(400, 'Give it a name.', 'name');
+      patch.name = name;
+      db.prepare('UPDATE rooms SET name = ? WHERE id = ?').run(name, mm[1]);
+    }
+    if (b.private !== undefined) {
+      patch.private = !!b.private;
+      db.prepare('UPDATE rooms SET private = ? WHERE id = ?').run(patch.private ? 1 : 0, mm[1]);
+    }
+    getRoom(mm[1])!.updateInfo(patch);
+    return json(res, 200, getRoom(mm[1])!.info);
+  }
+  if (mm && m === 'DELETE') {
+    ownRoom(req, mm[1]);
+    deleteRoom(mm[1]);
+    return json(res, 200, { ok: true });
+  }
+  if (mm && m === 'GET') {
+    const u = requireUser(req);
     const r = getRoom(mm[1]);
-    if (!r) return json(res, 404, { error: 'That room doesn’t exist.' });
+    if (!r || (r.info.private && r.info.ownerId !== u.id)) return json(res, 404, { error: 'That room doesn’t exist.' });
     const owner = getUser(r.info.ownerId);
     return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length });
   }
@@ -259,7 +387,10 @@ async function route(req: Req, res: Res) {
   // ---- Static client (production) ----
   if (m === 'GET' && !p.startsWith('/api/') && fs.existsSync(config.staticDir)) {
     const file = path.join(config.staticDir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
-    const target = file.startsWith(config.staticDir) && fs.existsSync(file) && fs.statSync(file).isFile() ? file : path.join(config.staticDir, 'index.html');
+    const isFile = file.startsWith(config.staticDir) && fs.existsSync(file) && fs.statSync(file).isFile();
+    // Pages: / is the landing page, /login the login page, and /app (with any sub-path) the app itself.
+    const page = p === '/app' || p.startsWith('/app/') ? 'app/index.html' : p === '/login' || p === '/login/' ? 'login/index.html' : 'index.html';
+    const target = isFile ? file : path.join(config.staticDir, page);
     const ext = path.extname(target);
     const types: Record<string, string> = {
       '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png',

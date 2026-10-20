@@ -9,6 +9,20 @@ export interface RoomInfo {
   name: string;
   ownerId: string;
   settings: DocSettings;
+  /** Private canvases ("Draw alone") only let their owner in. */
+  private: boolean;
+}
+
+/** A canvas on the home screen. */
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  private: boolean;
+  createdAt: number;
+  updatedAt: number;
+  thumb: string | null;
+  /** People drawing in it right now. */
+  online: number;
 }
 
 export interface Member extends PublicProfile { role: Role }
@@ -42,6 +56,7 @@ export type ServerMsg =
   | { type: 'op'; op: Op; from: string }
   | { type: 'reject'; opId: string; reason: string }
   | { type: 'members'; members: Member[] }
+  | { type: 'room'; room: RoomInfo }
   | { type: 'live'; from: string; live: LiveStroke }
   | { type: 'live-end'; from: string; stroke: string }
   | { type: 'cursor'; from: string; x: number; y: number; drawing: boolean }

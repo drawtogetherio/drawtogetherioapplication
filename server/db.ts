@@ -50,14 +50,44 @@ db.exec(`
 `);
 
 // Columns added after the first release.
-const userCols = (db.prepare('PRAGMA table_info(users)').all() as { name: string }[]).map((c) => c.name);
-if (!userCols.includes('theme')) db.exec(`ALTER TABLE users ADD COLUMN theme TEXT NOT NULL DEFAULT '${DEFAULT_THEME}'`);
+function addColumn(table: string, col: string, def: string) {
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+addColumn('users', 'theme', `TEXT NOT NULL DEFAULT '${DEFAULT_THEME}'`);
+addColumn('users', 'status', `TEXT NOT NULL DEFAULT ''`);
+addColumn('users', 'gradient', 'TEXT'); // "#aabbcc,#ddeeff"
+addColumn('users', 'avatar_anim', 'BLOB');
+addColumn('users', 'avatar_anim_version', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('rooms', 'private', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('rooms', 'updated_at', 'INTEGER');
+addColumn('rooms', 'thumb', 'BLOB');
+addColumn('rooms', 'thumb_version', 'INTEGER NOT NULL DEFAULT 0');
+db.exec(`
+  -- One row per pair, with user_a < user_b. Pending until the other person accepts.
+  CREATE TABLE IF NOT EXISTS friendships (
+    user_a TEXT NOT NULL,
+    user_b TEXT NOT NULL,
+    requested_by TEXT NOT NULL,
+    accepted INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_a, user_b)
+  );
+  CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
+  CREATE INDEX IF NOT EXISTS rooms_owner ON rooms (owner_id);
+`);
 
 export interface UserRow {
   id: string; provider: string; provider_id: string; handle: string; display_name: string;
-  favorite_color: string; links: string; avatar: Uint8Array | null; avatar_type: string | null;
+  favorite_color: string; links: string; has_avatar: number; avatar_type: string | null;
   avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
+  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number;
 }
+
+/** Every user column except the picture blobs (those are only read by the /avatars route). */
+export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
+  avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
+  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
@@ -70,8 +100,11 @@ export function isPremium(u: UserRow) {
 export function publicProfile(u: UserRow): PublicProfile {
   return {
     id: u.id, handle: u.handle, displayName: u.display_name, favoriteColor: u.favorite_color,
-    avatar: u.avatar ? `/avatars/${u.id}?v=${u.avatar_version}` : null,
-    links: JSON.parse(u.links), premium: isPremium(u), premiumUntil: u.premium_until,
+    avatar: u.has_avatar ? `/avatars/${u.id}?v=${u.avatar_version}` : null,
+    links: JSON.parse(u.links), premium: isPremium(u), premiumUntil: u.premium_until, status: u.status,
+    // Premium extras only show while premium is active.
+    gradient: isPremium(u) && u.gradient ? (u.gradient.split(',') as [string, string]) : null,
+    avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
   };
 }
 
@@ -82,7 +115,7 @@ export function myProfile(u: UserRow): MyProfile {
 }
 
 export function getUser(id: string): UserRow | undefined {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
+  return db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as UserRow | undefined;
 }
 
 export function handleTaken(handle: string, exceptUser?: string) {
@@ -103,7 +136,7 @@ export function freeHandle(): string {
 }
 
 export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string, displayName: string): UserRow {
-  const existing = db.prepare('SELECT * FROM users WHERE provider = ? AND provider_id = ?').get(provider, providerId) as UserRow | undefined;
+  const existing = db.prepare(`SELECT ${USER_COLS} FROM users WHERE provider = ? AND provider_id = ?`).get(provider, providerId) as UserRow | undefined;
   if (existing) return existing;
   const id = newId('u_');
   db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, created_at)

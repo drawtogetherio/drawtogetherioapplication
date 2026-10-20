@@ -1,11 +1,11 @@
 import { ApiError, api } from '../net/api';
 import {
-  AVATAR_MAX_BYTES, AVATAR_SIZE, DISPLAY_NAME_MAX, HANDLE_FOODS, HANDLE_WORDS, LINK_PLATFORMS, MyProfile,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, AVATAR_SIZE, DISPLAY_NAME_MAX, STATUS_MAX, cleanStatus, HANDLE_FOODS, HANDLE_WORDS, LINK_PLATFORMS, MyProfile,
   graphemeCount, normalizeColor, normalizeLink, sanitizeDisplayName, splitHandle, validateDisplayName,
 } from '../shared/profile';
 import { h } from './dom';
 import { icon } from './icons';
-import { avatarEl } from './people';
+import { avatarEl, badges, gradientStyle } from './people';
 import { modal } from './dialogs';
 
 /** Scale any picture down to a small square (first frame only, so GIFs become static). */
@@ -41,7 +41,13 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
 
     // Avatar
     const avatarBox = h('div.avatar-edit');
-    const renderAvatar = () => avatarBox.replaceChildren(avatarEl({ ...current, displayName: nameIn.value || current.displayName, favoriteColor: colorIn.value }, 72));
+    const renderAvatar = () => {
+      avatarBox.replaceChildren(avatarEl({ ...current, displayName: nameIn.value || current.displayName, favoriteColor: colorIn.value }, 72, true));
+      namePreview.textContent = sanitizeDisplayName(nameIn.value) || current.displayName;
+      namePreview.className = gradOn.checked && current.premium ? 'gradient-name' : '';
+      namePreview.setAttribute('style', gradOn.checked && current.premium ? gradientStyle([g1.value, g2.value]) : '');
+    };
+    const namePreview = h('span');
     const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp,image/gif', id: 'avatar-file', hidden: true });
     const upload = h('button.btn', { type: 'button', onclick: () => file.click() }, 'Upload picture');
     const remove = h('button.btn', { type: 'button' }, 'Remove');
@@ -90,6 +96,52 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     };
     nameIn.addEventListener('input', checkName);
 
+    // Status message
+    const statusIn = h('input', { type: 'text', id: 'status', value: me.status ?? '', maxlength: STATUS_MAX * 2, placeholder: 'Working on a comic, open to collabs…', 'aria-label': 'Status message' });
+    const statusCount = h('span.counter');
+    const checkStatus = () => {
+      const c = cleanStatus(statusIn.value);
+      statusCount.textContent = `${graphemeCount(sanitizeDisplayName(statusIn.value))}/${STATUS_MAX}`;
+      showErr('status', c === null ? `Keep it to ${STATUS_MAX} characters.` : '');
+    };
+    statusIn.addEventListener('input', checkStatus);
+
+    // Premium: name gradient and animated picture
+    const premium = me.premium;
+    const g = me.gradient ?? [me.favoriteColor, '#f4c25b'];
+    const gradOn = h('input', { type: 'checkbox', id: 'gradient-on', 'aria-label': 'Use a name gradient' });
+    gradOn.checked = !!me.gradient;
+    const g1 = h('input', { type: 'color', id: 'gradient-1', value: g[0], 'aria-label': 'Gradient start colour' });
+    const g2 = h('input', { type: 'color', id: 'gradient-2', value: g[1], 'aria-label': 'Gradient end colour' });
+    for (const el of [gradOn, g1, g2]) { el.disabled = !premium; el.addEventListener('input', () => renderAvatar()); }
+    const gif = h('input', { type: 'file', accept: 'image/gif', id: 'avatar-gif', hidden: true });
+    const gifBtn = h('button.btn', { type: 'button', onclick: () => gif.click() }, 'Upload GIF');
+    const gifRemove = h('button.btn', { type: 'button' }, 'Remove GIF');
+    gifBtn.disabled = gifRemove.disabled = !premium;
+    gif.addEventListener('change', async () => {
+      const f = gif.files?.[0];
+      gif.value = '';
+      if (!f) return;
+      try {
+        if (f.type !== 'image/gif') throw new Error('Animated pictures need to be GIFs.');
+        if (f.size > AVATAR_ANIM_MAX_BYTES) throw new Error(`That GIF is too large. Keep it under ${Math.round(AVATAR_ANIM_MAX_BYTES / 1024)} KB.`);
+        gifBtn.disabled = true;
+        // The GIF plays on your profile and in friends lists; everywhere else uses a small still of its first frame.
+        current = await api.uploadAnimatedAvatar(f);
+        current = await api.uploadAvatar(await makeAvatar(f));
+        showErr('gif', '');
+        renderAvatar();
+      } catch (ex) { showErr('gif', (ex as Error).message); } finally { gifBtn.disabled = false; }
+    });
+    gifRemove.addEventListener('click', async () => { current = await api.deleteAnimatedAvatar(); renderAvatar(); });
+    const premiumBox = h(`div.field.premium-box${premium ? '' : '.locked'}` as 'div', {},
+      h('span.field-label', {}, 'Premium extras ', badges(undefined, true)),
+      premium ? null : h('small.muted', {}, 'Available with premium.'),
+      h('label.check', {}, gradOn, 'Name gradient', g1, g2, h('span.gradient-preview', {}, namePreview)),
+      h('div.row', {}, gifBtn, gifRemove, h('small.muted', {}, `Animated GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} px.`)),
+      err('gradient'), err('gif'), gif,
+    );
+
     // Favourite colour (no alpha)
     const colorIn = h('input', { type: 'color', id: 'fav-color', value: me.favoriteColor, 'aria-label': 'Favourite colour' });
     const hexIn = h('input', { type: 'text', id: 'fav-hex', value: me.favoriteColor, maxlength: 7, spellcheck: 'false', 'aria-label': 'Favourite colour hex' });
@@ -119,12 +171,15 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
         ),
       ),
       h('div.field', {}, h('label.field-label', { for: 'display-name' }, 'Display name ', counter), nameIn, h('small.muted', {}, 'Anything you like. Letters, numbers, emoji and accents are fine.'), err('displayName')),
+      h('div.field', {}, h('label.field-label', { for: 'status' }, 'Status ', statusCount), statusIn, h('small.muted', {}, 'Shown to your friends next to your name.'), err('status')),
       h('div.field', {}, h('span.field-label', {}, 'Handle ', handlePreview), h('div.row.handle-row', {}, wordSel, foodSel, shuffle), err('handle')),
       h('div.field', {}, h('label.field-label', { for: 'fav-hex' }, 'Favourite colour'), h('div.row', {}, colorIn, hexIn), h('small.muted', {}, 'Colours your folder and name bubble in rooms.'), err('favoriteColor')),
+      premiumBox,
       h('details.field', { open: setup ? null : true }, h('summary.field-label', {}, 'Your other profiles'), h('small.muted', {}, 'Type a username to show a link on your profile. Nothing gets connected.'), links),
       err('form'),
     );
     checkName();
+    checkStatus();
     renderAvatar();
 
     const saveBtn = h('button.btn.primary', { type: 'submit' }, setup ? 'Start drawing' : 'Save');
@@ -138,7 +193,8 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       try {
         saved = await api.updateMe({
           displayName: sanitizeDisplayName(nameIn.value), handle: handle(), favoriteColor: normalizeColor(hexIn.value) ?? colorIn.value,
-          links: linkVals, done: true,
+          links: linkVals, done: true, status: cleanStatus(statusIn.value) ?? statusIn.value,
+          ...(premium ? { gradient: gradOn.checked ? [g1.value, g2.value] as [string, string] : null } : {}),
         });
         close();
       } catch (ex) {

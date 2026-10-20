@@ -20,6 +20,8 @@ import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme } from '../shared/themes';
 import { api } from '../net/api';
 import { applyTheme, theme } from './theme';
+import { Home } from './home';
+import { LOGO_SVG } from '../site/brand';
 import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } from './toolPicker';
 
 /** Tools whose button opens a drop-down when tapped while already selected. */
@@ -50,6 +52,7 @@ export class App {
   private toastTimer = 0;
   readonly roomUI: RoomUI;
   readonly session: Session;
+  readonly home: Home;
   private menuDyn = h('div.menu-dyn');
   private dock = h('div.room-dock', { hidden: true });
   private membersPop = h('div.popover.members-pop', { hidden: true });
@@ -70,6 +73,7 @@ export class App {
     ed.view.overlay = (ctx, M) => this.drawOverlay(ctx, M);
     this.roomUI = new RoomUI(ed);
     this.session = new Session(this);
+    this.home = new Home(this);
     this.roomUI.onLeave = () => this.session.leaveRoom();
     this.membersPop.append(this.roomUI.membersPanel);
     dismissOnOutside(this.membersPop, [this.dock], () => { this.membersPop.hidden = true; });
@@ -83,7 +87,10 @@ export class App {
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
     const left = h('div.bar-group', {},
-      h('div.brand', {}, 'doodle', h('span', {}, 'hive')),
+      h('button.brand', {
+        title: 'Home', 'aria-label': 'Doodlehive home', html: LOGO_SVG + '<span class="brand-word">doodle<span>hive</span></span>',
+        onclick: () => { if (!this.session.offline) this.session.leaveRoom(); },
+      }),
       menuBtn,
       btn('download', 'Export (Ctrl+Shift+E)', () => exportDialog(ed)),
       h('span.sep'),
@@ -136,7 +143,7 @@ export class App {
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
 
-    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, layersPop, colorPop, this.membersPop, this.toolPop, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -155,6 +162,7 @@ export class App {
     const me = this.ed.me;
     if (me) applyTheme(canUseTheme(me.theme, me.premium) ? me.theme : null);
     this.renderMenuDyn();
+    this.home.renderAccount();
   }
 
   /** Swatches for the app colour theme. Premium themes are locked without premium. */
@@ -194,6 +202,12 @@ export class App {
     if (room.status === 'connecting' || room.status === 'reconnecting') {
       d.append(h('span.room-status', {}, room.status === 'connecting' ? 'Connecting…' : 'Reconnecting…'));
     }
+    const own = room.info?.ownerId === room.you;
+    if (room.info?.private) {
+      // A canvas just for you: no member list or chat, just a way to share it.
+      if (own) d.append(h('button.btn.share-btn', { html: icon('users', 16) + '<span>Share</span>', onclick: () => this.shareCanvas() }));
+      return;
+    }
     const stack = h('span.avatar-stack');
     for (const m of room.members.slice(0, 4)) stack.append(avatarEl(m, 24));
     const membersBtn = h('button.members-btn', {
@@ -207,10 +221,28 @@ export class App {
     );
   }
 
-  async copyInvite() {
-    const link = this.session.inviteLink();
-    try { await navigator.clipboard.writeText(link); this.toast('Invite link copied'); }
-    catch { this.toast(link); }
+  async copyText(text: string, done: string) {
+    try { await navigator.clipboard.writeText(text); this.toast(done); }
+    catch { this.toast(text); }
+  }
+
+  copyInvite() { return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
+
+  /** Turn a private canvas into a shared room and copy its invite link. */
+  async shareCanvas() {
+    const room = this.ed.room;
+    if (!room) return;
+    try {
+      await api.updateRoom(room.id, { private: false });
+      await this.copyInvite();
+    } catch (e) { this.toast((e as Error).message); }
+  }
+
+  private async setPrivate(on: boolean) {
+    const room = this.ed.room;
+    if (!room) return;
+    if (on && room.members.length > 1 && !(await confirmDialog('Make this canvas private?', 'Everyone else will be disconnected, and only you will be able to open it.', 'Make private'))) return;
+    try { await api.updateRoom(room.id, { private: on }); } catch (e) { this.toast((e as Error).message); }
   }
 
   private onChange(w: string) {
@@ -226,6 +258,7 @@ export class App {
     } else if (w === 'history') {
       this.undoBtn.disabled = !ed.doc.history.canUndo;
       this.redoBtn.disabled = !ed.doc.history.canRedo;
+      this.session.scheduleThumb();
     } else if (w === 'selection') {
       if (ed.toolId === 'select') this.renderOptions();
     } else if (w === 'doc') {
@@ -417,16 +450,20 @@ export class App {
           h('button.btn', { html: icon('logout', 16) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } })),
         h('div.menu-sep'));
     } else if (s.server) {
-      d.append(item('user', 'Log in to draw together…', () => s.loginScreen()), h('div.menu-sep'));
+      d.append(item('user', 'Log in to draw together…', () => { location.href = '/login?next=/app'; }), h('div.menu-sep'));
     }
     if (ed.room) {
-      d.append(h('div.menu-label', {}, ed.room.info?.name ?? 'Shared room'),
-        item('link', 'Copy invite link', () => this.copyInvite()),
-        item('logout', 'Leave room', () => s.leaveRoom()));
+      const info = ed.room.info, own = info?.ownerId === ed.room.you;
+      d.append(h('div.menu-label', {}, info?.name ?? 'Canvas'));
+      if (info?.private) {
+        if (own) d.append(item('users', 'Share with friends…', () => this.shareCanvas()));
+      } else {
+        d.append(item('link', 'Copy invite link', () => this.copyInvite()));
+        if (own) d.append(item('lock', 'Make private', () => this.setPrivate(true)));
+      }
+      d.append(item('home', 'Back to home', () => s.leaveRoom()));
     } else if (me) {
-      d.append(item('users', 'Start a shared room…', () => s.createRoomFlow()),
-        item('folderPlus', 'Join a room…', () => s.homeScreen()),
-        item('file', 'New canvas…', () => this.newCanvas()));
+      d.append(item('home', 'Home', () => s.showHome()), item('plus', 'Create new…', () => s.createNew()));
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }

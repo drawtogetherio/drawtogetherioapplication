@@ -4,7 +4,7 @@ import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
 
-const url = process.argv[2] ?? 'http://localhost:5173/';
+const url = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '') + '/app';
 const out = 'test-results/room';
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
@@ -18,6 +18,7 @@ async function person(name, color, target = url) {
   page.on('pageerror', (e) => errors.push(`${name} pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/status of 401/.test(m.text())) errors.push(`${name} console: ${m.text()} ${m.location().url}`); });
   await page.goto(target);
+  await page.waitForURL(/\/login/);
   await page.fill('#dev-name', name + Math.floor(Math.random() * 1e6));
   await page.getByRole('button', { name: 'Dev login' }).click();
   await page.waitForSelector('#display-name');
@@ -49,7 +50,8 @@ const line = (x0, y0, x1, y1, n = 30) => Array.from({ length: n }, (_, i) => [x0
 
 // ---- Alice creates a room ----
 const alice = await person('Alice', '#e8578a');
-await alice.locator('.home-card', { hasText: 'Start a shared room' }).click();
+await alice.locator('.create-tile').click();
+await alice.locator('.home-card', { hasText: 'Shared room' }).click();
 await alice.fill('#room-name', 'Sketch night');
 await alice.getByText('Unlimited').first().click().catch(() => {});
 await alice.getByRole('button', { name: 'Create room' }).click();

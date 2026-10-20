@@ -1,12 +1,12 @@
 // Admin commands. Usage:
 //   npm run admin -- premium <handle> <days|forever|off>
 //   npm run admin -- users
-import { db, UserRow } from './db.ts';
+import { db, USER_COLS, UserRow } from './db.ts';
 
 const [cmd, ...args] = process.argv.slice(2);
 if (cmd === 'premium') {
   const [handle, length] = args;
-  const u = db.prepare('SELECT * FROM users WHERE lower(handle) = lower(?)').get(handle ?? '') as UserRow | undefined;
+  const u = db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(handle) = lower(?)`).get(handle ?? '') as UserRow | undefined;
   if (!u || !length) { console.error('Usage: premium <handle> <days|forever|off>'); process.exit(1); }
   if (length === 'off') db.prepare('UPDATE users SET premium = 0, premium_until = NULL WHERE id = ?').run(u.id);
   else if (length === 'forever') db.prepare('UPDATE users SET premium = 1, premium_until = NULL WHERE id = ?').run(u.id);

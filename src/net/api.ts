@@ -1,6 +1,6 @@
 import type { DocSettings } from '../core/model';
 import type { MyProfile, PublicProfile } from '../shared/profile';
-import type { RoomInfo } from '../shared/protocol';
+import type { ProjectInfo, RoomInfo } from '../shared/protocol';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public field?: string) { super(message); }
@@ -18,7 +18,10 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { discord: boolean; devLogin: boolean }
+export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null } }
+
+export interface Friend extends PublicProfile { online: boolean }
+export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
 
 export const api = {
   /** Null when no server is reachable (offline / static preview). */
@@ -35,12 +38,24 @@ export const api = {
   devLogin: (name: string) => call<MyProfile>('POST', '/auth/dev', { name }),
   logout: () => call('POST', '/auth/logout'),
   discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
-  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string }>) =>
+  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null }>) =>
     call<MyProfile>('PATCH', '/api/me', patch),
   uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),
   randomHandle: () => call<{ handle: string }>('GET', '/api/handle/random'),
   checkHandle: (h: string) => call<{ valid: boolean; available: boolean }>('GET', '/api/handle/check?h=' + encodeURIComponent(h)),
-  createRoom: (name: string, settings: Omit<DocSettings, 'id'>) => call<RoomInfo>('POST', '/api/rooms', { name, settings }),
+  uploadAnimatedAvatar: (gif: Blob) => call<MyProfile>('PUT', '/api/me/avatar-animated', undefined, gif),
+  deleteAnimatedAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar-animated'),
+  createRoom: (name: string, settings: Omit<DocSettings, 'id'>, isPrivate = false) =>
+    call<RoomInfo>('POST', '/api/rooms', { name, settings, private: isPrivate }),
+  updateRoom: (id: string, patch: { name?: string; private?: boolean }) => call<RoomInfo>('PATCH', '/api/rooms/' + id, patch),
+  deleteRoom: (id: string) => call<{ ok: true }>('DELETE', '/api/rooms/' + id),
+  uploadThumb: (id: string, img: Blob) => call<{ ok: true }>('PUT', `/api/rooms/${id}/thumb`, undefined, img),
+  projects: () => call<ProjectInfo[]>('GET', '/api/projects'),
+  friends: () => call<FriendsList>('GET', '/api/friends'),
+  addFriend: (handle: string) => call<FriendsList & { result: 'requested' | 'accepted' }>('POST', '/api/friends', { handle }),
+  acceptFriend: (id: string) => call<FriendsList>('POST', `/api/friends/${id}/accept`),
+  removeFriend: (id: string) => call<FriendsList>('DELETE', '/api/friends/' + id),
+  ping: () => call<{ ok: true }>('POST', '/api/presence'),
   room: (id: string) => call<RoomInfo & { owner: PublicProfile | null; online: number }>('GET', '/api/rooms/' + id),
 };

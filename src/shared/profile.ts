@@ -65,6 +65,14 @@ export function validateDisplayName(s: string): string | null {
   return null;
 }
 
+export const STATUS_MAX = 80;
+
+/** Status message: same cleaning as display names; empty is allowed. Returns null if too long. */
+export function cleanStatus(raw: string): string | null {
+  const s = sanitizeDisplayName(raw);
+  return graphemeCount(s) > STATUS_MAX || s.length > STATUS_MAX * 4 ? null : s;
+}
+
 export function normalizeColor(c: string): string | null {
   const m = /^#?([0-9a-fA-F]{6})$/.exec(c.trim());
   return m ? '#' + m[1].toLowerCase() : null;
@@ -107,6 +115,12 @@ export interface PublicProfile {
   /** Effective premium status (flag set and not expired). */
   premium: boolean;
   premiumUntil: number | null;
+  /** Short status message ("Working on a comic"); empty when unset. */
+  status: string;
+  /** Premium: two colours for the name/profile gradient, or null. */
+  gradient: [string, string] | null;
+  /** Premium: animated (GIF) picture URL, or null. `avatar` stays a small still version. */
+  avatarAnimated: string | null;
 }
 
 export interface MyProfile extends PublicProfile {
@@ -120,3 +134,6 @@ export interface MyProfile extends PublicProfile {
 /** Avatars are stored at this size; they are only ever shown small. */
 export const AVATAR_SIZE = 128;
 export const AVATAR_MAX_BYTES = 48 * 1024;
+/** Premium animated pictures are stored as uploaded (GIF), so they get a bigger, still modest limit. */
+export const AVATAR_ANIM_MAX_BYTES = 768 * 1024;
+export const AVATAR_ANIM_MAX_SIZE = 512;

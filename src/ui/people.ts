@@ -1,4 +1,4 @@
-import type { PublicProfile } from '../shared/profile';
+import { LINK_PLATFORMS, PublicProfile } from '../shared/profile';
 import type { Role } from '../shared/protocol';
 import { h } from './dom';
 import { CROWN_SVG, HOST_SVG, STAR_SVG } from './icons';
@@ -16,9 +16,14 @@ export function inkOn(hex: string) {
 }
 
 /** Round avatar: the uploaded picture, or an initial on the person's favourite colour. */
-export function avatarEl(p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'>, size = 28): HTMLElement {
+export function avatarEl(
+  p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'> & { avatarAnimated?: string | null },
+  size = 28, animate = false,
+): HTMLElement {
   const el = h('span.avatar', { style: `width:${size}px;height:${size}px;--ring:${p.favoriteColor}` });
-  if (p.avatar) el.append(h('img', { src: p.avatar, alt: '', width: size, height: size, loading: 'lazy' }));
+  // The animated picture (premium) only plays where it's showcased; everywhere else uses the small still.
+  const src = animate && p.avatarAnimated ? p.avatarAnimated : p.avatar;
+  if (src) el.append(h('img', { src, alt: '', width: size, height: size, loading: 'lazy' }));
   else {
     el.textContent = initials(p.displayName);
     el.style.background = p.favoriteColor;
@@ -35,8 +40,13 @@ export function badges(role: Role | undefined, premium: boolean): HTMLElement {
   return el;
 }
 
+/** Premium name gradient as inline style (text filled with the gradient). */
+export function gradientStyle(g: [string, string] | null | undefined) {
+  return g ? `--g1:${g[0]};--g2:${g[1]}` : '';
+}
+
 export function nameLine(p: PublicProfile, role?: Role, you = false): HTMLElement {
-  const name = h('span.person-name', {}, p.displayName);
+  const name = h(`span.person-name${p.gradient ? '.gradient-name' : ''}` as 'span', { style: gradientStyle(p.gradient) }, p.displayName);
   return h('span.name-line', {}, name, badges(role, p.premium), you ? h('span.you-tag', {}, 'you') : null);
 }
 
@@ -51,4 +61,23 @@ export function avatarImage(url: string, onLoad: () => void): HTMLImageElement |
     imgCache.set(url, img);
   }
   return img.complete && img.naturalWidth ? img : null;
+}
+
+/** Profile card contents (picture, name, badges, status, colour, links). Used for members and friends. */
+export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLElement | null): HTMLElement {
+  const links = h('div.profile-links');
+  for (const pl of LINK_PLATFORMS) {
+    const u = p.links[pl.id];
+    if (u) links.append(h('a.profile-link', { href: pl.url(u), target: '_blank', rel: 'noopener noreferrer' }, h('span.link-label', {}, pl.label), h('span', {}, (pl.id === 'pixiv' ? '#' : '@') + u)));
+  }
+  const head = h(`div.profile-card-head${p.gradient ? '.has-gradient' : ''}` as 'div', { style: gradientStyle(p.gradient) },
+    avatarEl(p, 64, true),
+    h('div', {},
+      h('div.profile-card-name', {}, h(`span${p.gradient ? '.gradient-name' : ''}` as 'span', { style: gradientStyle(p.gradient) }, p.displayName), badges(role, p.premium)),
+      h('div.muted', {}, '@' + p.handle),
+      p.status ? h('div.profile-status', {}, p.status) : null,
+      h('div.fav', {}, h('span.fav-swatch', { style: `background:${p.favoriteColor}` }), h('span.muted', {}, p.favoriteColor))),
+  );
+  return h('div.modal-body.profile-card', {}, head, extra ?? null,
+    links.childElementCount ? links : h('p.muted', {}, 'No other profiles listed.'));
 }

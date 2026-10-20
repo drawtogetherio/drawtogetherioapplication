@@ -4,10 +4,9 @@ import { polyPath } from '../core/geom';
 import type { Editor } from '../editor';
 import type { RoomClient, RoomEvent } from '../net/roomClient';
 import { CHAT_MAX, ChatMsg, Member } from '../shared/protocol';
-import { LINK_PLATFORMS } from '../shared/profile';
 import { clear, h } from './dom';
 import { icon } from './icons';
-import { avatarEl, avatarImage, badges, initials, inkOn, nameLine } from './people';
+import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, profileCardBody } from './people';
 import { confirmDialog, exportDialog, modal } from './dialogs';
 
 interface RemoteStroke { renderer: StrokeRenderer; layerId: string; touched: number }
@@ -227,11 +226,6 @@ export class RoomUI {
 
   profileCard(m: Member) {
     const room = this.room!;
-    const links = h('div.profile-links');
-    for (const p of LINK_PLATFORMS) {
-      const u = m.links[p.id];
-      if (u) links.append(h('a.profile-link', { href: p.url(u), target: '_blank', rel: 'noopener noreferrer' }, h('span.link-label', {}, p.label), h('span', {}, (p.id === 'pixiv' ? '#' : '@') + u)));
-    }
     const actions: HTMLElement[] = [];
     const meRole = room.me?.role;
     const canKick = room.isHost && m.id !== room.you && m.role !== 'owner' && !(m.role === 'host' && meRole !== 'owner');
@@ -251,15 +245,7 @@ export class RoomUI {
         },
       }));
     }
-    const body = h('div.modal-body.profile-card', {},
-      h('div.profile-card-head', {},
-        avatarEl(m, 64),
-        h('div', {}, h('div.profile-card-name', {}, m.displayName, badges(m.role, m.premium)), h('div.muted', {}, '@' + m.handle),
-          h('div.fav', {}, h('span.fav-swatch', { style: `background:${m.favoriteColor}` }), h('span.muted', {}, m.favoriteColor))),
-      ),
-      links.childElementCount ? links : h('p.muted', {}, 'No other profiles listed.'),
-    );
-    close = modal(m.id === room.you ? 'You' : 'Profile', body, actions);
+    close = modal(m.id === room.you ? 'You' : 'Profile', profileCardBody(m, m.role), actions);
   }
 
   // ---- Chat ----

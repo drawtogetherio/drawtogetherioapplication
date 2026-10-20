@@ -12,6 +12,7 @@ export type RoomEvent =
   | { kind: 'live-end'; from: string; stroke: string }
   | { kind: 'cursor'; from: string; x: number; y: number; drawing: boolean }
   | { kind: 'status' }
+  | { kind: 'room' }
   | { kind: 'error'; message: string };
 
 /**
@@ -102,6 +103,10 @@ export class RoomClient {
       case 'reject':
         this.emit({ kind: 'error', message: m.reason });
         this.resync();
+        return;
+      case 'room':
+        this.info = m.room;
+        this.emit({ kind: 'room' });
         return;
       case 'members':
         this.members = m.members;
