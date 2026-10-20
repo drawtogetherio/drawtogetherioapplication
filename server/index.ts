@@ -2,6 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
@@ -92,6 +93,15 @@ async function route(req: Req, res: Res) {
   const url = new URL(req.url ?? '/', 'http://x');
   const p = url.pathname;
   const m = req.method ?? 'GET';
+
+  if (p === '/healthz') return json(res, 200, { ok: true });
+  // www.doodlehive.net → doodlehive.net (one canonical address keeps login cookies in one place).
+  const host = String(req.headers.host ?? '');
+  const canonical = new URL(config.publicUrl).host;
+  if (config.production && host === 'www.' + canonical) {
+    res.writeHead(301, { Location: config.publicUrl + (req.url ?? '/') });
+    return res.end();
+  }
 
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
@@ -250,9 +260,23 @@ async function route(req: Req, res: Res) {
   if (m === 'GET' && !p.startsWith('/api/') && fs.existsSync(config.staticDir)) {
     const file = path.join(config.staticDir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
     const target = file.startsWith(config.staticDir) && fs.existsSync(file) && fs.statSync(file).isFile() ? file : path.join(config.staticDir, 'index.html');
-    const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png' };
-    res.writeHead(200, { 'Content-Type': types[path.extname(target)] ?? 'application/octet-stream' });
-    return fs.createReadStream(target).pipe(res);
+    const ext = path.extname(target);
+    const types: Record<string, string> = {
+      '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png',
+      '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain',
+    };
+    const headers: Record<string, string> = {
+      'Content-Type': types[ext] ?? 'application/octet-stream',
+      // Vite puts a content hash in asset file names, so they can be cached forever; the page itself never is.
+      'Cache-Control': target.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
+    };
+    const stream = fs.createReadStream(target);
+    if (/\.(html|js|css|svg|json)$/.test(target) && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
+      res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' });
+      return stream.pipe(zlib.createGzip()).pipe(res);
+    }
+    res.writeHead(200, headers);
+    return stream.pipe(res);
   }
   json(res, 404, { error: 'Not found.' });
 }
@@ -286,8 +310,19 @@ setInterval(() => {
 }, 30_000);
 wss.on('connection', (ws) => { const w = ws as typeof ws & { alive?: boolean }; w.alive = true; ws.on('pong', () => { w.alive = true; }); });
 
+// Railway (and most hosts) stop the old server with SIGTERM during a deploy: finish cleanly.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    for (const ws of wss.clients) ws.close(1012, 'Server restarting');
+    server.close();
+    try { db.close(); } catch { /* already closed */ }
+    process.exit(0);
+  });
+}
+
 server.listen(config.port, () => {
   console.log(`Doodlehive server on ${config.publicUrl}`);
-  console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID/SECRET in server/.env)'}`);
+  if (!config.persistent) console.warn('  WARNING: no volume attached; accounts and rooms will be lost on the next deploy.');
+  console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
 });

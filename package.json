@@ -18,15 +18,18 @@
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
     "concurrently": "^10.0.6",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
     "vite-plugin-singlefile": "^2.3.4"
   },
   "dependencies": {
     "ag-psd": "^31.0.3",
+    "tsx": "^4.23.15",
     "ws": "^8.22.0"
   },
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  }
 }

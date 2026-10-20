@@ -24,6 +24,10 @@ const env = process.env;
 const port = Number(env.PORT || 8787);
 const discordId = env.DISCORD_CLIENT_ID || '';
 const discordSecret = env.DISCORD_CLIENT_SECRET || '';
+/** Running on Railway (or another production host): safer defaults, no dev login. */
+const onRailway = !!(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
+const production = env.NODE_ENV === 'production' || onRailway;
+const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
 
 /** server/data/doodlehive.db; an older database from before the rename is renamed to match. */
 function defaultDbPath() {
@@ -39,13 +43,17 @@ function defaultDbPath() {
 export const config = {
   port,
   /** Public URL of this server (used for the Discord redirect). */
-  publicUrl: (env.PUBLIC_URL || `http://localhost:${port}`).replace(/\/$/, ''),
+  publicUrl,
+  production,
   /** Where to send people after logging in (the Vite dev server in development). */
-  clientUrl: (env.CLIENT_URL || env.PUBLIC_URL || `http://localhost:5173`).replace(/\/$/, ''),
+  clientUrl: (env.CLIENT_URL || (production || env.PUBLIC_URL ? publicUrl : 'http://localhost:5173')).replace(/\/$/, ''),
   discord: discordId && discordSecret ? { clientId: discordId, clientSecret: discordSecret } : null,
-  /** Fake logins for local testing. On by default until Discord is configured. */
-  devLogin: env.DEV_LOGIN ? env.DEV_LOGIN === '1' : !(discordId && discordSecret),
-  dbPath: env.DB_PATH || defaultDbPath(),
+  /** Fake logins for local testing. On by default until Discord is configured; never on by default in production. */
+  devLogin: env.DEV_LOGIN ? env.DEV_LOGIN === '1' : !(discordId && discordSecret) && !production,
+  /** On Railway the database lives on the attached volume so it survives deploys. */
+  dbPath: env.DB_PATH || (env.RAILWAY_VOLUME_MOUNT_PATH ? path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'doodlehive.db') : defaultDbPath()),
+  /** False when a production server would keep its database on a disk that is wiped every deploy. */
+  persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
-  secureCookies: (env.PUBLIC_URL || '').startsWith('https://'),
+  secureCookies: publicUrl.startsWith('https://'),
 };

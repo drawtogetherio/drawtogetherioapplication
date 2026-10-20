@@ -20,7 +20,7 @@ Other commands:
 
 ```bash
 npm run build          # production web build in dist/
-npm start              # run the server; it also serves dist/ on PUBLIC_URL
+npm start              # run the server; it also serves dist/ on PUBLIC_URL (see DEPLOY.md for Railway)
 npm run typecheck      # client + server
 npm run build:preview  # one self-contained offline HTML file in preview/
 npm run admin -- users                          # list accounts
