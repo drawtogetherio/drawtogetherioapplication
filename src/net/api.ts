@@ -1,0 +1,46 @@
+import type { DocSettings } from '../core/model';
+import type { MyProfile, PublicProfile } from '../shared/profile';
+import type { RoomInfo } from '../shared/protocol';
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public field?: string) { super(message); }
+}
+
+async function call<T>(method: string, url: string, body?: unknown, raw?: Blob): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    credentials: 'same-origin',
+    headers: raw ? { 'Content-Type': raw.type } : body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+    body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? 'Request failed.', (data as { field?: string }).field);
+  return data as T;
+}
+
+export interface ServerConfig { discord: boolean; devLogin: boolean }
+
+export const api = {
+  /** Null when no server is reachable (offline / static preview). */
+  async config(): Promise<ServerConfig | null> {
+    try {
+      const res = await fetch('/api/config', { credentials: 'same-origin' });
+      if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
+      return await res.json();
+    } catch { return null; }
+  },
+  async me(): Promise<MyProfile | null> {
+    try { return await call<MyProfile>('GET', '/api/me'); } catch (e) { if (e instanceof ApiError && e.status === 401) return null; throw e; }
+  },
+  devLogin: (name: string) => call<MyProfile>('POST', '/auth/dev', { name }),
+  logout: () => call('POST', '/auth/logout'),
+  discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
+  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean }>) =>
+    call<MyProfile>('PATCH', '/api/me', patch),
+  uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
+  deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),
+  randomHandle: () => call<{ handle: string }>('GET', '/api/handle/random'),
+  checkHandle: (h: string) => call<{ valid: boolean; available: boolean }>('GET', '/api/handle/check?h=' + encodeURIComponent(h)),
+  createRoom: (name: string, settings: Omit<DocSettings, 'id'>) => call<RoomInfo>('POST', '/api/rooms', { name, settings }),
+  room: (id: string) => call<RoomInfo & { owner: PublicProfile | null; online: number }>('GET', '/api/rooms/' + id),
+};

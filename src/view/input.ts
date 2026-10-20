@@ -131,6 +131,8 @@ export class InputController {
     if (e.pointerId === this.toolPointer) {
       const events = e.getCoalescedEvents?.() ?? [];
       for (const ce of events.length ? events : [e]) this.activeTool.move(this.info(ce));
+      const p = this.info(e);
+      this.ed.sendCursor(p.x, p.y, true);
       return;
     }
     const t = this.touches.get(e.pointerId);
@@ -170,7 +172,9 @@ export class InputController {
     if (e.pointerId === this.toolPointer) {
       this.toolPointer = null;
       // iOS may cancel a pen stroke when the palm touches; keep what was drawn.
-      this.activeTool.up(this.info(e));
+      const p = this.info(e);
+      this.activeTool.up(p);
+      this.ed.sendCursor(p.x, p.y, false);
     }
     if (!this.touches.has(e.pointerId)) return;
     this.touches.delete(e.pointerId);

@@ -29,18 +29,18 @@ function getScratch(w: number, h: number) {
  */
 export function composite(
   ctx: CanvasRenderingContext2D, doc: DrawDoc, region: Rect,
-  opts: { live?: LiveLayer | null; paper?: boolean; only?: string; raw?: boolean } = {},
+  opts: { lives?: LiveLayer[]; paper?: boolean; only?: string; raw?: boolean } = {},
 ) {
-  const { live, paper = true } = opts;
+  const { lives = [], paper = true } = opts;
   if (paper && doc.settings.background) {
     ctx.fillStyle = doc.settings.background;
     ctx.fillRect(region.x, region.y, region.w, region.h);
   }
   for (const layer of doc.layers) {
     const p = layer.props;
-    if (opts.only ? p.id !== opts.only : !p.visible) continue;
-    const isLive = live && live.layerId === p.id;
-    if (!isLive) {
+    if (opts.only ? p.id !== opts.only : !layer.shown) continue;
+    const mine = lives.length ? lives.filter((l) => l.layerId === p.id) : lives;
+    if (!mine.length) {
       ctx.save();
       if (!opts.raw) {
         ctx.globalAlpha = p.opacity;
@@ -58,27 +58,29 @@ export function composite(
     sc.clearRect(0, 0, W, H);
     sc.setTransform(ctx.getTransform());
     layer.surface.drawTo(sc, region);
-    if (live.hole) {
-      sc.save();
-      sc.globalCompositeOperation = 'destination-out';
-      sc.fill(live.hole);
-      sc.restore();
-    }
-    if (live.buffer) {
-      sc.save();
-      if (live.clip) sc.clip(live.clip);
-      sc.globalAlpha = live.bufferAlpha ?? 1;
-      sc.globalCompositeOperation = live.bufferOp ?? 'source-over';
-      live.buffer.drawTo(sc, region);
-      sc.restore();
-    }
-    if (live.floating) {
-      const f = live.floating;
-      sc.save();
-      sc.transform(f.m.a, f.m.b, f.m.c, f.m.d, f.m.e, f.m.f);
-      sc.imageSmoothingQuality = 'high';
-      sc.drawImage(f.canvas, f.x, f.y);
-      sc.restore();
+    for (const live of mine) {
+      if (live.hole) {
+        sc.save();
+        sc.globalCompositeOperation = 'destination-out';
+        sc.fill(live.hole);
+        sc.restore();
+      }
+      if (live.buffer) {
+        sc.save();
+        if (live.clip) sc.clip(live.clip);
+        sc.globalAlpha = live.bufferAlpha ?? 1;
+        sc.globalCompositeOperation = live.bufferOp ?? 'source-over';
+        live.buffer.drawTo(sc, region);
+        sc.restore();
+      }
+      if (live.floating) {
+        const f = live.floating;
+        sc.save();
+        sc.transform(f.m.a, f.m.b, f.m.c, f.m.d, f.m.e, f.m.f);
+        sc.imageSmoothingQuality = 'high';
+        sc.drawImage(f.canvas, f.x, f.y);
+        sc.restore();
+      }
     }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);

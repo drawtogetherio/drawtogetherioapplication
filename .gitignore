@@ -3,3 +3,6 @@ dist
 dist-single
 test-results
 preview
+
+server/.env
+server/data/

@@ -70,7 +70,7 @@ await page.keyboard.press('Control+d');
 // New layer with multiply blend
 await page.keyboard.press('b');
 await page.getByTitle('Layers (L)').click();
-await page.getByTitle('New layer').click();
+await page.locator('.head-actions [title="New layer"]').click();
 await page.locator('.blend-select').selectOption('multiply');
 await page.mouse.click(10, 300);
 await page.locator('.color-btn').click();

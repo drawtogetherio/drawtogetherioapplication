@@ -1,14 +1,14 @@
 import './style.css';
 import { DrawDoc } from './core/document';
 import { App } from './ui/app';
-import { newCanvasDialog } from './ui/dialogs';
 import { setSaveHandler } from './io/platform';
 import { zipSingle } from './io/zip';
 
 const root = document.getElementById('app')!;
-// Start with an unlimited canvas behind the "New canvas" dialog so the app is usable immediately.
+// Start with an unlimited canvas behind the first dialog so the app is usable immediately.
 const app = new App(root, DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' }));
-newCanvasDialog((doc) => app.ed.setDoc(doc));
+// Logs in and joins a room when a server is available; otherwise shows the "New canvas" dialog.
+app.session.start();
 
 // Expose for debugging and automated tests.
 (window as unknown as { drawwithus: App }).drawwithus = app;

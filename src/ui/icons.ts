@@ -32,9 +32,27 @@ const P: Record<string, string> = {
   ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6"/>',
   lasso: '<path d="M7 18c-2-1.5-4-3.5-4-6.5C3 7 7 4 12 4s9 3 9 7-4 7-9 7c-1.3 0-2.5-.2-3.6-.5"/><circle cx="7" cy="19" r="1.6"/>',
   selRect: '<path d="M4 4h4M12 4h4M20 4v4M20 12v4M20 20h-4M12 20H8M4 20v-4M4 12V8"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/>',
+  chevronRight: '<path d="M9 6l6 6-6 6"/>',
+  chevronDown: '<path d="M6 9l6 6 6-6"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.4 3.5 5.2"/>',
+  chat: '<path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 16l-4-4 4-4M6 12h10"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6 8-6s7.2 2 8 6"/>',
+  kick: '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.6-3.6 3.2-5.5 6.5-5.5 1.4 0 2.6.3 3.7.9"/><path d="M16 15l5 5M21 15l-5 5"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/>',
+  send: '<path d="M4 12l16-8-6 16-3-6z"/><path d="M11 14l9-10"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   selAll: '<rect x="4" y="4" width="16" height="16" rx="1" stroke-dasharray="3 2"/>',
 };
 
 export function icon(name: keyof typeof P | string, size = 22): string {
   return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] ?? ''}</svg>`;
 }
+
+/** Filled badges shown next to names. */
+export const CROWN_SVG = '<svg class="badge crown" viewBox="0 0 24 24" width="14" height="14" aria-label="Room owner" role="img"><path fill="#f5b301" stroke="#9a6b00" stroke-width="1.2" stroke-linejoin="round" d="M3 18l1.6-10 4.6 4.3L12 5l2.8 7.3L19.4 8 21 18z"/><rect x="3" y="18.5" width="18" height="2.5" rx="1" fill="#f5b301" stroke="#9a6b00" stroke-width="1.2"/></svg>';
+export const STAR_SVG = '<svg class="badge star" viewBox="0 0 24 24" width="14" height="14" aria-label="Premium" role="img"><path fill="#7c5cff" stroke="#4b33c9" stroke-width="1.2" stroke-linejoin="round" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
+export const HOST_SVG = '<svg class="badge host" viewBox="0 0 24 24" width="14" height="14" aria-label="Host" role="img"><path fill="#2f9e6e" stroke="#1b6b48" stroke-width="1.2" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg>';

@@ -9,6 +9,9 @@ export class BrushTool implements Tool {
   private buffer: TiledSurface | null = null;
   private renderer: StrokeRenderer | null = null;
   private pts: number[] = [];
+  private id = '';
+  private sent = 0; // samples already streamed to the room
+  private flushTimer = 0;
 
   constructor(private ed: Editor, private erase: boolean) {}
 
@@ -17,9 +20,11 @@ export class BrushTool implements Tool {
   busy() { return !!this.buffer; }
 
   down(p: PointerInfo) {
-    const layer = this.ed.layer;
-    if (!layer.props.visible) { this.ed.toast('This layer is hidden'); return; }
+    const layer = this.ed.paintableLayer();
+    if (!layer) return;
     const params = { ...this.params };
+    this.id = uid();
+    this.sent = 0;
     this.buffer = new TiledSurface();
     this.renderer = new StrokeRenderer(this.buffer, params, this.erase ? '#000000' : this.ed.color);
     this.pts = [];
@@ -39,25 +44,43 @@ export class BrushTool implements Tool {
     this.pts.push(x, y, pr);
     const r = this.renderer!.add(x, y, pr);
     if (r) this.ed.view.invalidate(r);
+    if (this.ed.room && !this.flushTimer) this.flushTimer = window.setTimeout(() => this.flush(), 33);
+  }
+
+  /** Stream new samples so others see the stroke while it is drawn. */
+  private flush() {
+    clearTimeout(this.flushTimer);
+    this.flushTimer = 0;
+    const room = this.ed.room;
+    if (!room || this.sent >= this.pts.length) return;
+    room.send({ type: 'live', live: {
+      stroke: this.id, layer: this.ed.activeLayer, erase: this.erase, brush: this.params, color: this.erase ? '#000000' : this.ed.color,
+      clip: this.ed.selection ?? undefined, pts: this.pts.slice(this.sent),
+    } });
+    this.sent = this.pts.length;
   }
 
   up() {
     if (!this.buffer) return;
     const r = this.renderer!.end();
     if (r) this.ed.view.invalidate(r);
+    this.flush();
     const buffer = this.buffer;
     const brush = { ...this.params };
     this.ed.view.live = null;
     this.buffer = null;
     if (!this.erase) this.ed.pushRecent(this.ed.color);
     this.ed.apply({
-      t: 'stroke', id: uid(), layer: this.ed.activeLayer, erase: this.erase, brush,
+      t: 'stroke', id: this.id, layer: this.ed.activeLayer, erase: this.erase, brush,
       color: this.erase ? '#000000' : this.ed.color, pts: this.pts, clip: this.ed.selection ?? undefined,
     }, { buffer });
   }
 
   cancel() {
     if (!this.buffer) return;
+    clearTimeout(this.flushTimer);
+    this.flushTimer = 0;
+    this.ed.room?.send({ type: 'live-end', stroke: this.id });
     this.buffer = null;
     this.ed.view.live = null;
     this.ed.view.invalidate(null);

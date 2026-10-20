@@ -13,7 +13,7 @@ export class FillTool implements Tool {
 
   up(p: PointerInfo) {
     const ed = this.ed, doc = ed.doc, st = ed.settings;
-    if (!ed.layer.props.visible) { ed.toast('This layer is hidden'); return; }
+    if (!ed.paintableLayer()) return;
     let region = ed.workArea();
     if (doc.settings.infinite) {
       // Unlimited canvas: fill within the visible area plus existing artwork, capped in size.

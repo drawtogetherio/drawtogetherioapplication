@@ -14,7 +14,7 @@ export class ShapeTool implements Tool {
   busy() { return !!this.start; }
 
   down(p: PointerInfo) {
-    if (!this.ed.layer.props.visible) { this.ed.toast('This layer is hidden'); return; }
+    if (!this.ed.paintableLayer()) return;
     this.start = { x: p.x, y: p.y };
     this.update(p);
   }
@@ -41,7 +41,7 @@ export class ShapeTool implements Tool {
     this.spec = { shape: st.shape, x0, y0, x1, y1, width: b.size, fill: st.shapeFill, color: this.ed.color };
     const buffer = new TiledSurface();
     const r = renderShape(buffer, this.spec);
-    const layer = this.ed.layer;
+    const layer = this.ed.layer!;
     this.ed.view.live = {
       layerId: layer.props.id, buffer, bufferAlpha: b.opacity,
       bufferOp: layer.props.alphaLock ? 'source-atop' : 'source-over', clip: this.ed.clipPath(),

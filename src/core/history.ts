@@ -1,12 +1,19 @@
+import type { Op } from './model';
+
 export interface HistoryEntry {
   label: string;
-  undo(): void;
-  redo(): void;
+  /** Ops that undo the change (apply in order). */
+  undo: Op[];
+  /** Ops that redo it; filled in when the entry is undone. */
+  redo: Op[];
   /** Approximate memory cost in tiles, used to cap history size. */
   cost: number;
 }
 
-/** Local undo/redo stack. Kept separate from the Op log so collaboration can add per-user undo later. */
+/**
+ * Local undo/redo stack of op lists. Undoing applies ops like any other edit, so in a shared room
+ * an undo reaches everyone. Each person has their own stack.
+ */
 export class History {
   private done: HistoryEntry[] = [];
   private undone: HistoryEntry[] = [];
@@ -14,32 +21,23 @@ export class History {
 
   constructor(private maxEntries = 120, private maxCost = 700) {}
 
-  push(e: HistoryEntry) {
+  record(e: HistoryEntry) {
     this.done.push(e);
     this.undone = [];
-    let cost = this.done.reduce((s, x) => s + x.cost, 0);
+    this.trim();
+    this.onChange();
+  }
+
+  takeUndo() { return this.done.pop(); }
+  takeRedo() { return this.undone.pop(); }
+  putUndone(e: HistoryEntry) { this.undone.push(e); this.onChange(); }
+  putDone(e: HistoryEntry) { this.done.push(e); this.trim(); this.onChange(); }
+
+  private trim() {
+    let cost = this.done.reduce((s, x) => s + x.cost, 0) + this.undone.reduce((s, x) => s + x.cost, 0);
     while (this.done.length > 1 && (this.done.length > this.maxEntries || cost > this.maxCost)) {
       cost -= this.done.shift()!.cost;
     }
-    this.onChange();
-  }
-
-  undo() {
-    const e = this.done.pop();
-    if (!e) return false;
-    e.undo();
-    this.undone.push(e);
-    this.onChange();
-    return true;
-  }
-
-  redo() {
-    const e = this.undone.pop();
-    if (!e) return false;
-    e.redo();
-    this.done.push(e);
-    this.onChange();
-    return true;
   }
 
   clear() { this.done = []; this.undone = []; this.onChange(); }

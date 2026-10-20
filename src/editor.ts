@@ -1,9 +1,13 @@
-import { DrawDoc, newLayerProps } from './core/document';
+import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost } from './core/document';
 import { Point, Rect, polyPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
 import { BRUSH_PRESETS, ERASER_PRESETS } from './engine/brush';
 import { CanvasView } from './view/canvasView';
 import type { Tool } from './tools/tool';
+import type { RoomClient } from './net/roomClient';
+import type { MyProfile } from './shared/profile';
+import { userFolderId } from './shared/protocol';
+import type { ApplyOptions } from './core/document';
 
 export type ToolId = 'brush' | 'eraser' | 'fill' | 'select' | 'shape' | 'eyedropper';
 export type SelectMode = 'rect' | 'ellipse' | 'lasso';
@@ -21,39 +25,46 @@ export interface EditorSettings {
   shapeFill: boolean;
   pressureGamma: number; // pressure curve exponent
   fingerDraws: boolean; // when false, one finger pans (set automatically once a pen is used)
+  showBubbles: boolean; // name bubbles where others are drawing
+  hideOthersFolders: boolean; // layers panel shows only your own folder
 }
 
 type Listener = (what: string) => void;
 
 /**
- * Per-user editor state around a document: active tool and layer, colour, selection. None of this
- * is part of the shared document, so later each collaborator keeps their own.
+ * Per-user editor state around a document: active tool and layer, colour, selection, and the
+ * optional shared room. None of this is part of the shared document.
  */
 export class Editor {
   doc: DrawDoc;
   readonly view: CanvasView;
   tools = {} as Record<ToolId, Tool>;
   toolId: ToolId = 'brush';
-  activeLayer: string;
+  activeLayer = '';
   color = '#1b1b1f';
   recentColors: string[] = [];
   selection: Selection | null = null;
-  author = uid('u_');
   hover: (Point & { pointer: string }) | null = null;
+  /** Signed-in profile (null when offline / logged out). */
+  me: MyProfile | null = null;
+  /** Folder chosen in the layers panel; new layers and folders go inside it. */
+  targetFolder: string | null = null;
+  /** Shared room, when drawing together. */
+  room: RoomClient | null = null;
   settings: EditorSettings = {
     brush: { ...BRUSH_PRESETS[0].params }, brushPreset: 0,
     eraser: { ...ERASER_PRESETS[0].params }, eraserPreset: 0,
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
-    pressureGamma: 1, fingerDraws: true,
+    pressureGamma: 1, fingerDraws: true, showBubbles: true, hideOthersFolders: false,
   };
   private listeners = new Set<Listener>();
   private unsubDoc: () => void = () => {};
 
   constructor(doc: DrawDoc, stage: HTMLElement) {
     this.doc = doc;
-    this.activeLayer = doc.layers[doc.layers.length - 1].props.id;
     this.view = new CanvasView(doc, stage);
+    this.pickActiveLayer();
     this.bindDoc();
   }
 
@@ -64,20 +75,28 @@ export class Editor {
     this.unsubDoc();
     this.unsubDoc = this.doc.on((c) => {
       this.view.invalidate(c.rect);
-      if (!this.doc.layer(this.activeLayer)) this.activeLayer = this.doc.layers[Math.max(0, this.doc.layers.length - 1)].props.id;
+      if (!this.doc.layer(this.activeLayer)) this.pickActiveLayer();
       if (c.structure) this.emit('layers');
     });
     this.doc.history.onChange = () => this.emit('history');
   }
 
-  setDoc(doc: DrawDoc) {
-    this.currentTool.cancel();
+  /** Choose a sensible active layer: the top one this user may edit. */
+  pickActiveLayer() {
+    const mine = [...this.doc.layers].reverse().find((l) => this.canEdit(l.props.id));
+    this.activeLayer = mine?.props.id ?? '';
+  }
+
+  setDoc(doc: DrawDoc, keepView = false) {
+    this.currentTool?.cancel();
     this.selection = null;
+    this.view.live = null;
+    this.view.remoteLive.clear();
     this.doc = doc;
-    this.activeLayer = doc.layers[doc.layers.length - 1].props.id;
     this.view.setDoc(doc);
+    this.pickActiveLayer();
     this.bindDoc();
-    this.fitView();
+    if (!keepView) this.fitView();
     this.emit('doc');
     this.emit('layers');
     this.emit('history');
@@ -107,47 +126,140 @@ export class Editor {
     this.recentColors = [c, ...this.recentColors.filter((x) => x !== c)].slice(0, 12);
   }
 
-  get layer() { return this.doc.layer(this.activeLayer)!; }
+  get layer(): Layer | undefined { return this.doc.layer(this.activeLayer); }
 
   setActiveLayer(id: string) {
     this.commitPending();
     this.activeLayer = id;
+    this.targetFolder = null;
     this.emit('layers');
   }
 
-  /** Apply an op authored by this user. */
-  apply(op: Op, buffer?: Parameters<DrawDoc['apply']>[1]) {
-    op.author = this.author;
-    this.doc.apply(op, buffer);
+  // ---- Permissions ----
+
+  /** In a room, only the owner of a layer/folder (or a host) may change it. */
+  canEdit(nodeId: string): boolean {
+    if (!this.room) return true;
+    const n = this.doc.node(nodeId);
+    if (!n) return false;
+    return n.props.owner === this.room.you || this.room.isHost;
+  }
+
+  /** The active layer if it can be painted on right now; otherwise explains why and returns null. */
+  paintableLayer(): Layer | null {
+    const l = this.layer;
+    if (!l) { this.toast(this.room ? 'Add a layer in your folder to start drawing' : 'Add a layer to start drawing'); return null; }
+    if (!this.canEdit(l.props.id)) { this.toast(`This layer belongs to ${this.ownerName(l.props.owner)}`); return null; }
+    if (!l.shown) { this.toast('This layer is hidden'); return null; }
+    return l;
+  }
+
+  ownerName(id?: string) { return (id && this.room?.member(id)?.displayName) || 'someone else'; }
+
+  /** Where new layers/folders go: the active layer's folder, or this user's folder in a room. */
+  insertionPoint(): { parent: string | null; index: number } {
+    const tf = this.targetFolder && this.doc.folder(this.targetFolder);
+    if (tf && this.canEdit(tf.props.id)) return { parent: tf.props.id, index: this.doc.children(tf.props.id).length };
+    const l = this.layer;
+    if (l && this.canEdit(l.props.id) && (!this.room || l.parent)) {
+      const p = this.doc.place(l.props.id);
+      return { parent: p.parent, index: p.index + 1 };
+    }
+    if (this.room) {
+      const f = userFolderId(this.room.you);
+      return { parent: f, index: this.doc.children(f).length };
+    }
+    return { parent: null, index: this.doc.children(null).length };
+  }
+
+  // ---- Edits ----
+
+  /** Apply ops authored by this user as one undo step, and share them with the room. */
+  run(ops: Op[], label = 'Edit', opts: ApplyOptions = {}) {
+    const inverse: Op[] = [];
+    ops.forEach((op, i) => {
+      op.author = this.room?.you;
+      const inv = this.doc.apply(op, i === 0 ? opts : {});
+      if (!inv.length) return;
+      this.room?.sendOp(op);
+      inverse.unshift(...inv);
+    });
+    if (inverse.length) this.doc.history.record({ label, undo: inverse, redo: [], cost: opsCost(inverse) });
+  }
+
+  apply(op: Op, opts: ApplyOptions = {}) { this.run([op], op.t, opts); }
+
+  private replay(ops: Op[]): Op[] {
+    const inverse: Op[] = [];
+    for (const op of ops) {
+      const inv = this.doc.apply(op);
+      if (!inv.length) continue;
+      this.room?.sendOp(op);
+      inverse.unshift(...inv);
+    }
+    return inverse;
+  }
+
+  undo() {
+    if (this.currentTool.busy?.()) { this.currentTool.cancel(); this.view.invalidate(null); return; }
+    const e = this.doc.history.takeUndo();
+    if (!e) return;
+    e.redo = this.replay(e.undo);
+    e.cost = opsCost(e.redo);
+    this.doc.history.putUndone(e);
+  }
+
+  redo() {
+    this.commitPending();
+    const e = this.doc.history.takeRedo();
+    if (!e) return;
+    e.undo = this.replay(e.redo);
+    e.cost = opsCost(e.undo);
+    this.doc.history.putDone(e);
   }
 
   addLayer() {
     this.commitPending();
-    const idx = this.doc.indexOf(this.activeLayer) + 1;
-    const props = newLayerProps(`Layer ${this.doc.layers.length + 1}`);
-    this.apply({ t: 'layer.add', id: uid(), index: idx, layer: props });
+    const { parent, index } = this.insertionPoint();
+    if (parent && !this.canEdit(parent)) return;
+    const n = this.doc.layers.filter((l) => !this.room || l.props.owner === this.room.you).length + 1;
+    const props = newLayerProps(`Layer ${n}`, this.room?.you);
+    this.run([{ t: 'layer.add', id: uid(), parent, index, layer: props }], 'Add layer');
     this.setActiveLayer(props.id);
+  }
+
+  addFolder() {
+    this.commitPending();
+    const { parent, index } = this.insertionPoint();
+    const n = [...this.doc.nodes.values()].filter((x) => x.kind === 'folder' && !x.props.user).length + 1;
+    this.run([{ t: 'folder.add', id: uid(), parent, index, folder: newFolderProps(`Folder ${n}`, this.room?.you) }], 'Add folder');
   }
 
   duplicateLayer() {
     this.commitPending();
     const src = this.layer;
-    const props = { ...src.props, id: uid('ly_'), name: src.props.name + ' copy' };
-    this.apply({ t: 'layer.add', id: uid(), index: this.doc.indexOf(src.props.id) + 1, layer: props, copyOf: src.props.id });
+    if (!src) return;
+    const { parent, index } = this.insertionPoint();
+    const props = { ...src.props, id: uid('ly_'), name: src.props.name + ' copy', owner: this.room?.you };
+    this.run([{ t: 'layer.add', id: uid(), parent, index, layer: props, copyOf: src.props.id }], 'Duplicate layer');
+    this.setActiveLayer(props.id);
+  }
+
+  /** Make sure this user has a layer to draw on after joining a room. */
+  ensureOwnLayer() {
+    if (!this.room) return;
+    const mine = this.doc.layers.find((l) => l.props.owner === this.room!.you);
+    if (mine) { if (!this.canEdit(this.activeLayer)) this.setActiveLayer(mine.props.id); return; }
+    const f = userFolderId(this.room.you);
+    if (!this.doc.folder(f)) return;
+    const props = newLayerProps('Layer 1', this.room.you);
+    this.run([{ t: 'layer.add', id: uid(), parent: f, index: 0, layer: props }], 'Add layer');
+    this.doc.history.clear();
     this.setActiveLayer(props.id);
   }
 
   /** Finish any in-progress transform before other actions. */
-  commitPending() { this.currentTool.commit?.(); }
-
-  undo() {
-    if (this.currentTool.busy?.()) { this.currentTool.cancel(); this.view.invalidate(null); return; }
-    this.doc.history.undo();
-  }
-  redo() {
-    this.commitPending();
-    this.doc.history.redo();
-  }
+  commitPending() { this.currentTool?.commit?.(); }
 
   /** Selection clip used by painting tools. */
   clipPath(): Path2D | undefined { return this.selection ? polyPath(this.selection.pts) : undefined; }
@@ -176,4 +288,14 @@ export class Editor {
   }
 
   toast(msg: string) { this.emit('toast:' + msg); }
+
+  private lastCursor = 0;
+  /** Tell the room where this user is drawing (throttled). */
+  sendCursor(x: number, y: number, drawing: boolean) {
+    if (!this.room) return;
+    const now = performance.now();
+    if (drawing && now - this.lastCursor < 50) return;
+    this.lastCursor = now;
+    this.room.send({ type: 'cursor', x: Math.round(x), y: Math.round(y), drawing });
+  }
 }

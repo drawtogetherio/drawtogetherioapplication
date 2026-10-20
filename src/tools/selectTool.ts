@@ -81,8 +81,8 @@ export class SelectTool implements Tool {
     if (this.xf) return this.xf;
     const sel = this.ed.selection;
     if (!sel) return null;
-    const layer = this.ed.layer;
-    if (!layer.props.visible) { this.ed.toast('This layer is hidden'); return null; }
+    const layer = this.ed.paintableLayer();
+    if (!layer) return null;
     const b = rectFromPoints(sel.pts)!;
     this.xf = {
       layerId: layer.props.id, sel, float: liftSelection(layer.surface, sel), b,
@@ -256,7 +256,7 @@ export class SelectTool implements Tool {
   selectAll() {
     this.commit();
     const ed = this.ed;
-    const r = ed.doc.settings.infinite ? ed.layer.surface.contentBounds() ?? ed.workArea() : ed.workArea();
+    const r = ed.doc.settings.infinite ? ed.layer?.surface.contentBounds() ?? ed.workArea() : ed.workArea();
     ed.selection = { pts: [r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h] };
     ed.emit('selection');
     ed.view.requestRender();

@@ -15,7 +15,10 @@ export class CanvasView {
   readonly canvas: HTMLCanvasElement;
   readonly viewport = new Viewport();
   dpr = 1;
+  /** This user's uncommitted stroke / transform. */
   live: LiveLayer | null = null;
+  /** Other people's in-progress strokes, by stroke id. */
+  readonly remoteLive = new Map<string, LiveLayer>();
   overlay: ((ctx: CanvasRenderingContext2D, m: DOMMatrix) => void) | null = null;
 
   private comp = makeCanvas(1, 1);
@@ -129,7 +132,9 @@ export class CanvasView {
         if (docRect) { cc.beginPath(); cc.rect(docRect.x, docRect.y, docRect.w, docRect.h); cc.clip(); }
         cc.imageSmoothingEnabled = true;
         cc.imageSmoothingQuality = 'high';
-        composite(cc, doc, region, { live: this.live });
+        const lives = [...this.remoteLive.values()];
+        if (this.live) lives.push(this.live);
+        composite(cc, doc, region, { lives });
         cc.restore();
       }
       this.dirty = null;

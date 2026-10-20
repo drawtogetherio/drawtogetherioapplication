@@ -15,6 +15,9 @@ import { LayersPanel } from './layersPanel';
 import { Slider } from './slider';
 import { ShapeKind } from '../core/model';
 import { uid } from '../core/geom';
+import { RoomUI } from './roomUI';
+import { Session } from './session';
+import { avatarEl, nameLine } from './people';
 
 const TOOLS: { id: ToolId; label: string; key: string }[] = [
   { id: 'brush', label: 'Brush', key: 'B' },
@@ -39,6 +42,11 @@ export class App {
   private zoomLabel = h('button.zoom-label', { title: 'Fit to screen' });
   private toastEl = h('div.toast', { role: 'status' });
   private toastTimer = 0;
+  readonly roomUI: RoomUI;
+  readonly session: Session;
+  private menuDyn = h('div.menu-dyn');
+  private dock = h('div.room-dock', { hidden: true });
+  private membersPop = h('div.popover.members-pop', { hidden: true });
 
   constructor(root: HTMLElement, doc: DrawDoc) {
     const stage = h('main.stage-wrap');
@@ -51,13 +59,18 @@ export class App {
     };
     this.input = new InputController(ed, ed.view.canvas);
     ed.view.overlay = (ctx, M) => this.drawOverlay(ctx, M);
+    this.roomUI = new RoomUI(ed);
+    this.session = new Session(this);
+    this.roomUI.onLeave = () => this.session.leaveRoom();
+    this.membersPop.append(this.roomUI.membersPanel);
+    dismissOnOutside(this.membersPop, [this.dock], () => { this.membersPop.hidden = true; });
 
     // ---- Top bar ----
     const btn = (name: string, title: string, fn: () => void, cls = '') =>
       h(`button.icon-btn${cls}` as 'button', { title, 'aria-label': title, html: icon(name), onclick: fn });
 
     const menuPop = this.menu();
-    const menuBtn = btn('menu', 'Menu', () => { menuPop.hidden = !menuPop.hidden; });
+    const menuBtn = btn('menu', 'Menu', () => { menuPop.hidden = !menuPop.hidden; if (!menuPop.hidden) this.renderMenuDyn(); });
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
     const left = h('div.bar-group', {},
@@ -109,7 +122,7 @@ export class App {
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
 
-    root.append(topbar, this.options, stage, sidebar, menuPop, layersPop, colorPop, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, layersPop, colorPop, this.membersPop, this.toastEl);
 
     ed.on((w) => this.onChange(w));
     ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); };
@@ -118,6 +131,41 @@ export class App {
     this.onChange('color');
     this.onChange('history');
     ed.fitView();
+    this.refreshRoom();
+  }
+
+  /** Account section of the menu changes after login / logout. */
+  refreshAccount() { this.renderMenuDyn(); }
+
+  /** Room dock (bottom right): connection state, members, chat, invite link. */
+  refreshRoom() {
+    const room = this.ed.room, d = this.dock;
+    this.renderMenuDyn();
+    clear(d);
+    d.hidden = !room;
+    if (!room) { this.membersPop.hidden = true; return; }
+    const ib = (name: string, title: string, fn: () => void) =>
+      h('button.icon-btn', { title, 'aria-label': title, html: icon(name, 20), onclick: fn });
+    if (room.status === 'connecting' || room.status === 'reconnecting') {
+      d.append(h('span.room-status', {}, room.status === 'connecting' ? 'Connecting…' : 'Reconnecting…'));
+    }
+    const stack = h('span.avatar-stack');
+    for (const m of room.members.slice(0, 4)) stack.append(avatarEl(m, 24));
+    const membersBtn = h('button.members-btn', {
+      title: 'People in this room', 'aria-label': 'People in this room',
+      onclick: () => { this.membersPop.hidden = !this.membersPop.hidden; if (!this.membersPop.hidden) this.roomUI.renderMembers(); },
+    }, stack, h('span', {}, String(room.members.length)));
+    d.append(
+      membersBtn,
+      ib('chat', 'Chat (Enter)', () => this.roomUI.toggleChat()),
+      ib('link', 'Copy invite link', () => this.copyInvite()),
+    );
+  }
+
+  async copyInvite() {
+    const link = this.session.inviteLink();
+    try { await navigator.clipboard.writeText(link); this.toast('Invite link copied'); }
+    catch { this.toast(link); }
   }
 
   private onChange(w: string) {
@@ -252,9 +300,7 @@ export class App {
     const finger = h('input', { type: 'checkbox' });
     const pop = h('div.popover.menu-pop', { hidden: true },
       h('div.panel', {},
-        h('button.menu-item', { html: icon('file', 18) + '<span>New canvas…</span>', onclick: () => { pop.hidden = true; this.newCanvas(); } }),
-        h('button.menu-item', { html: icon('download', 18) + '<span>Export PNG / JPG / PSD…</span>', onclick: () => { pop.hidden = true; exportDialog(ed); } }),
-        h('div.menu-sep'),
+        this.menuDyn,
         gamma.el,
         h('label.check.menu-check', {}, finger, 'Draw with finger (off once a pen is used)'),
         h('div.menu-sep'),
@@ -267,6 +313,50 @@ export class App {
     return pop;
   }
 
+  /** Account, room and file actions; rebuilt whenever the menu opens. */
+  private renderMenuDyn() {
+    const ed = this.ed, s = this.session, d = this.menuDyn, st = ed.settings;
+    const close = () => { (d.closest('.popover') as HTMLElement).hidden = true; };
+    const item = (ic: string, text: string, fn: () => void, cls = '') =>
+      h(`button.menu-item${cls}` as 'button', { html: icon(ic, 18) + `<span>${text}</span>`, onclick: () => { close(); fn(); } });
+    clear(d);
+    const me = ed.me;
+    if (me) {
+      d.append(h('div.account', {}, avatarEl(me, 36), h('div.account-text', {}, nameLine(me, undefined), h('small.muted', {}, '@' + me.handle))),
+        h('div.row.account-actions', {},
+          h('button.btn', { html: icon('user', 16) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
+          h('button.btn', { html: icon('logout', 16) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } })),
+        h('div.menu-sep'));
+    } else if (s.server) {
+      d.append(item('user', 'Log in to draw together…', () => s.loginScreen()), h('div.menu-sep'));
+    }
+    if (ed.room) {
+      d.append(h('div.menu-label', {}, ed.room.info?.name ?? 'Shared room'),
+        item('link', 'Copy invite link', () => this.copyInvite()),
+        item('logout', 'Leave room', () => s.leaveRoom()));
+    } else if (me) {
+      d.append(item('users', 'Start a shared room…', () => s.createRoomFlow()),
+        item('folderPlus', 'Join a room…', () => s.homeScreen()),
+        item('file', 'New canvas…', () => this.newCanvas()));
+    } else {
+      d.append(item('file', 'New canvas…', () => this.newCanvas()));
+    }
+    d.append(item('download', 'Export PNG / JPG / PSD…', () => exportDialog(ed)), h('div.menu-sep'));
+    if (ed.room || me) {
+      const tog = (label: string, get: () => boolean, set: (v: boolean) => void) => {
+        const cb = h('input', { type: 'checkbox' });
+        cb.checked = get();
+        cb.addEventListener('change', () => { set(cb.checked); ed.emit('settings'); ed.view.requestRender(); });
+        return h('label.check.menu-check', {}, cb, label);
+      };
+      d.append(
+        tog('Show name bubbles where others draw', () => st.showBubbles, (v) => { st.showBubbles = v; }),
+        tog('Hide other people’s folders in Layers', () => st.hideOthersFolders, (v) => { st.hideOthersFolders = v; }),
+        h('div.menu-sep'),
+      );
+    }
+  }
+
   async newCanvas() {
     const empty = this.ed.doc.log.length <= 1;
     if (!empty && !(await confirmDialog('Start a new canvas?', 'Your current drawing will be discarded. Export it first if you want to keep it.', 'Discard and start new'))) return;
@@ -276,6 +366,7 @@ export class App {
   private drawOverlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) {
     const ed = this.ed;
     this.select.overlay(ctx, M);
+    this.roomUI.drawBubbles(ctx, M);
     const hv = ed.hover;
     if (hv && (ed.toolId === 'brush' || ed.toolId === 'eraser') && !this.input.altPick) {
       const p = M.transformPoint(hv);
@@ -303,8 +394,16 @@ export class App {
       if (mod) return;
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === 'Alt') { this.input.altPick = true; e.preventDefault(); ed.view.requestRender(); return; }
-      if (e.key === 'Enter') { this.select.commit(); return; }
-      if (e.key === 'Escape') { if (this.select.xf) this.select.cancel(); else this.select.deselect(); return; }
+      if (e.key === 'Enter') {
+        if (this.select.xf || !ed.room) this.select.commit();
+        else { e.preventDefault(); this.roomUI.toggleChat(true); }
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (this.roomUI.chatOpen) this.roomUI.toggleChat(false);
+        else if (this.select.xf) this.select.cancel(); else this.select.deselect();
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') { this.deleteSelection(); return; }
       const tool = TOOLS.find((x) => x.key.toLowerCase() === k);
       if (tool) { ed.setTool(tool.id); return; }

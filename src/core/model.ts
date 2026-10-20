@@ -27,6 +27,18 @@ export interface LayerProps {
   opacity: number; // 0..1
   blend: BlendMode;
   alphaLock: boolean; // paint only where the layer already has pixels
+  /** User id of the creator in a shared room. Only they (or a host) may edit it. */
+  owner?: string;
+}
+
+export interface FolderProps {
+  id: string;
+  name: string;
+  visible: boolean;
+  owner?: string;
+  /** A member's top-level folder in a room; named and coloured from their profile. */
+  user?: boolean;
+  color?: string | null;
 }
 
 export interface DocSettings {
@@ -76,11 +88,20 @@ export type Op =
       /** Matrix a,b,c,d,e,f mapping the lifted pixels to their new place. */
       m: [number, number, number, number, number, number];
     })
-  | (OpBase & { t: 'layer.add'; layer: LayerProps; index: number; copyOf?: string })
+  | (OpBase & { t: 'layer.add'; layer: LayerProps; parent: string | null; index: number; copyOf?: string })
   | (OpBase & { t: 'layer.remove'; layer: string })
-  | (OpBase & { t: 'layer.props'; layer: string; props: Partial<Omit<LayerProps, 'id'>> })
-  | (OpBase & { t: 'layer.move'; layer: string; index: number })
+  | (OpBase & { t: 'layer.props'; layer: string; props: Partial<Omit<LayerProps, 'id' | 'owner'>> })
   | (OpBase & { t: 'layer.merge'; layer: string /* merged down into the layer below */ })
-  | (OpBase & { t: 'layer.clear'; layer: string });
+  | (OpBase & { t: 'layer.clear'; layer: string })
+  | (OpBase & { t: 'folder.add'; folder: FolderProps; parent: string | null; index: number })
+  | (OpBase & { t: 'folder.remove'; folder: string })
+  | (OpBase & { t: 'folder.props'; folder: string; props: Partial<Pick<FolderProps, 'name' | 'visible' | 'color'>> })
+  /** Move a layer or folder. index counts from the bottom of the destination's children. */
+  | (OpBase & { t: 'node.move'; node: string; parent: string | null; index: number })
+  /**
+   * Raw tile pixels (PNG data URLs, null = empty). Used by undo/redo so they can be synced like
+   * any other edit. `img` is a local decoded copy and is never sent.
+   */
+  | (OpBase & { t: 'tiles'; layer: string; tiles: Record<string, string | null>; img?: Record<string, ImageData | null> });
 
 export type OpType = Op['t'];

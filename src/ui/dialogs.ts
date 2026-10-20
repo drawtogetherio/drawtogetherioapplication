@@ -4,7 +4,7 @@ import { ExportFormat, exportDoc, exportRect } from '../io/export';
 import { h } from './dom';
 import { icon } from './icons';
 
-function modal(title: string, body: HTMLElement, actions: HTMLElement[], onClose?: () => void, closable = true) {
+export function modal(title: string, body: HTMLElement, actions: HTMLElement[], onClose?: () => void, closable = true) {
   const close = () => { overlay.remove(); onClose?.(); };
   const overlay = h('div.modal-overlay', {},
     h('div.modal', { role: 'dialog', 'aria-label': title },
@@ -30,7 +30,13 @@ const PRESETS: Preset[] = [
   { name: 'Comic page', w: 1988, h: 3056 },
 ];
 
-export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = true) {
+export interface CanvasChoice { width: number; height: number; infinite: boolean; background: string | null; roomName: string }
+
+/**
+ * Pick a canvas size. In 'room' mode it also asks for a room name and hands back the settings
+ * (the server creates the room); otherwise it creates a local document.
+ */
+export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = true, room?: { onCreate: (c: CanvasChoice) => Promise<void> }) {
   let choice: 'unlimited' | Preset = 'unlimited';
   const wIn = h('input', { type: 'number', min: 16, max: 16384, value: 2048, 'aria-label': 'Width' });
   const hIn = h('input', { type: 'number', min: 16, max: 16384, value: 2048, 'aria-label': 'Height' });
@@ -62,15 +68,24 @@ export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = tru
   const err = h('p.error', { role: 'alert' });
   const custom = h('div.row.custom-size', {}, h('label', {}, 'Width', wIn), h('span', {}, '×'), h('label', {}, 'Height', hIn), h('span.muted', {}, 'px'));
   custom.hidden = true;
-  const body = h('div.modal-body', {}, grid, custom, h('div.row', {}, h('label', {}, 'Background', bg)), err);
+  const roomName = h('input', { type: 'text', id: 'room-name', maxlength: 48, placeholder: 'Sketch night', 'aria-label': 'Room name' });
+  const body = h('div.modal-body', {}, room ? h('label.row', {}, 'Room name', roomName) : null, grid, custom, h('div.row', {}, h('label', {}, 'Background', bg)), err);
 
-  const create = h('button.btn.primary', {}, 'Create canvas');
-  const close = modal('New canvas', body, [create], undefined, closable);
-  create.addEventListener('click', () => {
+  const create = h('button.btn.primary', {}, room ? 'Create room' : 'Create canvas');
+  const close = modal(room ? 'New shared room' : 'New canvas', body, [create], undefined, closable);
+  create.addEventListener('click', async () => {
     const infinite = choice === 'unlimited';
     const w = Math.max(16, Math.min(16384, Math.round(+wIn.value || 2048)));
     const hh = Math.max(16, Math.min(16384, Math.round(+hIn.value || 2048)));
     if (!infinite && w * hh > 100_000_000) { err.textContent = 'That canvas is too large. Keep it under 100 megapixels (for example 10000 × 10000).'; return; }
+    if (room) {
+      create.disabled = true;
+      try {
+        await room.onCreate({ width: w, height: hh, infinite, background: bg.value || null, roomName: roomName.value });
+        close();
+      } catch (e) { err.textContent = (e as Error).message; create.disabled = false; }
+      return;
+    }
     close();
     onCreate(DrawDoc.create({ width: w, height: hh, infinite, background: bg.value || null }));
   });
@@ -106,7 +121,8 @@ export function exportDialog(ed: Editor) {
   go.addEventListener('click', async () => {
     go.setAttribute('disabled', '');
     try {
-      await exportDoc(ed.doc, { format, quality: +quality.value / 100, transparent: transparent.checked, name: name.value.trim() || 'drawing' });
+      await exportDoc(ed.doc, { format, quality: +quality.value / 100, transparent: transparent.checked, name: name.value.trim() || 'drawing',
+        folderName: (f) => (f.user && f.owner && ed.room?.member(f.owner)?.displayName) || f.name });
       close();
     } catch (ex) {
       const e = ex as { message?: string; code?: string };

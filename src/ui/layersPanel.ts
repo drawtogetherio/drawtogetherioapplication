@@ -1,27 +1,40 @@
 import { Rect, ctx2d, uid } from '../core/geom';
 import { BLEND_LABELS, BLEND_MODES, BlendMode, LayerProps } from '../core/model';
-import type { Layer } from '../core/document';
+import type { DocNode, Folder, Layer } from '../core/document';
 import type { Editor } from '../editor';
 import { h } from './dom';
 import { icon } from './icons';
 import { Slider } from './slider';
 import { textDialog } from './dialogs';
+import { avatarEl } from './people';
 
-const THUMB = 56;
+const THUMB = 48;
 
-/** Layer list with visibility, reordering (drag), blend mode, opacity and layer actions. */
+interface Row { node: DocNode; depth: number; el: HTMLElement }
+
+/**
+ * Layers and folders. In a room every member has a folder named and coloured after them; they can
+ * nest more folders inside. Drag rows to reorder or drop them onto a folder.
+ */
 export class LayersPanel {
   readonly el: HTMLElement;
   private list: HTMLElement;
   private blend: HTMLSelectElement;
   private opacity: Slider;
   private lockBtn: HTMLButtonElement;
+  private footer: HTMLElement;
+  private folderFooter: HTMLElement;
+  private dropLine = h('div.drop-line', { hidden: true });
   private thumbs = new Map<string, HTMLCanvasElement>();
   private thumbTimer = 0;
+  private collapsed = new Set<string>();
+  /** Selected folder (folder actions + where new layers go), or null when a layer is selected. */
+  selectedFolder: string | null = null;
+  private rows: Row[] = [];
   open = false;
 
   constructor(private ed: Editor) {
-    this.list = h('div.layer-list');
+    this.list = h('div.layer-list', {}, this.dropLine);
     this.blend = h('select.blend-select', { 'aria-label': 'Blend mode' });
     for (const m of BLEND_MODES) this.blend.append(h('option', { value: m }, BLEND_LABELS[m]));
     this.blend.addEventListener('change', () => this.setProps({ blend: this.blend.value as BlendMode }));
@@ -29,35 +42,54 @@ export class LayersPanel {
       min: 0, max: 1, value: 1, label: 'Opacity', format: (v) => Math.round(v * 100) + '%',
       onInput: (v) => this.setProps({ opacity: Math.round(v * 100) / 100 }, true),
     });
-    this.lockBtn = h('button.icon-btn', { title: 'Lock transparency (paint only on existing pixels)', html: icon('lock', 18), onclick: () => this.setProps({ alphaLock: !this.ed.layer.props.alphaLock }) });
+    this.lockBtn = h('button.icon-btn', {
+      title: 'Lock transparency (paint only on existing pixels)', html: icon('lock', 18),
+      onclick: () => { const l = this.ed.layer; if (l) this.setProps({ alphaLock: !l.props.alphaLock }); },
+    });
 
     const act = (name: string, title: string, fn: () => void) => h('button.icon-btn', { title, 'aria-label': title, html: icon(name, 18), onclick: fn });
-    this.el = h('div.panel.layers-panel', {},
-      h('div.panel-head', {}, h('span.panel-title', {}, 'Layers'), act('plus', 'New layer', () => this.ed.addLayer())),
-      this.list,
-      h('div.layer-props', {},
-        h('div.row', {}, this.blend),
-        this.opacity.el,
-        h('div.row.layer-actions', {},
-          act('rename', 'Rename', () => this.rename()),
-          act('copy', 'Duplicate', () => this.ed.duplicateLayer()),
-          act('merge', 'Merge down', () => this.merge()),
-          this.lockBtn,
-          act('clear', 'Clear layer', () => { this.ed.commitPending(); this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer }); }),
-          act('trash', 'Delete layer', () => this.remove()),
-        ),
+    this.footer = h('div.layer-props', {},
+      h('div.row', {}, this.blend),
+      this.opacity.el,
+      h('div.row.layer-actions', {},
+        act('rename', 'Rename layer', () => this.renameLayer()),
+        act('copy', 'Duplicate layer', () => this.ed.duplicateLayer()),
+        act('merge', 'Merge down', () => this.merge()),
+        this.lockBtn,
+        act('clear', 'Clear layer', () => { this.ed.commitPending(); if (this.ed.layer) this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer }); }),
+        act('trash', 'Delete layer', () => this.removeLayer()),
       ),
     );
+    this.folderFooter = h('div.layer-props', { hidden: true },
+      h('div.row.layer-actions', {},
+        act('rename', 'Rename folder', () => this.renameFolder()),
+        act('plus', 'New layer in this folder', () => this.ed.addLayer()),
+        act('folderPlus', 'New folder inside', () => this.ed.addFolder()),
+        act('trash', 'Delete folder and its layers', () => this.removeFolder()),
+      ),
+    );
+    this.el = h('div.panel.layers-panel', {},
+      h('div.panel-head', {}, h('span.panel-title', {}, 'Layers'),
+        h('span.head-actions', {}, act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
+      this.list,
+      this.footer,
+      this.folderFooter,
+    );
     ed.on((w) => {
-      if (w === 'layers' || w === 'doc') { this.scheduleThumbs(); if (this.open) this.render(); }
+      if (w === 'layers' || w === 'doc' || w === 'members' || w === 'settings') {
+        if (this.selectedFolder && (!this.ed.doc.folder(this.selectedFolder) || this.ed.targetFolder !== this.selectedFolder)) this.selectedFolder = null;
+        this.scheduleThumbs();
+        if (this.open) this.render();
+      }
     });
   }
 
-  private setProps(props: Partial<Omit<LayerProps, 'id'>>, coalesce = false) {
-    const id = this.ed.activeLayer;
+  private setProps(props: Partial<Omit<LayerProps, 'id' | 'owner'>>, coalesce = false) {
+    const layer = this.ed.layer;
+    if (!layer || !this.ed.canEdit(layer.props.id)) return;
+    const id = layer.props.id;
     if (coalesce) {
       // Live opacity drag: change directly, record a single undo step after a pause.
-      const layer = this.ed.layer;
       const before = this.pendingOpacity?.layer === id ? this.pendingOpacity.from : layer.props.opacity;
       Object.assign(layer.props, props);
       this.ed.view.invalidate(null);
@@ -77,87 +109,220 @@ export class LayersPanel {
   }
   private pendingOpacity: { layer: string; from: number; timer: number } | null = null;
 
-  private async rename() {
-    const name = await textDialog('Rename layer', this.ed.layer.props.name);
+  /** Displayed name/colour of a folder; member folders follow the member's profile. */
+  folderLabel(f: Folder): { name: string; color: string | null; member?: ReturnType<NonNullable<Editor['room']>['member']> } {
+    if (f.props.user && f.props.owner) {
+      const m = this.ed.room?.member(f.props.owner);
+      return { name: m?.displayName ?? f.props.name, color: m?.favoriteColor ?? f.props.color ?? null, member: m };
+    }
+    return { name: f.props.name, color: f.props.color ?? null };
+  }
+
+  private async renameLayer() {
+    const l = this.ed.layer;
+    if (!l || !this.ed.canEdit(l.props.id)) return;
+    const name = await textDialog('Rename layer', l.props.name);
     if (name && name.trim()) this.setProps({ name: name.trim().slice(0, 60) });
+  }
+
+  private async renameFolder() {
+    const f = this.selectedFolder && this.ed.doc.folder(this.selectedFolder);
+    if (!f || !this.ed.canEdit(f.props.id)) return;
+    if (f.props.user) { this.ed.toast('Member folders use the member’s display name'); return; }
+    const name = await textDialog('Rename folder', f.props.name);
+    if (name && name.trim()) this.ed.apply({ t: 'folder.props', id: uid(), folder: f.props.id, props: { name: name.trim().slice(0, 60) } });
+  }
+
+  private removeFolder() {
+    const f = this.selectedFolder && this.ed.doc.folder(this.selectedFolder);
+    if (!f || !this.ed.canEdit(f.props.id)) return;
+    if (f.props.user && !this.ed.room?.isHost) { this.ed.toast('Your own folder can’t be deleted'); return; }
+    this.ed.commitPending();
+    this.ed.apply({ t: 'folder.remove', id: uid(), folder: f.props.id });
+    this.selectedFolder = null;
   }
 
   private merge() {
     this.ed.commitPending();
-    const idx = this.ed.doc.indexOf(this.ed.activeLayer);
-    if (idx <= 0) { this.ed.toast('No layer below to merge into'); return; }
-    const below = this.ed.doc.layers[idx - 1].props.id;
-    this.ed.apply({ t: 'layer.merge', id: uid(), layer: this.ed.activeLayer });
-    this.ed.setActiveLayer(below);
+    const l = this.ed.layer;
+    if (!l) return;
+    const below = this.ed.doc.layerBelow(l.props.id);
+    if (!below) { this.ed.toast('There’s no layer directly below in this folder'); return; }
+    if (!this.ed.canEdit(l.props.id) || !this.ed.canEdit(below.props.id)) { this.ed.toast('You can only merge your own layers'); return; }
+    this.ed.apply({ t: 'layer.merge', id: uid(), layer: l.props.id });
+    this.ed.setActiveLayer(below.props.id);
   }
 
-  private remove() {
+  private removeLayer() {
     this.ed.commitPending();
-    if (this.ed.doc.layers.length <= 1) { this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer }); return; }
-    this.ed.apply({ t: 'layer.remove', id: uid(), layer: this.ed.activeLayer });
+    const l = this.ed.layer;
+    if (!l || !this.ed.canEdit(l.props.id)) return;
+    if (!this.ed.room && this.ed.doc.layers.length <= 1) { this.ed.apply({ t: 'layer.clear', id: uid(), layer: l.props.id }); return; }
+    this.ed.apply({ t: 'layer.remove', id: uid(), layer: l.props.id });
+  }
+
+  /** Should this root-level node be listed? (setting: hide other members' folders) */
+  private listed(n: DocNode) {
+    if (!this.ed.room || !this.ed.settings.hideOthersFolders) return true;
+    return n.props.owner === this.ed.room.you;
   }
 
   render() {
-    const doc = this.ed.doc;
-    const rows = [...doc.layers].reverse().map((l) => this.row(l));
-    this.list.replaceChildren(...rows);
-    const p = this.ed.layer.props;
-    this.blend.value = p.blend;
-    if (!this.pendingOpacity) this.opacity.set(p.opacity);
-    this.lockBtn.classList.toggle('on', p.alphaLock);
+    const ed = this.ed, doc = ed.doc;
+    this.rows = [];
+    const walk = (parent: string | null, depth: number) => {
+      const ids = [...doc.children(parent)].reverse(); // top of the stack first
+      for (const id of ids) {
+        const n = doc.node(id)!;
+        if (depth === 0 && !this.listed(n)) continue;
+        this.rows.push({ node: n, depth, el: n.kind === 'layer' ? this.layerRow(n, depth) : this.folderRow(n, depth) });
+        if (n.kind === 'folder' && !this.collapsed.has(id)) walk(id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    const empty = !this.rows.length ? h('div.layers-empty', {}, ed.room ? 'Your folder will appear here.' : 'No layers yet.') : null;
+    this.list.replaceChildren(this.dropLine, ...this.rows.map((r) => r.el), ...(empty ? [empty] : []));
+
+    const folderMode = !!this.selectedFolder;
+    this.footer.hidden = folderMode;
+    this.folderFooter.hidden = !folderMode;
+    const l = ed.layer;
+    const editable = !!l && ed.canEdit(l.props.id);
+    this.footer.classList.toggle('disabled', !editable);
+    this.blend.disabled = !editable;
+    if (l) {
+      this.blend.value = l.props.blend;
+      if (!this.pendingOpacity) this.opacity.set(l.props.opacity);
+      this.lockBtn.classList.toggle('on', l.props.alphaLock);
+    }
   }
 
-  private row(l: Layer): HTMLElement {
-    const p = l.props;
-    const thumb = this.thumb(l);
-    const vis = h('button.icon-btn.vis', {
-      title: p.visible ? 'Hide layer' : 'Show layer', html: icon(p.visible ? 'eye' : 'eyeOff', 18),
-      onclick: (e: Event) => { e.stopPropagation(); this.ed.apply({ t: 'layer.props', id: uid(), layer: p.id, props: { visible: !p.visible } }); },
+  private indent(depth: number) { return `padding-left:${6 + depth * 16}px`; }
+
+  private folderRow(f: Folder, depth: number): HTMLElement {
+    const ed = this.ed;
+    const { name, color, member } = this.folderLabel(f);
+    const open = !this.collapsed.has(f.props.id);
+    const mine = ed.canEdit(f.props.id);
+    const chevron = h('button.icon-btn.chev', {
+      title: open ? 'Collapse' : 'Expand', html: icon(open ? 'chevronDown' : 'chevronRight', 16),
+      onclick: (e: Event) => { e.stopPropagation(); if (open) this.collapsed.add(f.props.id); else this.collapsed.delete(f.props.id); this.render(); },
     });
-    const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : ''].filter(Boolean).join(' · ');
-    const row = h(`div.layer-row${p.id === this.ed.activeLayer ? '.active' : ''}${p.visible ? '' : '.hidden-layer'}` as 'div', { 'data-id': p.id },
-      h('div.layer-thumb', {}, thumb),
-      h('div.layer-name', {}, h('div', {}, p.name), meta ? h('small', {}, meta) : null),
+    const vis = this.visButton(f.props.visible, mine || ed.canEdit(f.props.id), () =>
+      ed.apply({ t: 'folder.props', id: uid(), folder: f.props.id, props: { visible: !f.props.visible } }));
+    const lead = member ? avatarEl(member, 22) : h('span.folder-ic', { html: icon('folder', 18) });
+    const row = h(`div.layer-row.folder-row${this.selectedFolder === f.props.id ? '.active' : ''}${f.shown ? '' : '.hidden-layer'}` as 'div',
+      { 'data-id': f.props.id, style: this.indent(depth) + (color ? `;--folder:${color}` : '') },
+      chevron, lead,
+      h('div.layer-name', {}, h('div', {}, name), f.props.user && member?.id === ed.room?.you ? h('small', {}, 'Your folder') : null),
+      mine ? null : h('span.lock-ic', { title: 'Only its owner or a host can edit this', html: icon('lock', 14) }),
       vis,
     );
-    row.addEventListener('pointerdown', (e) => this.dragStart(e, row, p.id));
-    row.addEventListener('dblclick', () => this.rename());
+    if (color) row.classList.add('colored');
+    row.addEventListener('pointerdown', (e) => this.dragStart(e, row, f));
     return row;
   }
 
-  /** Tap selects a layer; dragging vertically reorders it. */
-  private dragStart(e: PointerEvent, row: HTMLElement, id: string) {
-    if ((e.target as HTMLElement).closest('.vis')) return;
+  private layerRow(l: Layer, depth: number): HTMLElement {
+    const ed = this.ed;
+    const p = l.props;
+    const mine = ed.canEdit(p.id);
+    const vis = this.visButton(p.visible, mine, () => ed.apply({ t: 'layer.props', id: uid(), layer: p.id, props: { visible: !p.visible } }));
+    const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : ''].filter(Boolean).join(' · ');
+    const active = p.id === ed.activeLayer && !this.selectedFolder;
+    const row = h(`div.layer-row${active ? '.active' : ''}${l.shown ? '' : '.hidden-layer'}` as 'div', { 'data-id': p.id, style: this.indent(depth) },
+      h('div.layer-thumb', {}, this.thumb(l)),
+      h('div.layer-name', {}, h('div', {}, p.name), meta ? h('small', {}, meta) : null),
+      mine ? null : h('span.lock-ic', { title: `Belongs to ${ed.ownerName(p.owner)}`, html: icon('lock', 14) }),
+      vis,
+    );
+    row.addEventListener('pointerdown', (e) => this.dragStart(e, row, l));
+    row.addEventListener('dblclick', () => this.renameLayer());
+    return row;
+  }
+
+  private visButton(visible: boolean, enabled: boolean, toggle: () => void) {
+    const b = h('button.icon-btn.vis', {
+      title: visible ? 'Hide' : 'Show', html: icon(visible ? 'eye' : 'eyeOff', 18),
+      onclick: (e: Event) => { e.stopPropagation(); if (enabled) toggle(); },
+    });
+    if (!enabled) b.disabled = true;
+    return b;
+  }
+
+  private select(n: DocNode) {
+    if (n.kind === 'folder') { this.selectedFolder = n.props.id; this.ed.targetFolder = n.props.id; this.render(); }
+    else { this.selectedFolder = null; this.ed.setActiveLayer(n.props.id); }
+  }
+
+  /** Tap selects; dragging vertically moves the row (between rows, or into a folder). */
+  private dragStart(e: PointerEvent, row: HTMLElement, node: DocNode) {
+    if ((e.target as HTMLElement).closest('.vis, .chev')) return;
     const y0 = e.clientY;
     let dragging = false;
-    row.setPointerCapture(e.pointerId);
-    const rows = [...this.list.children] as HTMLElement[];
-    const from = rows.indexOf(row);
-    let target = from;
+    let target: { parent: string | null; index: number } | null = null;
+    try { row.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    const canMove = this.ed.canEdit(node.props.id) && !(node.kind === 'folder' && node.props.user && !this.ed.room?.isHost);
     const move = (ev: PointerEvent) => {
       const dy = ev.clientY - y0;
-      if (!dragging && Math.abs(dy) > 8) { dragging = true; row.classList.add('dragging'); }
+      if (!dragging && Math.abs(dy) > 8 && canMove) { dragging = true; row.classList.add('dragging'); }
       if (!dragging) return;
       row.style.transform = `translateY(${dy}px)`;
-      const mid = row.getBoundingClientRect().top + row.offsetHeight / 2;
-      target = rows.filter((r) => r !== row && r.getBoundingClientRect().top + r.offsetHeight / 2 < mid).length;
+      target = this.dropTarget(ev.clientY, node);
     };
     const up = () => {
       row.removeEventListener('pointermove', move);
       row.removeEventListener('pointerup', up);
       row.removeEventListener('pointercancel', up);
-      if (!dragging) { this.ed.setActiveLayer(id); return; }
+      this.dropLine.hidden = true;
+      this.list.querySelector('.drop-into')?.classList.remove('drop-into');
+      if (!dragging) { this.select(node); return; }
       row.style.transform = '';
       row.classList.remove('dragging');
-      if (target !== from) {
-        // List is shown top-first; document order is bottom-first.
-        const n = this.ed.doc.layers.length;
-        this.ed.apply({ t: 'layer.move', id: uid(), layer: id, index: n - 1 - target });
-      } else this.render();
+      if (target) this.ed.apply({ t: 'node.move', id: uid(), node: node.props.id, parent: target.parent, index: target.index });
+      else this.render();
     };
     row.addEventListener('pointermove', move);
     row.addEventListener('pointerup', up);
     row.addEventListener('pointercancel', up);
+  }
+
+  private dropTarget(y: number, moving: DocNode): { parent: string | null; index: number } | null {
+    const doc = this.ed.doc;
+    this.list.querySelector('.drop-into')?.classList.remove('drop-into');
+    this.dropLine.hidden = true;
+    const rows = this.rows.filter((r) => r.node !== moving && !(moving.kind === 'folder' && doc.isWithin(r.node.props.id, moving.props.id)));
+    let hit: Row | undefined;
+    let where: 'above' | 'below' | 'into' = 'below';
+    for (const r of rows) {
+      const b = r.el.getBoundingClientRect();
+      if (y < b.top || y > b.bottom) continue;
+      hit = r;
+      const t = (y - b.top) / b.height;
+      where = r.node.kind === 'folder' && t > 0.3 && t < 0.7 ? 'into' : t < 0.5 ? 'above' : 'below';
+      break;
+    }
+    if (!hit) return null;
+    let parent: string | null, index: number;
+    if (where === 'into') { parent = hit.node.props.id; index = doc.children(parent).length; }
+    else {
+      const pl = doc.place(hit.node.props.id);
+      parent = pl.parent;
+      index = where === 'above' ? pl.index + 1 : pl.index;
+    }
+    // Moving within the same parent: account for the row leaving its old slot.
+    const from = doc.place(moving.props.id);
+    if (from.parent === parent && from.index < index) index--;
+    const ed = this.ed;
+    const allowed = parent === null ? !ed.room || ed.room.isHost : ed.canEdit(parent);
+    if (!allowed) return null;
+    const lb = hit.el.getBoundingClientRect(), list = this.list.getBoundingClientRect();
+    if (where === 'into') hit.el.classList.add('drop-into');
+    else {
+      this.dropLine.hidden = false;
+      this.dropLine.style.top = (where === 'above' ? lb.top : lb.bottom) - list.top + this.list.scrollTop - 1 + 'px';
+    }
+    return { parent, index };
   }
 
   private thumb(l: Layer): HTMLCanvasElement {
@@ -173,11 +338,11 @@ export class LayersPanel {
   private scheduleThumbs() {
     clearTimeout(this.thumbTimer);
     this.thumbTimer = window.setTimeout(() => {
-      for (const l of this.ed.doc.layers) {
-        const c = this.thumbs.get(l.props.id);
-        if (c) this.drawThumb(l, c);
+      for (const [id, c] of this.thumbs) {
+        const l = this.ed.doc.layer(id);
+        if (l) this.drawThumb(l, c); else this.thumbs.delete(id);
       }
-    }, 250);
+    }, 300);
   }
 
   private drawThumb(l: Layer, c: HTMLCanvasElement) {
