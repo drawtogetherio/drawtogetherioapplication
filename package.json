@@ -1,0 +1,23 @@
+{
+  "name": "drawwithus",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc && vite build",
+    "build:single": "tsc && vite build --mode single",
+    "preview": "vite preview --host",
+    "typecheck": "tsc",
+    "build:preview": "npm run build:single && node scripts/make-preview.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vite-plugin-singlefile": "^2.3.4"
+  },
+  "dependencies": {
+    "ag-psd": "^31.0.3"
+  },
+  "private": true,
+  "type": "module"
+}
