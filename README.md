@@ -41,6 +41,8 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 **Drawing (v0.1)**
 - Fixed or **Unlimited** canvas; brush/eraser presets with pen pressure, smoothing, hardness, flow
 - Selection (rect/ellipse/lasso) with move/rotate/scale/flip; fill bucket; shapes; eyedropper
+- Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
+- R + drag rotates the view (Shift snaps 15°), Z + drag zooms
 - Flip/pan/zoom/rotate view, undo/redo (incl. two/three-finger taps), HSV colour picker
 - Layers with 17 blend modes, opacity, lock transparency, merge, clear; folders
 - Export PNG, JPG and layered PSD (folders become PSD groups)
@@ -115,6 +117,7 @@ npm run build && (cd dist && python3 -m http.server 4180)
 node tests/smoke.mjs http://localhost:4180/
 node tests/touch.mjs http://localhost:4180/
 node tests/replay.mjs http://localhost:4180/
+node tests/pickers.mjs http://localhost:4180/   # brush library, mode drop-downs, R/Z view keys
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev

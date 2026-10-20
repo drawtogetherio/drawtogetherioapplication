@@ -47,7 +47,8 @@ await page.mouse.up();
 
 // Shape: ellipse, then rect
 await page.keyboard.press('u');
-await page.getByTitle('Ellipse').click();
+await page.locator('.optionsbar .preset-btn').click();
+await page.locator('.icon-choices [aria-label="Ellipse"]').click();
 await page.mouse.move(cx + 40, cy - 40); await page.mouse.down(); await page.mouse.move(cx + 200, cy + 100, { steps: 5 }); await page.mouse.up();
 
 // Fill inside the ellipse with red on a new layer below

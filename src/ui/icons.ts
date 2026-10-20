@@ -31,6 +31,8 @@ const P: Record<string, string> = {
   rect: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
   ellipse: '<ellipse cx="12" cy="12" rx="8" ry="6"/>',
   lasso: '<path d="M7 18c-2-1.5-4-3.5-4-6.5C3 7 7 4 12 4s9 3 9 7-4 7-9 7c-1.3 0-2.5-.2-3.6-.5"/><circle cx="7" cy="19" r="1.6"/>',
+  selEllipse: '<ellipse cx="12" cy="12" rx="8.5" ry="6.5" stroke-dasharray="3.2 2.6"/>',
+  selLasso: '<path d="M7 18c-2-1.5-4-3.5-4-6.5C3 7 7 4 12 4s9 3 9 7-4 7-9 7c-1.3 0-2.5-.2-3.6-.5" stroke-dasharray="3.2 2.6"/><circle cx="7" cy="19" r="1.6"/>',
   selRect: '<path d="M4 4h4M12 4h4M20 4v4M20 12v4M20 20h-4M12 20H8M4 20v-4M4 12V8"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   folderPlus: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/>',

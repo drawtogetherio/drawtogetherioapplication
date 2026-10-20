@@ -1,5 +1,5 @@
 import { DrawDoc } from '../core/document';
-import { Editor, SelectMode, ToolId } from '../editor';
+import { Editor, ToolId } from '../editor';
 import { BRUSH_PRESETS, ERASER_PRESETS } from '../engine/brush';
 import { BrushTool } from '../tools/brushTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
@@ -13,11 +13,14 @@ import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { LayersPanel } from './layersPanel';
 import { Slider } from './slider';
-import { ShapeKind } from '../core/model';
 import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { avatarEl, nameLine } from './people';
+import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } from './toolPicker';
+
+/** Tools whose button opens a drop-down when tapped while already selected. */
+const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'select', 'shape'];
 
 const TOOLS: { id: ToolId; label: string; key: string }[] = [
   { id: 'brush', label: 'Brush', key: 'B' },
@@ -47,6 +50,9 @@ export class App {
   private menuDyn = h('div.menu-dyn');
   private dock = h('div.room-dock', { hidden: true });
   private membersPop = h('div.popover.members-pop', { hidden: true });
+  /** Drop-down under a tool button: brush library, selection modes, shape kinds. */
+  private toolPop = h('div.popover.tool-pop', { hidden: true });
+  private toolPopFor: ToolId | null = null;
 
   constructor(root: HTMLElement, doc: DrawDoc) {
     const stage = h('main.stage-wrap');
@@ -87,7 +93,12 @@ export class App {
 
     const right = h('div.bar-group');
     for (const t of TOOLS) {
-      const b = btn(t.id, `${t.label} (${t.key})`, () => ed.setTool(t.id), '.tool');
+      const picker = PICKER_TOOLS.includes(t.id);
+      const title = `${t.label} (${t.key})${picker ? ', tap again for options' : ''}`;
+      const b = btn(t.id, title, () => {
+        if (picker && ed.toolId === t.id) this.togglePicker(t.id, b);
+        else { this.closePicker(); ed.setTool(t.id); }
+      }, picker ? '.tool.has-picker' : '.tool');
       this.toolButtons.set(t.id, b);
       right.append(b);
     }
@@ -122,7 +133,8 @@ export class App {
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
 
-    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, layersPop, colorPop, this.membersPop, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, layersPop, colorPop, this.membersPop, this.toolPop, this.toastEl);
+    dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
     ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); };
@@ -172,6 +184,8 @@ export class App {
     const ed = this.ed;
     if (w === 'tool') {
       for (const [id, b] of this.toolButtons) b.classList.toggle('active', id === ed.toolId);
+      this.updateToolIcons();
+      if (this.toolPopFor && this.toolPopFor !== ed.toolId) this.closePicker();
       this.renderOptions();
       this.syncSliders();
     } else if (w === 'color') {
@@ -188,6 +202,50 @@ export class App {
     } else if (w.startsWith('toast:')) {
       this.toast(w.slice(6));
     }
+  }
+
+  /** The selection and shape buttons show the mode they will use. */
+  private updateToolIcons() {
+    const st = this.ed.settings;
+    const sel = SELECT_MODES.find((m) => m[0] === st.selectMode)!;
+    const shp = SHAPE_KINDS.find((m) => m[0] === st.shape)!;
+    this.toolButtons.get('select')!.innerHTML = icon(sel[2]);
+    this.toolButtons.get('shape')!.innerHTML = icon(shp[2]);
+  }
+
+  private closePicker() {
+    this.toolPop.hidden = true;
+    this.toolPopFor = null;
+    for (const b of this.toolButtons.values()) b.classList.remove('open');
+  }
+
+  togglePicker(id: ToolId, anchor: HTMLElement) {
+    if (this.toolPopFor === id && !this.toolPop.hidden) { this.closePicker(); return; }
+    const ed = this.ed, st = ed.settings;
+    const done = () => { this.closePicker(); this.updateToolIcons(); this.renderOptions(); this.syncSliders(); };
+    let content: HTMLElement;
+    if (id === 'brush' || id === 'eraser') content = brushLibrary(ed, id === 'eraser', done);
+    else if (id === 'select') content = iconChoices(SELECT_MODES, st.selectMode, (v) => { st.selectMode = v; ed.setTool('select'); done(); });
+    else content = iconChoices(SHAPE_KINDS, st.shape, (v) => { st.shape = v; ed.setTool('shape'); done(); });
+    this.toolPop.replaceChildren(content);
+    this.toolPop.hidden = false;
+    this.toolPopFor = id;
+    for (const [tid, b] of this.toolButtons) b.classList.toggle('open', tid === id && b === anchor);
+    // Drop down from the anchor, kept on screen.
+    const r = anchor.getBoundingClientRect();
+    const w = this.toolPop.offsetWidth;
+    this.toolPop.style.top = `${Math.round(r.bottom + 6)}px`;
+    this.toolPop.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)))}px`;
+  }
+
+  /** Options-bar twin of the toolbar drop-down (current mode icon + name). */
+  private modeButton([, label, ic]: [string, string, string]) {
+    const b: HTMLButtonElement = h('button.preset-btn', {
+      title: 'Change mode', 'aria-label': `Mode: ${label}. Change mode`,
+      html: icon(ic, 18) + `<span>${label}</span><span class="caret">${icon('chevronDown', 14)}</span>`,
+      onclick: () => this.togglePicker(this.ed.toolId, b),
+    });
+    return b;
   }
 
   private syncSliders() {
@@ -237,15 +295,13 @@ export class App {
       const erase = ed.toolId === 'eraser';
       const presets = erase ? ERASER_PRESETS : BRUSH_PRESETS;
       const params = erase ? st.eraser : st.brush;
-      const sel = h('select', { 'aria-label': 'Brush preset' });
-      presets.forEach((p, i) => sel.append(h('option', { value: i }, p.name)));
-      sel.value = String(erase ? st.eraserPreset : st.brushPreset);
-      sel.addEventListener('change', () => {
-        const i = +sel.value;
-        if (erase) { st.eraserPreset = i; st.eraser = { ...presets[i].params }; } else { st.brushPreset = i; st.brush = { ...presets[i].params }; }
-        this.renderOptions(); this.syncSliders();
+      const name = presets[erase ? st.eraserPreset : st.brushPreset]?.name ?? 'Brush';
+      const pick: HTMLButtonElement = h('button.preset-btn', {
+        title: 'Choose a brush', 'aria-label': `Brush: ${name}. Choose a brush`, html: '',
+        onclick: () => this.togglePicker(ed.toolId, pick),
       });
-      o.append(sel,
+      pick.append(brushPreview(params, 64, 24), h('span', {}, name), h('span.caret', { html: icon('chevronDown', 14) }));
+      o.append(pick,
         range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
         range('Flow', params.flow, 0.02, 1, (v) => { params.flow = v; }),
         range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
@@ -261,7 +317,7 @@ export class App {
         seg([['all', 'All layers'], ['layer', 'This layer']] as const, st.fillSampleAll ? 'all' : 'layer', (v) => { st.fillSampleAll = v === 'all'; }),
       );
     } else if (ed.toolId === 'select') {
-      o.append(seg<SelectMode>([['rect', 'Rectangle', 'selRect'], ['ellipse', 'Ellipse', 'ellipse'], ['lasso', 'Lasso', 'lasso']], st.selectMode, (v) => { st.selectMode = v; }));
+      o.append(this.modeButton(SELECT_MODES.find((m) => m[0] === st.selectMode)!));
       o.append(h('button.btn', { onclick: () => this.select.selectAll() }, 'Select all'));
       if (ed.selection) {
         o.append(
@@ -280,7 +336,7 @@ export class App {
       }
     } else if (ed.toolId === 'shape') {
       o.append(
-        seg<ShapeKind>([['line', 'Line', 'line'], ['rect', 'Rectangle', 'rect'], ['ellipse', 'Ellipse', 'ellipse']], st.shape, (v) => { st.shape = v; }),
+        this.modeButton(SHAPE_KINDS.find((m) => m[0] === st.shape)!),
         toggle('Filled', st.shapeFill, (v) => { st.shapeFill = v; }),
         h('span.hint', {}, 'Uses brush size and opacity. Shift constrains, Alt draws from centre.'),
       );
@@ -368,7 +424,7 @@ export class App {
     this.select.overlay(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
     const hv = ed.hover;
-    if (hv && (ed.toolId === 'brush' || ed.toolId === 'eraser') && !this.input.altPick) {
+    if (hv && (ed.toolId === 'brush' || ed.toolId === 'eraser') && !this.input.altPick && !this.input.viewKey) {
       const p = M.transformPoint(hv);
       const r = Math.max(1, (ed.sizeParams.size * ed.view.viewport.zoom) / 2);
       ctx.lineWidth = 1;
@@ -394,13 +450,19 @@ export class App {
       if (mod) return;
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === 'Alt') { this.input.altPick = true; e.preventDefault(); ed.view.requestRender(); return; }
+      if (k === 'r' || k === 'z') {
+        this.input.viewKey = k === 'r' ? 'rotate' : 'zoom';
+        ed.view.canvas.style.cursor = k === 'r' ? 'grab' : 'zoom-in';
+        return;
+      }
       if (e.key === 'Enter') {
         if (this.select.xf || !ed.room) this.select.commit();
         else { e.preventDefault(); this.roomUI.toggleChat(true); }
         return;
       }
       if (e.key === 'Escape') {
-        if (this.roomUI.chatOpen) this.roomUI.toggleChat(false);
+        if (!this.toolPop.hidden) this.closePicker();
+        else if (this.roomUI.chatOpen) this.roomUI.toggleChat(false);
         else if (this.select.xf) this.select.cancel(); else this.select.deselect();
         return;
       }
@@ -421,9 +483,13 @@ export class App {
     });
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ') { this.input.spaceHeld = false; ed.view.canvas.style.cursor = ''; }
+      const k = e.key.toLowerCase();
+      if ((k === 'r' && this.input.viewKey === 'rotate') || (k === 'z' && this.input.viewKey === 'zoom')) {
+        this.input.viewKey = null; ed.view.canvas.style.cursor = '';
+      }
       if (e.key === 'Alt') { this.input.altPick = false; ed.view.requestRender(); }
     });
-    window.addEventListener('blur', () => { this.input.spaceHeld = false; this.input.altPick = false; });
+    window.addEventListener('blur', () => { this.input.spaceHeld = false; this.input.altPick = false; this.input.viewKey = null; ed.view.canvas.style.cursor = ''; });
   }
 
   private zoomCenter(f: number) {
@@ -451,6 +517,7 @@ const SHORTCUTS = `
 <strong>Shortcuts</strong>
 <div><kbd>B</kbd> Brush <kbd>E</kbd> Eraser <kbd>G</kbd> Fill <kbd>M</kbd> Select <kbd>U</kbd> Shapes <kbd>I</kbd> Eyedropper</div>
 <div><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo <kbd>[</kbd> <kbd>]</kbd> Brush size</div>
+<div><kbd>R</kbd> + drag rotate (Shift snaps) · <kbd>Z</kbd> + drag zoom · tap a selected tool for its options</div>
 <div><kbd>Space</kbd> drag to pan · <kbd>Ctrl</kbd>+scroll / pinch to zoom · <kbd>Alt</kbd>+scroll zoom</div>
 <div><kbd>H</kbd> / <kbd>V</kbd> Flip view · <kbd>0</kbd> Fit · <kbd>Ctrl A</kbd> / <kbd>Ctrl D</kbd> Select all / none</div>
 <div><kbd>Enter</kbd> Apply transform · <kbd>Esc</kbd> Cancel · <kbd>Delete</kbd> Clear selection</div>

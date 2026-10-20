@@ -18,6 +18,9 @@ export class InputController {
   private tap: { t0: number; max: number; moved: boolean } | null = null;
   private pan: { id: number; x: number; y: number } | null = null;
   spaceHeld = false;
+  /** R held: drag rotates the view. Z held: drag zooms (right/up = in). Like Clip Studio. */
+  viewKey: 'rotate' | 'zoom' | null = null;
+  private viewDrag: { id: number; mode: 'rotate' | 'zoom'; x0: number; y0: number; m0: DOMMatrix; a0: number } | null = null;
   altPick = false; // Alt held: temporary eyedropper
 
   constructor(private ed: Editor, private el: HTMLCanvasElement) {
@@ -59,6 +62,12 @@ export class InputController {
   private down(e: PointerEvent) {
     try { this.el.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
     if (e.pointerType === 'touch') return this.touchDown(e);
+    if (e.button === 0 && this.viewKey) {
+      const p = this.local({ x: e.clientX, y: e.clientY });
+      const vp = this.ed.view.viewport;
+      this.viewDrag = { id: e.pointerId, mode: this.viewKey, x0: p.x, y0: p.y, m0: vp.matrix(), a0: Math.atan2(p.y - vp.h / 2, p.x - vp.w / 2) };
+      return;
+    }
     if (e.button === 1 || (e.button === 0 && this.spaceHeld)) {
       this.pan = { id: e.pointerId, x: e.clientX, y: e.clientY };
       return;
@@ -123,6 +132,7 @@ export class InputController {
   }
 
   private move(e: PointerEvent) {
+    if (this.viewDrag && e.pointerId === this.viewDrag.id) { this.dragView(e); return; }
     if (this.pan && e.pointerId === this.pan.id) {
       this.ed.view.viewport.panBy(e.clientX - this.pan.x, e.clientY - this.pan.y);
       this.pan.x = e.clientX; this.pan.y = e.clientY;
@@ -149,6 +159,27 @@ export class InputController {
     }
   }
 
+  private dragView(e: PointerEvent) {
+    const d = this.viewDrag!;
+    const vp = this.ed.view.viewport;
+    const p = this.local({ x: e.clientX, y: e.clientY });
+    let m: DOMMatrix;
+    if (d.mode === 'zoom') {
+      const f = Math.exp(((p.x - d.x0) - (p.y - d.y0)) * 0.006);
+      m = new DOMMatrix().translateSelf(d.x0, d.y0).scaleSelf(f).translateSelf(-d.x0, -d.y0);
+    } else {
+      const cx = vp.w / 2, cy = vp.h / 2;
+      let deg = ((Math.atan2(p.y - cy, p.x - cx) - d.a0) * 180) / Math.PI;
+      if (e.shiftKey) {
+        // Snap the resulting view angle to 15° steps.
+        const start = (Math.atan2(d.m0.b, d.m0.a) * 180) / Math.PI;
+        deg = Math.round((start + deg) / 15) * 15 - start;
+      }
+      m = new DOMMatrix().translateSelf(cx, cy).rotateSelf(deg).translateSelf(-cx, -cy);
+    }
+    vp.setFromMatrix(m.multiplySelf(d.m0));
+  }
+
   private updateGesture() {
     const g = this.gesture!;
     const vp = this.ed.view.viewport;
@@ -168,6 +199,7 @@ export class InputController {
   }
 
   private up(e: PointerEvent) {
+    if (this.viewDrag && e.pointerId === this.viewDrag.id) { this.viewDrag = null; return; }
     if (this.pan && e.pointerId === this.pan.id) { this.pan = null; return; }
     if (e.pointerId === this.toolPointer) {
       this.toolPointer = null;
