@@ -20,7 +20,8 @@ const brushBtn = page.locator('.topbar [aria-label^="Brush (B)"]');
 // Tapping the active brush opens the library.
 await brushBtn.click();
 await page.waitForSelector('.brush-library');
-check(await page.locator('.brush-row').count() === 5, 'brush library lists 5 brushes with previews');
+check(await page.locator('.brush-tab').count() === 4 && (await page.locator('.brush-tab.active').textContent()) === 'Pen', 'library opens on the Pen tab, one of 4 categories');
+check(await page.locator('.brush-row').count() === 4, 'the Pen tab lists 4 brushes with previews');
 const inked = await page.evaluate(() => {
   const c = document.querySelector('.brush-row canvas');
   const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
@@ -29,10 +30,11 @@ const inked = await page.evaluate(() => {
 });
 check(inked > 200, 'preview squiggle is drawn (' + inked + ' px)');
 await page.screenshot({ path: `${out}/01-brush-library.png` });
-await page.locator('.brush-row', { hasText: 'Pencil' }).click();
+await page.locator('.brush-tab', { hasText: 'Pencil' }).click();
+await page.locator('.brush-row', { hasText: 'HB Pencil' }).click();
 check(await page.locator('.brush-library').isHidden(), 'picking closes the library');
-check(await ed((e) => e.settings.brushPreset) === 1, 'Pencil selected');
-check(await page.locator('.preset-btn', { hasText: 'Pencil' }).count() === 1, 'options bar shows Pencil');
+check(await ed((e) => e.settings.brushPreset) === 'pencil', 'HB Pencil selected');
+check(await page.locator('.preset-btn', { hasText: 'HB Pencil' }).count() === 1, 'options bar shows HB Pencil');
 
 // Eraser: first tap selects, second opens.
 const eraserBtn = page.locator('.topbar [aria-label^="Eraser (E)"]');
@@ -40,7 +42,7 @@ await eraserBtn.click();
 check(await page.locator('.tool-pop').isHidden(), 'first tap only selects the eraser');
 await eraserBtn.click();
 await page.waitForSelector('.brush-library');
-check(await page.locator('.brush-row').count() === 2, 'eraser library lists 2 erasers');
+check((await page.locator('.brush-tab.active').textContent()) === 'Eraser' && (await page.locator('.brush-row').count()) === 2, 'eraser opens the same library on its Eraser tab');
 await page.screenshot({ path: `${out}/02-eraser-library.png` });
 await page.keyboard.press('Escape');
 check(await page.locator('.tool-pop').isHidden(), 'Escape closes it');

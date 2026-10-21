@@ -49,6 +49,14 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 **Drawing (v0.1)**
 - Fixed or **Unlimited** canvas; brush/eraser presets with pen pressure, smoothing, hardness, flow; **Smudge** (S) drags and blends paint in place
+- **Brush library (v0.21)**: one library in categories (General, Pencil, Pen, Eraser) that brush, eraser and
+  smudge all pick from (`src/engine/brush.ts`, `BRUSH_LIBRARY`). Graphite, crayon, charcoal and the flat
+  brush carry **grain**: a seeded paper texture fixed to the canvas, so every device renders the same
+  speckle and strokes line up; the Grain slider in the options bar tunes it. Cube, flat and chisel brushes
+  have a square tip. Dragging the Size or Opacity slider shows a preview of the brush at that size.
+- **Layer effects** (canvas menu or the layers panel's ✦): Gaussian blur, motion blur, mosaic, chromatic
+  aberration, glitch, sharpen and noise. Each is one `effect` op, computed with plain arithmetic in a fixed
+  order (`src/engine/effects.ts`) so every client bakes the same pixels; nothing is re-applied per frame.
 - Selection (rect/ellipse/lasso) with move/rotate/scale/flip; fill bucket; shapes; eyedropper
 - Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
 - R + drag rotates the view (Shift snaps 15°), Z + drag zooms
@@ -220,6 +228,7 @@ node tests/smoke.mjs http://localhost:4180/app.html
 node tests/touch.mjs http://localhost:4180/app.html
 node tests/replay.mjs http://localhost:4180/app.html
 node tests/pickers.mjs http://localhost:4180/app.html   # brush library, mode drop-downs, R/Z view keys
+node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, square tips, shared smudge/eraser library, slider preview, effects
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev

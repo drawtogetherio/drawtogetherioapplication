@@ -1,8 +1,9 @@
-import { Rect, ctx2d, makeCanvas, polyPath, rectUnion, uid } from './geom';
+import { Rect, ctx2d, makeCanvas, polyPath, rectFromPoints, rectIntersect, rectRoundOut, rectUnion, uid } from './geom';
 import { History } from './history';
 import { DocSettings, FolderProps, LayerProps, Op, blendOp } from './model';
 import { TILE, TiledSurface, TileSnapshot } from './tiles';
 import { renderStroke } from '../engine/brush';
+import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
 import { floodFill } from '../engine/fill';
@@ -170,6 +171,28 @@ export class DrawDoc {
         const done = opts.applied;
         const keys = done ? [...done.keys()] : smudgeKeys(layer.surface, op);
         return this.pixelEdit(layer, keys, () => (done ? rectOfKeys(keys) : renderSmudge(layer.surface, op)), true, done);
+      }
+      case 'effect': {
+        const layer = this.layer(op.layer);
+        if (!layer) return null;
+        let region = layer.surface.contentBounds();
+        if (op.clip) region = region && rectIntersect(region, rectFromPoints(op.clip.pts)!);
+        if (!region) return null;
+        region = rectRoundOut(region, effectReach(op));
+        const src = layer.surface.extract(region);
+        const img = ctx2d(src, true).getImageData(0, 0, region.w, region.h);
+        applyEffect(img, op, region.x, region.y);
+        ctx2d(src).putImageData(img, 0, 0);
+        const r = region;
+        return this.pixelEdit(layer, layer.surface.keysIn(r), () => {
+          const clip = op.clip ? polyPath(op.clip.pts) : null;
+          layer.surface.draw(r, (c) => {
+            if (clip) c.clip(clip);
+            c.clearRect(r.x, r.y, r.w, r.h);
+            c.drawImage(src, r.x, r.y);
+          });
+          return r;
+        });
       }
       case 'fill': {
         const layer = this.layer(op.layer);

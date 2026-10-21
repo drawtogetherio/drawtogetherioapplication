@@ -1,6 +1,6 @@
 import { DrawDoc } from '../core/document';
 import { Editor, ToolId } from '../editor';
-import { BRUSH_PRESETS, ERASER_PRESETS } from '../engine/brush';
+import { brushById } from '../engine/brush';
 import { BrushTool } from '../tools/brushTool';
 import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
@@ -29,9 +29,11 @@ import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
 import { LOGO_SVG } from '../site/brand';
-import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } from './toolPicker';
+import { BrushTool as BrushToolId, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
+import { effectsDialog } from './effectsDialog';
 
-const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'select', 'shape'];
+const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'smudge', 'select', 'shape'];
+const isBrushTool = (id: ToolId): id is BrushToolId => id === 'brush' || id === 'eraser' || id === 'smudge';
 
 const TOOLS: { id: ToolId; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
@@ -68,6 +70,8 @@ export class App {
   private invitePop = h('div.popover.invite-pop', { hidden: true });
   private toolPop = h('div.popover.tool-pop', { hidden: true });
   private saveBadge = h('div.save-badge', { hidden: true });
+  private sliderPreview = h('div.slider-preview', { hidden: true, 'aria-hidden': 'true' });
+  private sliderPreviewTimer = 0;
   private toolPopFor: ToolId | null = null;
   private layersBtn: HTMLButtonElement;
   private prefsTimer = 0;
@@ -144,19 +148,20 @@ export class App {
 
     const topbar = h('header.topbar', {}, left, right);
 
+    const peek = { onStart: () => this.showSliderPreview(), onEnd: () => this.hideSliderPreview() };
     this.sizeSlider = new Slider({
-      min: 1, max: 500, value: ed.sizeParams.size, vertical: true, curve: 2.4, label: 'Size',
-      format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); },
+      min: 1, max: 500, value: ed.sizeParams.size, vertical: true, curve: 2.4, label: 'Size', ...peek,
+      format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); this.showSliderPreview(); },
     });
     this.opacitySlider = new Slider({
-      min: 0.01, max: 1, value: ed.sizeParams.opacity, vertical: true, label: 'Opacity',
-      format: (v) => Math.round(v * 100) + '%', onInput: (v) => { ed.sizeParams.opacity = v; ed.emit('brush'); },
+      min: 0.01, max: 1, value: ed.sizeParams.opacity, vertical: true, label: 'Opacity', ...peek,
+      format: (v) => Math.round(v * 100) + '%', onInput: (v) => { ed.sizeParams.opacity = v; ed.emit('brush'); this.showSliderPreview(); },
     });
     this.undoBtn = btn('undo', 'Undo (Ctrl+Z, two-finger tap)', () => ed.undo());
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
 
-    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -388,6 +393,22 @@ export class App {
     }
   }
 
+  /** What the brush will look like at the size and opacity being dragged to. */
+  private showSliderPreview() {
+    const ed = this.ed, p = ed.sizeParams, el = this.sliderPreview;
+    if (!isBrushTool(ed.toolId)) return;
+    clearTimeout(this.sliderPreviewTimer);
+    const name = brushById(currentPreset(ed, ed.toolId)).name;
+    const info = `${Math.round(p.size)} px${ed.toolId === 'smudge' ? '' : ` · ${Math.round(p.opacity * 100)}%`}${p.size > 120 ? ' · shown smaller' : ''}`;
+    el.replaceChildren(sizePreview(p, ed.toolId === 'brush' ? ed.color : '#8a8a96'), h('span.slider-preview-text', {}, h('strong', {}, name), info));
+    el.hidden = false;
+  }
+
+  private hideSliderPreview() {
+    clearTimeout(this.sliderPreviewTimer);
+    this.sliderPreviewTimer = window.setTimeout(() => { this.sliderPreview.hidden = true; }, 500);
+  }
+
   private updateToolIcons() {
     const st = this.ed.settings;
     const sel = SELECT_MODES.find((m) => m[0] === st.selectMode)!;
@@ -407,7 +428,7 @@ export class App {
     const ed = this.ed, st = ed.settings;
     const done = () => { this.closePicker(); this.updateToolIcons(); this.renderOptions(); this.syncSliders(); };
     let content: HTMLElement;
-    if (id === 'brush' || id === 'eraser') content = brushLibrary(ed, id === 'eraser', done);
+    if (isBrushTool(id)) content = brushLibrary(ed, id, done);
     else if (id === 'select') content = iconChoices(SELECT_MODES, st.selectMode, (v) => { st.selectMode = v; ed.setTool('select'); done(); });
     else content = iconChoices(SHAPE_KINDS, st.shape, (v) => { st.shape = v; ed.setTool('shape'); done(); });
     this.toolPop.replaceChildren(content);
@@ -471,33 +492,23 @@ export class App {
     };
 
     o.append(h('span.opt-title', {}, TOOLS.find((t) => t.id === ed.toolId)!.label));
-    if (ed.toolId === 'brush' || ed.toolId === 'eraser') {
-      const erase = ed.toolId === 'eraser';
-      const presets = erase ? ERASER_PRESETS : BRUSH_PRESETS;
-      const params = erase ? st.eraser : st.brush;
-      const name = presets[erase ? st.eraserPreset : st.brushPreset]?.name ?? 'Brush';
+    if (isBrushTool(ed.toolId)) {
+      const tool = ed.toolId, smudge = tool === 'smudge';
+      const params = tool === 'eraser' ? st.eraser : smudge ? st.smudge : st.brush;
+      const name = brushById(currentPreset(ed, tool)).name;
       const pick: HTMLButtonElement = h('button.preset-btn', {
         title: 'Choose a brush', 'aria-label': `Brush: ${name}. Choose a brush`, html: '',
-        onclick: () => this.togglePicker(ed.toolId, pick),
+        onclick: () => this.togglePicker(tool, pick),
       });
       pick.append(brushPreview(params, 64, 24), h('span', {}, name), h('span.caret', { html: icon('chevronDown', 14) }));
       o.append(pick,
+        range(smudge ? 'Strength' : 'Flow', params.flow, 0.02, 1, (v) => { params.flow = v; }),
         range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
-        range('Flow', params.flow, 0.02, 1, (v) => { params.flow = v; }),
+        range('Grain', params.grain ?? 0, 0, 1, (v) => { params.grain = v; }),
         range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
         label('Pressure:'),
-        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? 1 : 0; }),
-        toggle('Opacity', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? 1 : 0; }),
-      );
-    } else if (ed.toolId === 'smudge') {
-      const params = st.smudge;
-      o.append(
-        range('Strength', params.flow, 0.05, 1, (v) => { params.flow = v; }),
-        range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
-        range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
-        label('Pressure:'),
-        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? 0.5 : 0; }),
-        toggle('Strength', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? 0.5 : 0; }),
+        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? (smudge ? 0.5 : 1) : 0; }),
+        toggle(smudge ? 'Strength' : 'Opacity', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? (smudge ? 0.5 : 1) : 0; }),
       );
     } else if (ed.toolId === 'fill') {
       o.append(
@@ -572,7 +583,7 @@ export class App {
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
-    if (!ed.readOnly) d.append(item('download', 'Export PNG / JPG / PSD…', () => this.export()));
+    if (!ed.readOnly) d.append(item('sparkle', 'Layer effects…', () => effectsDialog(ed)), item('download', 'Export PNG / JPG / PSD…', () => this.export()));
     d.append(item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
     if (ed.room && !ed.readOnly) {
       const cb = h('input', { type: 'checkbox' });

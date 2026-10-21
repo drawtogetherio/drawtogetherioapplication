@@ -1,4 +1,4 @@
-import { BLEND_MODES, type BrushParams, type Op } from '../src/core/model.ts';
+import { BLEND_MODES, EFFECTS, type BrushParams, type Op } from '../src/core/model.ts';
 import type { LiveStroke } from '../src/shared/protocol.ts';
 
 // Shape and size checks for everything clients send into a room. Anything that fails is dropped
@@ -29,7 +29,8 @@ const isClip = (v: unknown) => v === undefined || (obj(v) && nums(v.pts, MAX_CLI
 
 function isBrush(b: unknown): b is BrushParams {
   return obj(b) && inRange(b.size, 0.1, MAX_BRUSH) && inRange(b.opacity, 0, 1) && inRange(b.flow, 0, 1) && inRange(b.hardness, 0, 1)
-    && inRange(b.spacing, 0.01, 4) && inRange(b.pressureSize, 0, 1) && inRange(b.pressureFlow, 0, 1) && inRange(b.minSize, 0, 1) && inRange(b.smoothing, 0, 1);
+    && inRange(b.spacing, 0.01, 4) && inRange(b.pressureSize, 0, 1) && inRange(b.pressureFlow, 0, 1) && inRange(b.minSize, 0, 1) && inRange(b.smoothing, 0, 1)
+    && (b.shape === undefined || b.shape === 'round' || b.shape === 'square') && (b.grain === undefined || inRange(b.grain, 0, 1)) && (b.grainScale === undefined || inRange(b.grainScale, 0.25, 8));
 }
 
 const LAYER_PROPS: Record<string, (v: unknown) => boolean> = {
@@ -55,6 +56,8 @@ export function validOp(op: unknown): op is Op {
       return isId(op.layer) && isBool(op.erase) && isBrush(op.brush) && isColor(op.color) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
     case 'smudge':
       return isId(op.layer) && isBrush(op.brush) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
+    case 'effect':
+      return isId(op.layer) && EFFECTS.includes(op.effect as never) && inRange(op.amount, 0, 1) && (op.angle === undefined || inRange(op.angle, -7, 7)) && isClip(op.clip);
     case 'shape':
       return isId(op.layer) && ['line', 'rect', 'ellipse'].includes(op.shape as string) && nums([op.x0, op.y0, op.x1, op.y1], 4, 4)
         && inRange(op.width, 0, MAX_BRUSH) && isBool(op.fill) && isColor(op.color) && inRange(op.opacity, 0, 1) && isBool(op.erase) && isClip(op.clip);

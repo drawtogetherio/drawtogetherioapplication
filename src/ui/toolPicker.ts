@@ -1,9 +1,9 @@
 import type { BrushParams, ShapeKind } from '../core/model';
 import { TiledSurface } from '../core/tiles';
-import { BRUSH_PRESETS, BrushPreset, ERASER_PRESETS, renderStroke } from '../engine/brush';
-import type { Editor, SelectMode } from '../editor';
+import { BRUSH_LIBRARY, categoryOf, renderStroke, smudgeParams } from '../engine/brush';
+import type { Editor, SelectMode, ToolId } from '../editor';
 import { ctx2d, makeCanvas } from '../core/geom';
-import { h } from './dom';
+import { clear, h } from './dom';
 import { icon } from './icons';
 
 export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse']];
@@ -47,24 +47,65 @@ function cloneCanvas(src: HTMLCanvasElement, w: number, hh: number): HTMLCanvasE
   return c;
 }
 
-export function brushLibrary(ed: Editor, erase: boolean, onPick: () => void): HTMLElement {
+export type BrushTool = Extract<ToolId, 'brush' | 'eraser' | 'smudge'>;
+
+export function currentPreset(ed: Editor, tool: BrushTool) {
   const st = ed.settings;
-  const presets: BrushPreset[] = erase ? ERASER_PRESETS : BRUSH_PRESETS;
-  const current = erase ? st.eraserPreset : st.brushPreset;
-  const list = h('div.brush-list', { role: 'listbox', 'aria-label': erase ? 'Erasers' : 'Brushes' });
-  presets.forEach((pr, i) => {
-    const row = h(`button.brush-row${i === current ? '.active' : ''}` as 'button', {
-      role: 'option', 'aria-selected': String(i === current), title: pr.name,
-      onclick: () => {
-        if (erase) { st.eraserPreset = i; st.eraser = { ...pr.params }; } else { st.brushPreset = i; st.brush = { ...pr.params }; }
-        ed.setTool(erase ? 'eraser' : 'brush');
-        ed.emit('brush');
-        onPick();
-      },
-    }, h('span.brush-name', {}, pr.name), brushPreview(pr.params));
-    list.append(row);
-  });
-  return h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, erase ? 'Eraser' : 'Brush Library')), list);
+  return tool === 'eraser' ? st.eraserPreset : tool === 'smudge' ? st.smudgePreset : st.brushPreset;
+}
+
+/** Brush, eraser and smudge share one library, in categories; the last tab you looked at stays open. */
+export function brushLibrary(ed: Editor, tool: BrushTool, onPick: () => void): HTMLElement {
+  const st = ed.settings, current = currentPreset(ed, tool);
+  let tab = categoryOf(current);
+  const tabs = h('div.brush-tabs', { role: 'tablist' });
+  const list = h('div.brush-list', { role: 'listbox', 'aria-label': 'Brushes' });
+  const render = () => {
+    clear(tabs);
+    BRUSH_LIBRARY.forEach((c, i) => tabs.append(h(`button.brush-tab${i === tab ? '.active' : ''}` as 'button', {
+      role: 'tab', 'aria-selected': String(i === tab), onclick: () => { tab = i; render(); },
+    }, c.name)));
+    clear(list);
+    for (const pr of BRUSH_LIBRARY[tab].brushes) {
+      list.append(h(`button.brush-row${pr.id === current ? '.active' : ''}` as 'button', {
+        role: 'option', 'aria-selected': String(pr.id === current), title: pr.name,
+        onclick: () => {
+          const params = { ...pr.params };
+          if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
+          else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); }
+          else { st.brushPreset = pr.id; st.brush = params; }
+          ed.setTool(tool);
+          ed.emit('brush');
+          onPick();
+        },
+      }, h('span.brush-name', {}, pr.name), brushPreview(pr.params)));
+    }
+  };
+  render();
+  const title = tool === 'eraser' ? 'Eraser' : tool === 'smudge' ? 'Smudge' : 'Brush';
+  return h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library')), tabs, list);
+}
+
+/** The brush at its real size (shrunk past 120 px) with the current opacity, shown while a sidebar slider moves. */
+export function sizePreview(params: BrushParams, color: string): HTMLCanvasElement {
+  const W = 220, H = 150, dpr = Math.min(2, window.devicePixelRatio || 1);
+  const k = Math.min(1, 120 / params.size);
+  const size = params.size * k * dpr;
+  const p: BrushParams = { ...params, size, smoothing: 0 };
+  const pts: number[] = [];
+  const n = 70, pad = size / 2 + 8 * dpr;
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    pts.push(pad + (W * dpr - pad * 2) * t, (H * dpr) / 2 + Math.sin(t * Math.PI * 2) * Math.max(0, (H * dpr) / 2 - pad) * 0.6, Math.max(0.15, Math.sin(Math.PI * t)));
+  }
+  const surface = new TiledSurface();
+  renderStroke(surface, p, color, pts);
+  const c = makeCanvas(W * dpr, H * dpr);
+  c.style.width = W + 'px'; c.style.height = H + 'px';
+  const ctx = ctx2d(c);
+  ctx.globalAlpha = params.opacity;
+  surface.drawTo(ctx);
+  return c;
 }
 
 export function iconChoices<T extends string>(items: [T, string, string][], value: T, pick: (v: T) => void): HTMLElement {

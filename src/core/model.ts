@@ -56,7 +56,16 @@ export interface BrushParams {
   pressureFlow: number; // 0..1: how much pressure affects flow
   minSize: number; // fraction of size at zero pressure
   smoothing: number; // 0..1 streamline
+  /** Dab shape; round unless set. */
+  shape?: 'round' | 'square';
+  /** 0..1 how much paper grain breaks the dab up; the texture is fixed to the canvas so strokes line up. */
+  grain?: number;
+  /** Grain texture scale, 1 = fine. */
+  grainScale?: number;
 }
+
+export const EFFECTS = ['blur', 'motion', 'mosaic', 'chroma', 'glitch', 'sharpen', 'noise'] as const;
+export type EffectId = (typeof EFFECTS)[number];
 
 export interface Selection { pts: number[] }
 
@@ -72,6 +81,8 @@ export type Op =
     })
   /** Drags the layer's own pixels along the path; flow is the strength. */
   | (OpBase & { t: 'smudge'; layer: string; brush: BrushParams; pts: number[]; clip?: Selection })
+  /** Baked into the layer's pixels once, the same way everywhere; `angle` only for motion blur. */
+  | (OpBase & { t: 'effect'; layer: string; effect: EffectId; amount: number; angle?: number; clip?: Selection })
   | (OpBase & {
       t: 'shape'; layer: string; shape: ShapeKind; x0: number; y0: number; x1: number; y1: number;
       width: number; fill: boolean; color: string; opacity: number; erase: boolean; clip?: Selection;

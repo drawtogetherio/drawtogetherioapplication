@@ -1,7 +1,7 @@
 import { BrushParams, Op } from '../core/model';
 import { Rect, polyPath, rectUnion } from '../core/geom';
 import { TiledSurface, TileSnapshot } from '../core/tiles';
-import { DabPath } from './brush';
+import { DabPath, GRAIN, grainSheet } from './brush';
 
 type SmudgeOp = Extract<Op, { t: 'smudge' }>;
 
@@ -17,6 +17,10 @@ export class SmudgeRenderer extends DabPath {
   private readonly scratch: HTMLCanvasElement;
   private readonly clip: Path2D | null;
   private readonly clipCanvas: HTMLCanvasElement | null;
+  private readonly sq: boolean;
+  private readonly grain: Float32Array | null;
+  private readonly grainK: number;
+  private readonly grainScale: number;
 
   constructor(private surface: TiledSurface, brush: BrushParams, clip?: number[], private before?: TileSnapshot) {
     super(brush);
@@ -24,6 +28,10 @@ export class SmudgeRenderer extends DabPath {
     this.scratch = square(this.D);
     this.clip = clip ? polyPath(clip) : null;
     this.clipCanvas = clip ? square(this.D) : null;
+    this.sq = brush.shape === 'square';
+    this.grain = brush.grain ? grainSheet() : null;
+    this.grainK = Math.min(1, brush.grain ?? 0);
+    this.grainScale = Math.max(0.25, Math.min(8, brush.grainScale ?? 1));
   }
 
   protected dab(x: number, y: number, p: number): Rect | null {
@@ -47,10 +55,15 @@ export class SmudgeRenderer extends DabPath {
     let any = false;
     for (let j = 0, i = 0; j < D; j++) {
       for (let k = 0; k < D; k++, i += 4) {
-        const dist = Math.hypot(k + 0.5 - cx, j + 0.5 - cy) / r;
+        const ddx = k + 0.5 - cx, ddy = j + 0.5 - cy;
+        const dist = (this.sq ? Math.max(Math.abs(ddx), Math.abs(ddy)) : Math.hypot(ddx, ddy)) / r;
         if (dist >= 1) continue;
         let a = s * (dist <= h ? 1 : 0.5 + 0.5 * Math.cos((Math.PI * (dist - h)) / (1 - h)));
         if (clipA) a *= clipA[i + 3] / 255;
+        if (this.grain) {
+          const gx = Math.floor(((bx + k) / this.grainScale) % GRAIN + GRAIN) % GRAIN, gy = Math.floor(((by + j) / this.grainScale) % GRAIN + GRAIN) % GRAIN;
+          a *= 1 - this.grainK * (1 - Math.min(1, Math.max(0, 0.5 + (this.grain[gy * GRAIN + gx] - 0.5) * (1 + this.grainK * 3))));
+        }
         if (a <= 0) continue;
         const ua = d[i + 3];
         const ur = d[i] * ua, ug = d[i + 1] * ua, ub = d[i + 2] * ua;

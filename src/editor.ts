@@ -1,7 +1,7 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost } from './core/document';
 import { Point, Rect, polyPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
-import { BRUSH_PRESETS, ERASER_PRESETS, SMUDGE_PARAMS } from './engine/brush';
+import { DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
 import { CanvasView } from './view/canvasView';
 import type { Tool } from './tools/tool';
 import type { RoomClient } from './net/roomClient';
@@ -15,10 +15,11 @@ export type SelectMode = 'rect' | 'ellipse' | 'lasso';
 
 export interface EditorSettings {
   brush: BrushParams;
-  brushPreset: number;
+  brushPreset: string;
   eraser: BrushParams;
-  eraserPreset: number;
+  eraserPreset: string;
   smudge: BrushParams;
+  smudgePreset: string;
   fillTolerance: number; // 0..1
   fillSampleAll: boolean;
   fillExpand: number;
@@ -48,9 +49,9 @@ export class Editor {
   onOp: ((op: Op) => void) | null = null;
   prefs: Prefs = { ...DEFAULT_PREFS, keys: {} };
   settings: EditorSettings = {
-    brush: { ...BRUSH_PRESETS[0].params }, brushPreset: 0,
-    eraser: { ...ERASER_PRESETS[0].params }, eraserPreset: 0,
-    smudge: { ...SMUDGE_PARAMS },
+    brush: { ...brushById(DEFAULT_BRUSH).params }, brushPreset: DEFAULT_BRUSH,
+    eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
+    smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
     hideOthersFolders: false,

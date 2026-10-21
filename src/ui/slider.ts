@@ -9,6 +9,8 @@ export interface SliderOptions {
   format?: (v: number) => string;
   step?: number;
   onInput: (v: number) => void;
+  onStart?: () => void;
+  onEnd?: () => void;
 }
 
 export class Slider {
@@ -41,6 +43,7 @@ export class Slider {
     e.preventDefault();
     this.el.setPointerCapture(e.pointerId);
     this.el.classList.add('active');
+    this.o.onStart?.();
     const update = (ev: PointerEvent) => {
       const r = this.el.getBoundingClientRect();
       const t = this.o.vertical ? 1 - (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width;
@@ -50,6 +53,7 @@ export class Slider {
     const move = (ev: PointerEvent) => update(ev);
     const up = () => {
       this.el.classList.remove('active');
+      this.o.onEnd?.();
       this.el.removeEventListener('pointermove', move);
       this.el.removeEventListener('pointerup', up);
       this.el.removeEventListener('pointercancel', up);
