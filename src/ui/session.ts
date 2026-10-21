@@ -10,6 +10,9 @@ import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import type { LiveEvent } from '../net/api';
 import { WATCH_KEY_RE } from '../shared/protocol';
+import { cleanPrefs } from '../shared/prefs';
+
+export const PREFS_KEY = 'doodlehive.prefs';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const THUMB_DELAY_MS = 15_000;
@@ -52,6 +55,7 @@ export class Session {
     this.server = await api.config();
     if (!this.server || new URLSearchParams(location.search).has('offline')) {
       this.offline = true;
+      try { this.ed.prefs = cleanPrefs(JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')); } catch { /* fresh device */ }
       this.app.refreshAccount();
       this.booted();
       newCanvasDialog((doc) => this.ed.setDoc(doc), false);
@@ -62,6 +66,7 @@ export class Session {
       location.replace('/login?next=' + encodeURIComponent(location.pathname + location.search));
       return;
     }
+    this.ed.prefs = this.ed.me.prefs;
     this.app.refreshAccount();
     this.listen();
     if (this.me?.needsSetup) {

@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
 import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isValidHandle, suggestHandle } from '../src/shared/profile.ts';
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
+import { cleanPrefs } from '../src/shared/prefs.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 export const db = new DatabaseSync(config.dbPath);
@@ -65,6 +66,7 @@ addColumn('rooms', 'thumb', 'BLOB');
 addColumn('rooms', 'thumb_version', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'presence_mode', `TEXT NOT NULL DEFAULT 'auto'`);
 addColumn('users', 'premium_warned', 'INTEGER'); // the premium_until a warning went out for
+addColumn('users', 'prefs', `TEXT NOT NULL DEFAULT '{}'`);
 // visibility has its own column so the home screen can filter on it; the other share flags are JSON.
 addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
 addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
@@ -88,12 +90,12 @@ export interface UserRow {
   id: string; provider: string; provider_id: string; handle: string; display_name: string;
   favorite_color: string; links: string; has_avatar: number; avatar_type: string | null;
   avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
-  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string; premium_warned: number | null;
+  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string; premium_warned: number | null; prefs: string;
 }
 
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
-  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned`;
+  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
@@ -118,9 +120,11 @@ export function myProfile(u: UserRow): MyProfile {
   const theme = canUseTheme(u.theme, isPremium(u)) ? u.theme : DEFAULT_THEME;
   return {
     ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme,
-    presenceMode: u.presence_mode as MyProfile['presenceMode'],
+    presenceMode: u.presence_mode as MyProfile['presenceMode'], prefs: cleanPrefs(safeJson(u.prefs)),
   };
 }
+
+function safeJson(s: string): unknown { try { return JSON.parse(s); } catch { return {}; } }
 
 export function getUser(id: string): UserRow | undefined {
   return db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as UserRow | undefined;

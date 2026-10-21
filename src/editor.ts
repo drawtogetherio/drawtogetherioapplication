@@ -8,6 +8,7 @@ import type { RoomClient } from './net/roomClient';
 import type { MyProfile } from './shared/profile';
 import { userFolderId } from './shared/protocol';
 import type { ApplyOptions } from './core/document';
+import { DEFAULT_PREFS, Prefs } from './shared/prefs';
 
 export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
 export type SelectMode = 'rect' | 'ellipse' | 'lasso';
@@ -24,9 +25,7 @@ export interface EditorSettings {
   selectMode: SelectMode;
   shape: ShapeKind;
   shapeFill: boolean;
-  pressureGamma: number; // pressure curve exponent
   fingerDraws: boolean; // when false, one finger pans (set automatically once a pen is used)
-  showBubbles: boolean; // name bubbles where others are drawing
   hideOthersFolders: boolean; // layers panel shows only your own folder
 }
 
@@ -46,13 +45,14 @@ export class Editor {
   me: MyProfile | null = null;
   targetFolder: string | null = null;
   room: RoomClient | null = null;
+  prefs: Prefs = { ...DEFAULT_PREFS, keys: {} };
   settings: EditorSettings = {
     brush: { ...BRUSH_PRESETS[0].params }, brushPreset: 0,
     eraser: { ...ERASER_PRESETS[0].params }, eraserPreset: 0,
     smudge: { ...SMUDGE_PARAMS },
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
-    pressureGamma: 1, fingerDraws: true, showBubbles: true, hideOthersFolders: false,
+    fingerDraws: true, hideOthersFolders: false,
   };
   private listeners = new Set<Listener>();
   private unsubDoc: () => void = () => {};

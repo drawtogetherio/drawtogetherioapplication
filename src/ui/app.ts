@@ -20,7 +20,10 @@ import { Session } from './session';
 import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme } from '../shared/themes';
 import { api } from '../net/api';
-import { applyTheme, theme } from './theme';
+import { applyMode, applyTheme, theme } from './theme';
+import { preferencesDialog } from './prefsDialog';
+import { KEY_ACTIONS, KeyAction, actionFor, keyOf } from '../shared/prefs';
+import { PREFS_KEY } from './session';
 import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
@@ -29,14 +32,9 @@ import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } fr
 
 const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'select', 'shape'];
 
-const TOOLS: { id: ToolId; label: string; key: string }[] = [
-  { id: 'brush', label: 'Brush', key: 'B' },
-  { id: 'eraser', label: 'Eraser', key: 'E' },
-  { id: 'smudge', label: 'Smudge', key: 'S' },
-  { id: 'fill', label: 'Fill', key: 'G' },
-  { id: 'select', label: 'Selection', key: 'M' },
-  { id: 'shape', label: 'Shapes', key: 'U' },
-  { id: 'eyedropper', label: 'Eyedropper', key: 'I' },
+const TOOLS: { id: ToolId; label: string }[] = [
+  { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
+  { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
 ];
 
 export class App {
@@ -63,6 +61,9 @@ export class App {
   private invitePop = h('div.popover.invite-pop', { hidden: true });
   private toolPop = h('div.popover.tool-pop', { hidden: true });
   private toolPopFor: ToolId | null = null;
+  private layersBtn: HTMLButtonElement;
+  private shortcutsEl = h('div.shortcuts');
+  private prefsTimer = 0;
 
   constructor(root: HTMLElement, doc: DrawDoc) {
     const stage = h('main.stage-wrap');
@@ -109,8 +110,7 @@ export class App {
     const right = h('div.bar-group');
     for (const t of TOOLS) {
       const picker = PICKER_TOOLS.includes(t.id);
-      const title = `${t.label} (${t.key})`;
-      const b = btn(t.id, title, () => {
+      const b = btn(t.id, t.label, () => {
         if (picker && ed.toolId === t.id) this.togglePicker(t.id, b);
         else { this.closePicker(); ed.setTool(t.id); }
       }, picker ? '.tool.has-picker' : '.tool');
@@ -121,7 +121,7 @@ export class App {
 
     const layers = new LayersPanel(ed);
     const layersPop = h('div.popover.layers-pop', { hidden: true }, layers.el);
-    const layersBtn = btn('layers', 'Layers (L)', () => {
+    const layersBtn = this.layersBtn = btn('layers', 'Layers', () => {
       layersPop.hidden = !layersPop.hidden; layers.open = !layersPop.hidden; if (layers.open) layers.render();
     }, '.edit-only');
     dismissOnOutside(layersPop, [layersBtn], () => { layersPop.hidden = true; layers.open = false; });
@@ -153,6 +153,7 @@ export class App {
     ed.on((w) => this.onChange(w));
     ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); };
     this.bindKeys();
+    this.applyPrefs();
     this.onChange('tool');
     this.onChange('color');
     this.onChange('history');
@@ -164,22 +165,59 @@ export class App {
     // The account's saved theme wins over the one remembered on this device.
     const me = this.ed.me;
     if (me) applyTheme(canUseTheme(me.theme, me.premium) ? me.theme : null);
+    this.applyPrefs();
     this.renderMenuDyn();
     this.home.renderAccount();
   }
 
-  private themeRow(): HTMLElement {
+  /** Puts the preferences into effect: colour mode, shortcuts, hover outline. */
+  applyPrefs() {
+    const p = this.ed.prefs;
+    applyMode(p.mode);
+    const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
+    for (const t of TOOLS) {
+      const b = this.toolButtons.get(t.id)!;
+      b.title = t.label + key(t.id);
+      b.setAttribute('aria-label', b.title);
+    }
+    this.layersBtn.title = 'Layers' + key('layers');
+    this.layersBtn.setAttribute('aria-label', this.layersBtn.title);
+    const kbd = (a: KeyAction) => `<kbd>${(keyOf(p, a) || '—').toUpperCase()}</kbd>`;
+    this.shortcutsEl.innerHTML = `<strong>Shortcuts</strong>
+<div>${KEY_ACTIONS.slice(0, 8).map((a) => `${kbd(a.id)} ${a.label}`).join(' ')}</div>
+<div><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo ${kbd('sizeDown')} ${kbd('sizeUp')} Brush size</div>
+<div>${kbd('rotate')} + drag rotate (Shift snaps) · ${kbd('zoomDrag')} + drag zoom · tap a selected tool for its options</div>
+<div><kbd>Space</kbd> drag to pan · <kbd>Ctrl</kbd>+scroll / pinch to zoom · <kbd>Alt</kbd>+scroll zoom</div>
+<div>${kbd('flipH')} / ${kbd('flipV')} Flip view · ${kbd('fit')} Fit · ${kbd('zoomIn')} / ${kbd('zoomOut')} Zoom · <kbd>Ctrl A</kbd> / <kbd>Ctrl D</kbd> Select all / none</div>
+<div><kbd>Enter</kbd> Apply transform · <kbd>Esc</kbd> Cancel · <kbd>Delete</kbd> Clear selection</div>
+<div style="margin-top:6px"><strong>Touch</strong>: two fingers pan / zoom / rotate · two-finger tap undo · three-finger tap redo</div>`;
+    this.ed.view.requestRender();
+  }
+
+  /** Saved with the account, or on this device when drawing without one. */
+  savePrefs() {
+    clearTimeout(this.prefsTimer);
+    this.prefsTimer = window.setTimeout(async () => {
+      const prefs = this.ed.prefs;
+      if (!this.ed.me) { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* storage blocked */ } return; }
+      try { this.ed.me = await api.updateMe({ prefs }); } catch { this.toast('Couldn’t save your preferences'); }
+    }, 400);
+  }
+
+  themeRow(): HTMLElement {
     const me = this.ed.me;
     const row = h('div.theme-row', {}, h('div.menu-label', {}, 'Theme'));
+    const swatches: HTMLButtonElement[] = [];
+    const mark = () => { for (const b of swatches) { const on = b.dataset.id === theme().id; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); } };
     for (const t of THEMES) {
       const allowed = canUseTheme(t.id, !!me?.premium);
       const title = t.name + (t.premium ? (allowed ? ' (premium)' : ' (premium only)') : '');
-      const b = h(`button.theme-swatch${t.id === theme().id ? '.active' : ''}${allowed ? '' : '.locked'}` as 'button', {
-        title, 'aria-label': title, style: `--sw:${t.accent}`, 'aria-pressed': String(t.id === theme().id),
+      const b = h(`button.theme-swatch${allowed ? '' : '.locked'}` as 'button', {
+        title, 'aria-label': title, style: `--sw:${t.accent}`, 'data-id': t.id,
         onclick: async () => {
           if (!allowed) { this.toast(`${t.name} is a premium theme`); return; }
           applyTheme(t.id);
-          this.renderMenuDyn();
+          mark();
           this.ed.view.requestRender();
           if (me) {
             try { this.ed.me = await api.updateMe({ theme: t.id }); } catch { this.toast('Couldn’t save your theme'); }
@@ -187,8 +225,10 @@ export class App {
         },
       });
       if (t.premium) b.append(badges(undefined, true));
+      swatches.push(b);
       row.append(b);
     }
+    mark();
     return row;
   }
 
@@ -455,25 +495,18 @@ export class App {
   }
 
   private menu(): HTMLElement {
-    const ed = this.ed;
-    const st = ed.settings;
-    const gamma = new Slider({
-      min: 0.4, max: 2.5, value: st.pressureGamma, label: 'Pressure curve',
-      format: (v) => (v < 0.95 ? 'Light ' : v > 1.05 ? 'Firm ' : 'Linear ') + v.toFixed(2),
-      onInput: (v) => { st.pressureGamma = v; },
-    });
+    const st = this.ed.settings;
     const finger = h('input', { type: 'checkbox' });
     const pop = h('div.popover.menu-pop', { hidden: true },
       h('div.panel', {},
         this.menuDyn,
-        gamma.el,
         h('label.check.menu-check', {}, finger, 'Draw with finger'),
         h('div.menu-sep'),
-        h('div.shortcuts', { html: SHORTCUTS }),
+        this.shortcutsEl,
       ),
     );
     finger.addEventListener('change', () => { st.fingerDraws = finger.checked; });
-    pop.addEventListener('pointerenter', () => { finger.checked = st.fingerDraws; gamma.set(st.pressureGamma); });
+    pop.addEventListener('pointerenter', () => { finger.checked = st.fingerDraws; });
     new MutationObserver(() => { finger.checked = st.fingerDraws; }).observe(pop, { attributes: true, attributeFilter: ['hidden'] });
     return pop;
   }
@@ -509,19 +542,14 @@ export class App {
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
-    if (!ed.readOnly) d.append(item('download', 'Export PNG / JPG / PSD…', () => this.export()), h('div.menu-sep'));
-    if (ed.room || me) {
-      const tog = (label: string, get: () => boolean, set: (v: boolean) => void) => {
-        const cb = h('input', { type: 'checkbox' });
-        cb.checked = get();
-        cb.addEventListener('change', () => { set(cb.checked); ed.emit('settings'); ed.view.requestRender(); });
-        return h('label.check.menu-check', {}, cb, label);
-      };
-      d.append(tog('Name bubbles', () => st.showBubbles, (v) => { st.showBubbles = v; }));
-      if (!ed.readOnly) d.append(tog('Only my folder in Layers', () => st.hideOthersFolders, (v) => { st.hideOthersFolders = v; }));
-      d.append(h('div.menu-sep'));
+    if (!ed.readOnly) d.append(item('download', 'Export PNG / JPG / PSD…', () => this.export()));
+    d.append(item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
+    if (ed.room && !ed.readOnly) {
+      const cb = h('input', { type: 'checkbox' });
+      cb.checked = st.hideOthersFolders;
+      cb.addEventListener('change', () => { st.hideOthersFolders = cb.checked; ed.emit('settings'); });
+      d.append(h('label.check.menu-check', {}, cb, 'Only my folder in Layers'), h('div.menu-sep'));
     }
-    d.append(this.themeRow(), h('div.menu-sep'));
   }
 
   async newCanvas() {
@@ -535,7 +563,7 @@ export class App {
     this.select.overlay(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
     const hv = ed.hover;
-    if (hv && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser' || ed.toolId === 'smudge') && !this.input.altPick && !this.input.viewKey) {
+    if (hv && ed.prefs.hoverPreview && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser' || ed.toolId === 'smudge') && !this.input.altPick && !this.input.viewKey) {
       const p = M.transformPoint(hv);
       const r = Math.max(1, (ed.sizeParams.size * ed.view.viewport.zoom) / 2);
       ctx.lineWidth = 1;
@@ -562,9 +590,10 @@ export class App {
       if (mod) return;
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === 'Alt') { this.input.altPick = true; e.preventDefault(); ed.view.requestRender(); return; }
-      if (k === 'r' || k === 'z') {
-        this.input.viewKey = k === 'r' ? 'rotate' : 'zoom';
-        ed.view.canvas.style.cursor = k === 'r' ? 'grab' : 'zoom-in';
+      const hold = actionFor(ed.prefs, k);
+      if (hold === 'rotate' || hold === 'zoomDrag') {
+        this.input.viewKey = hold === 'rotate' ? 'rotate' : 'zoom';
+        ed.view.canvas.style.cursor = hold === 'rotate' ? 'grab' : 'zoom-in';
         return;
       }
       if (e.key === 'Enter') {
@@ -579,24 +608,25 @@ export class App {
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') { this.deleteSelection(); return; }
-      const tool = TOOLS.find((x) => x.key.toLowerCase() === k);
-      if (tool) { ed.setTool(tool.id); return; }
-      if (k === '[' || k === ']') {
+      const action = actionFor(ed.prefs, k);
+      if (!action) return;
+      if (TOOLS.some((t) => t.id === action)) { ed.setTool(action as ToolId); return; }
+      if (action === 'sizeUp' || action === 'sizeDown') {
         const p = ed.sizeParams;
-        p.size = Math.max(1, Math.min(500, p.size * (k === ']' ? 1.15 : 1 / 1.15)));
+        p.size = Math.max(1, Math.min(500, p.size * (action === 'sizeUp' ? 1.15 : 1 / 1.15)));
         this.syncSliders(); ed.view.requestRender(); return;
       }
-      if (k === 'h') ed.view.viewport.flip(true);
-      else if (k === 'v') ed.view.viewport.flip(false);
-      else if (k === '0') ed.fitView();
-      else if (k === '=' || k === '+') this.zoomCenter(1.25);
-      else if (k === '-') this.zoomCenter(0.8);
-      else if (k === 'l') (document.querySelector('[aria-label="Layers (L)"]') as HTMLElement)?.click();
+      if (action === 'flipH') ed.view.viewport.flip(true);
+      else if (action === 'flipV') ed.view.viewport.flip(false);
+      else if (action === 'fit') ed.fitView();
+      else if (action === 'zoomIn') this.zoomCenter(1.25);
+      else if (action === 'zoomOut') this.zoomCenter(0.8);
+      else if (action === 'layers') this.layersBtn.click();
     });
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ') { this.input.spaceHeld = false; ed.view.canvas.style.cursor = ''; }
-      const k = e.key.toLowerCase();
-      if ((k === 'r' && this.input.viewKey === 'rotate') || (k === 'z' && this.input.viewKey === 'zoom')) {
+      const action = actionFor(ed.prefs, e.key.toLowerCase());
+      if ((action === 'rotate' && this.input.viewKey === 'rotate') || (action === 'zoomDrag' && this.input.viewKey === 'zoom')) {
         this.input.viewKey = null; ed.view.canvas.style.cursor = '';
       }
       if (e.key === 'Alt') { this.input.altPick = false; ed.view.requestRender(); }
@@ -623,13 +653,3 @@ export class App {
     });
   }
 }
-
-const SHORTCUTS = `
-<strong>Shortcuts</strong>
-<div><kbd>B</kbd> Brush <kbd>E</kbd> Eraser <kbd>S</kbd> Smudge <kbd>G</kbd> Fill <kbd>M</kbd> Select <kbd>U</kbd> Shapes <kbd>I</kbd> Eyedropper</div>
-<div><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo <kbd>[</kbd> <kbd>]</kbd> Brush size</div>
-<div><kbd>R</kbd> + drag rotate (Shift snaps) · <kbd>Z</kbd> + drag zoom · tap a selected tool for its options</div>
-<div><kbd>Space</kbd> drag to pan · <kbd>Ctrl</kbd>+scroll / pinch to zoom · <kbd>Alt</kbd>+scroll zoom</div>
-<div><kbd>H</kbd> / <kbd>V</kbd> Flip view · <kbd>0</kbd> Fit · <kbd>Ctrl A</kbd> / <kbd>Ctrl D</kbd> Select all / none</div>
-<div><kbd>Enter</kbd> Apply transform · <kbd>Esc</kbd> Cancel · <kbd>Delete</kbd> Clear selection</div>
-<div style="margin-top:6px"><strong>Touch</strong>: two fingers pan / zoom / rotate · two-finger tap undo · three-finger tap redo</div>`;

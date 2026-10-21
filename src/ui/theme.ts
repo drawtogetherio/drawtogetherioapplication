@@ -1,4 +1,5 @@
 import { DEFAULT_THEME, Theme, findTheme } from '../shared/themes';
+import type { Mode } from '../shared/prefs';
 
 const KEY = 'doodlehive.theme';
 let current: Theme = findTheme(DEFAULT_THEME);
@@ -25,6 +26,13 @@ export function initTheme() {
   try { id = localStorage.getItem(KEY); } catch { /* ignore */ }
   applyTheme(id);
 }
+
+const dark = matchMedia('(prefers-color-scheme: dark)');
+let mode: Mode = 'dark';
+const paint = () => { document.documentElement.dataset.mode = mode === 'system' ? (dark.matches ? 'dark' : 'light') : mode; };
+dark.addEventListener('change', paint);
+
+export function applyMode(m: Mode) { mode = m; paint(); }
 
 export const theme = () => current;
 export const accentColor = () => current.accent;

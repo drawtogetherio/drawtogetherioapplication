@@ -2,6 +2,7 @@ import type { DocSettings } from '../core/model';
 import type { MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
 import type { ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
+import type { Prefs } from '../shared/prefs';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public field?: string) { super(message); }
@@ -44,7 +45,7 @@ export const api = {
   guestLogin: (name: string) => call<MyProfile>('POST', '/auth/guest', { name }),
   logout: () => call('POST', '/auth/logout'),
   discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
-  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null; presenceMode: PresenceMode }>) =>
+  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null; presenceMode: PresenceMode; prefs: Prefs }>) =>
     call<MyProfile>('PATCH', '/api/me', patch),
   uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),

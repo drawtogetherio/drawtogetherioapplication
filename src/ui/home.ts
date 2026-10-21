@@ -4,6 +4,7 @@ import type { ProjectInfo, Visibility } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
 import { MODE_CHOICES, presenceLabel } from './presence';
 import { shareDialog } from './share';
+import { preferencesDialog } from './prefsDialog';
 import { brandHtml } from '../site/brand';
 import type { App } from './app';
 import { confirmDialog, modal, textDialog } from './dialogs';
@@ -200,6 +201,7 @@ export class Home {
     this.accountPop.append(h('div.panel', {},
       h('div.account', {}, avatarEl(me, 40, true), h('div.account-text', {}, nameLine(me), h('small.muted', {}, '@' + me.handle), me.status ? h('small.status-line', {}, me.status) : null)),
       h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
+      h('button.menu-item', { html: icon('settings', 18) + '<span>Preferences</span>', onclick: () => { close(); preferencesDialog(this.app); } }),
       h('button.menu-item', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
     ));
   }

@@ -1,3 +1,4 @@
+import type { Prefs } from './prefs';
 // Profile rules shared by browser and server.
 
 export const HANDLE_WORDS = [
@@ -129,6 +130,7 @@ export interface MyProfile extends PublicProfile {
   needsSetup: boolean;
   provider: 'discord' | 'dev' | 'guest';
   theme: string;
+  prefs: Prefs;
 }
 
 export const AVATAR_SIZE = 128;

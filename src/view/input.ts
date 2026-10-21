@@ -43,7 +43,7 @@ export class InputController {
       // Some drivers report 0 pressure on the first sample.
       p = e.pressure > 0 ? e.pressure : this.lastPressure;
       this.lastPressure = p;
-      p = Math.pow(Math.min(1, Math.max(0.001, p)), this.ed.settings.pressureGamma);
+      p = Math.pow(Math.min(1, Math.max(0.001, p)), this.ed.prefs.pressureGamma);
     }
     return { x: d.x, y: d.y, sx, sy, pressure: p, type, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
   }

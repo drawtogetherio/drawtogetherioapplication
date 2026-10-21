@@ -17,6 +17,7 @@ import {
   AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/protocol.ts';
+import { cleanPrefs } from '../src/shared/prefs.ts';
 import { THEMES, canUseTheme } from '../src/shared/themes.ts';
 
 type Req = http.IncomingMessage;
@@ -296,6 +297,10 @@ async function route(req: Req, res: Res) {
       const pm = String(b.presenceMode);
       if (!PRESENCE_MODES.includes(pm as PresenceMode)) throw new HttpError(400, 'Unknown status.', 'presenceMode');
       sets.push('presence_mode = ?'); vals.push(pm);
+    }
+    if (b.prefs !== undefined) {
+      if (!b.prefs || typeof b.prefs !== 'object') throw new HttpError(400, 'Invalid preferences.', 'prefs');
+      sets.push('prefs = ?'); vals.push(JSON.stringify(cleanPrefs(b.prefs)));
     }
     if (b.done === true) sets.push('needs_setup = 0');
     if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, u.id);

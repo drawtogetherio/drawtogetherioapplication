@@ -150,7 +150,7 @@ export class RoomUI {
 
   drawBubbles(ctx: CanvasRenderingContext2D, M: DOMMatrix) {
     const room = this.room;
-    if (!room || !this.ed.settings.showBubbles) return;
+    if (!room || !this.ed.prefs.showBubbles) return;
     const now = Date.now();
     let animating = false;
     for (const [uid, b] of this.bubbles) {
@@ -186,7 +186,12 @@ export class RoomUI {
     ctx.lineTo(x + tri, by + H - 0.5);
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = m.favoriteColor;
+    if (m.gradient) {
+      const g = ctx.createLinearGradient(bx, by, bx + W, by + H);
+      g.addColorStop(0, m.gradient[0]);
+      g.addColorStop(1, m.gradient[1]);
+      ctx.strokeStyle = g;
+    } else ctx.strokeStyle = m.favoriteColor;
     ctx.lineWidth = 2;
     ctx.stroke();
     const ax = bx + pad + A / 2, ay = by + H / 2;

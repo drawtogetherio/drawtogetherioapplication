@@ -76,7 +76,7 @@ export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLEleme
       h('div.profile-card-name', {}, nameText(p, 'card-name'), badges(role, p.premium)),
       h('div.muted', {}, '@' + p.handle),
       p.status ? h('div.profile-status', {}, p.status) : null,
-      h('div.fav', {}, h('span.fav-swatch', { style: `background:${p.favoriteColor}` }), h('span.muted', {}, p.favoriteColor))),
+      h('div.fav', {}, h('span.fav-swatch', { style: p.gradient ? `background:linear-gradient(135deg,${p.gradient[0]},${p.gradient[1]})` : `background:${p.favoriteColor}` }))),
   );
   return h('div.modal-body.profile-card', {}, head, extra ?? null,
     links.childElementCount ? links : null);
