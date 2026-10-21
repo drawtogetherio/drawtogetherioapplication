@@ -35,6 +35,7 @@ log ever says `WARNING: no volume attached`, the volume is missing.
 | `DISCORD_CLIENT_SECRET` | from the Discord developer portal (keep it only here) |
 | `DOWNLOAD_MAC_URL` | optional, later: link to the Mac app download (the landing page shows "soon" until set) |
 | `DOWNLOAD_WINDOWS_URL` | optional, later: link to the Windows app download |
+| `PATREON_URL` | optional: where the home-screen support banner links (default `https://www.patreon.com/doodlehive`) |
 
 Saving variables redeploys the service.
 

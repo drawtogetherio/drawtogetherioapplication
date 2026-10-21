@@ -99,6 +99,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - A bell by the account button counts unread notifications: friend requests (accept or decline
   right there), accepted requests, room invites (Join) and system notices such as premium ending
   within a day. They arrive live over the event stream; the server keeps the last 100 per person.
+- A honey banner at the top of the home screen links to Patreon (`PATREON_URL`, default
+  patreon.com/doodlehive). It shows once per browser session; its X hides it for good (saved with
+  the preferences).
 - **Preferences** (account menu, or the canvas menu): theme colour, Dark / Light / System mode,
   brush outline on hover, name bubbles, pressure curve, and every single-key shortcut (click a key,
   press a new one). Saved on the account, so they follow you between devices; offline they stay on

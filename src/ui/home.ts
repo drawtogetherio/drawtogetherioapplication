@@ -13,6 +13,7 @@ import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 
 // Fallback to the live event stream.
+const BANNER_KEY = 'doodlehive.support';
 const FRIENDS_POLL_MS = 60_000;
 
 const VIS_LABEL: Record<Visibility, string> = { private: 'Just you', open: 'Open link', friends: 'Friends', unlisted: 'Unlisted' };
@@ -46,6 +47,7 @@ export class Home {
   private bellBadge = h('span.bell-badge', { hidden: true });
   private noticesPop = h('div.popover.notices-pop', { hidden: true });
   private notices: Notice[] = [];
+  private banner = h('div.support-banner', { hidden: true });
 
   constructor(private app: App) {
     const plus = this.plus = h('button.icon-btn.plus-btn', { title: 'Create new', 'aria-label': 'Create new', html: icon('plus', 22), onclick: () => this.app.session.createNew() });
@@ -80,6 +82,7 @@ export class Home {
     });
 
     this.el.append(
+      this.banner,
       h('header.home-top', {},
         plus,
         h('div.home-brand', { html: brandHtml('/') }),
@@ -111,6 +114,7 @@ export class Home {
     const guest = !!this.app.ed.me?.guest;
     this.el.classList.toggle('guest', guest);
     this.plus.hidden = this.friendsPanel.hidden = this.bellBtn.hidden = guest;
+    this.renderBanner();
     if (guest) { this.renderGuest(); return; }
     this.projectsHead.textContent = 'Recent';
     this.loadProjects();
@@ -124,6 +128,25 @@ export class Home {
     this.el.hidden = true;
     this.accountPop.hidden = this.noticesPop.hidden = true;
     clearInterval(this.timer);
+  }
+
+  /** Once per browser session, until it is closed for good. */
+  private renderBanner() {
+    const url = this.app.session.server?.patreon;
+    const b = this.banner;
+    let seen = false;
+    try { seen = sessionStorage.getItem(BANNER_KEY) === '1'; } catch { /* storage blocked */ }
+    b.hidden = !url || !this.app.ed.prefs.supportBanner || seen;
+    if (b.hidden || b.childElementCount) return;
+    try { sessionStorage.setItem(BANNER_KEY, '1'); } catch { /* storage blocked */ }
+    b.append(
+      h('a.support-link', { href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Support Doodlehive on Patreon and unlock special features'),
+      h('button.icon-btn', { type: 'button', title: 'Close', 'aria-label': 'Close', html: icon('x', 16), onclick: () => {
+        b.hidden = true;
+        this.app.ed.prefs.supportBanner = false;
+        this.app.savePrefs();
+      } }),
+    );
   }
 
   // ---- Account ----

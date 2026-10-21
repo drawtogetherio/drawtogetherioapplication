@@ -25,9 +25,11 @@ export interface Prefs {
   hoverPreview: boolean;
   showBubbles: boolean;
   pressureGamma: number;
+  /** The Patreon banner on the home screen; false once it has been closed. */
+  supportBanner: boolean;
 }
 
-export const DEFAULT_PREFS: Prefs = { keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1 };
+export const DEFAULT_PREFS: Prefs = { keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, supportBanner: true };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
 
@@ -46,6 +48,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     hoverPreview: typeof r.hoverPreview === 'boolean' ? r.hoverPreview : DEFAULT_PREFS.hoverPreview,
     showBubbles: typeof r.showBubbles === 'boolean' ? r.showBubbles : DEFAULT_PREFS.showBubbles,
     pressureGamma: gamma >= 0.4 && gamma <= 2.5 ? gamma : DEFAULT_PREFS.pressureGamma,
+    supportBanner: r.supportBanner !== false,
   };
 }
 

@@ -49,6 +49,7 @@ export const config = {
   dbPath: env.DB_PATH || (env.RAILWAY_VOLUME_MOUNT_PATH ? path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'doodlehive.db') : defaultDbPath()),
   persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
+  patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
   secureCookies: publicUrl.startsWith('https://'),
 };

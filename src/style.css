@@ -731,3 +731,10 @@ body.spectating .stage { cursor: grab; }
 /* Overlays on the canvas stay dark in both modes */
 .toast, .chat-log, .chat-typing { color: #ececf1; }
 .chat-msg.system, .chat-typing { color: #b8b8c4; }
+
+/* Patreon banner */
+.support-banner { display: flex; align-items: center; justify-content: center; gap: 6px; background: #f4c25b; color: #2b1f04; min-height: 34px; padding: 0 8px 0 42px; font-size: 13.5px; }
+.support-link { color: inherit; text-decoration: none; font-weight: 600; flex: 1; text-align: center; }
+.support-link:hover { text-decoration: underline; }
+.support-banner .icon-btn { width: 30px; height: 30px; color: inherit; }
+.support-banner .icon-btn:hover { background: rgba(0, 0, 0, 0.1); }

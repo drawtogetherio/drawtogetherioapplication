@@ -25,6 +25,16 @@ await page.fill('#display-name', 'Pia');
 await page.getByRole('button', { name: 'Start drawing' }).click();
 await page.waitForSelector('.home:not([hidden])');
 
+// ---- Patreon banner ----
+const banner = page.locator('.support-banner');
+check(await banner.isVisible() && /patreon\.com/.test(await banner.locator('a').getAttribute('href')), 'the support banner shows on the home screen');
+await banner.locator('.icon-btn').click();
+check(await banner.isHidden(), 'X closes it');
+await page.waitForTimeout(700);
+await page.reload();
+await page.waitForSelector('.home:not([hidden])');
+check(await banner.isHidden(), 'it stays closed after a reload');
+
 // ---- Open from the account menu ----
 await page.locator('.account-btn').click();
 await page.locator('.account-pop .menu-item', { hasText: 'Preferences' }).click();
@@ -56,7 +66,7 @@ await page.locator('.modal-head .icon-btn').click();
 // ---- Saved with the account ----
 await page.waitForTimeout(700);
 const me = await page.evaluate(async () => (await fetch('/api/me')).json());
-check(me.prefs.mode === 'light' && me.prefs.keys.fill === 'q' && me.prefs.hoverPreview === false, 'preferences are stored on the account');
+check(me.prefs.mode === 'light' && me.prefs.keys.fill === 'q' && me.prefs.hoverPreview === false && me.prefs.supportBanner === false, 'preferences are stored on the account');
 
 await page.reload();
 await page.waitForSelector('.home:not([hidden])');
