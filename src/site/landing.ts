@@ -64,9 +64,11 @@ function scene() {
 }
 
 async function main() {
+  // Show the page straight away; download links and the signed-in line fill in once the server answers.
+  render(undefined);
   const cfg = await api.config();
-  render(cfg?.downloads);
   if (!cfg) return;
+  if (cfg.downloads?.mac || cfg.downloads?.windows) render(cfg.downloads);
   const me = await api.me().catch(() => null);
   if (me) {
     document.getElementById('account-line')!.innerHTML =

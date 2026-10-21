@@ -412,7 +412,8 @@ async function route(req: Req, res: Res) {
   }
 
   // ---- Static client (production) ----
-  if (m === 'GET' && !p.startsWith('/api/') && fs.existsSync(config.staticDir)) {
+  // HEAD too: link previews, uptime checks and some proxies probe pages with HEAD before loading them.
+  if ((m === 'GET' || m === 'HEAD') && !p.startsWith('/api/') && fs.existsSync(config.staticDir)) {
     const file = path.join(config.staticDir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
     const isFile = file.startsWith(config.staticDir) && fs.existsSync(file) && fs.statSync(file).isFile();
     // Pages: / is the landing page, /login the login page, and /app (with any sub-path) the app itself.
@@ -428,6 +429,7 @@ async function route(req: Req, res: Res) {
       // Vite puts a content hash in asset file names, so they can be cached forever; the page itself never is.
       'Cache-Control': target.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
     };
+    if (m === 'HEAD') { res.writeHead(200, headers); return res.end(); }
     const stream = fs.createReadStream(target);
     if (/\.(html|js|css|svg|json)$/.test(target) && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
       res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' });
