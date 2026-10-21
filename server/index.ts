@@ -417,7 +417,9 @@ async function route(req: Req, res: Res) {
     const file = path.join(config.staticDir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
     const isFile = file.startsWith(config.staticDir) && fs.existsSync(file) && fs.statSync(file).isFile();
     // Pages: / is the landing page, /login the login page, and /app (with any sub-path) the app itself.
-    const page = p === '/app' || p.startsWith('/app/') ? 'app/index.html' : p === '/login' || p === '/login/' ? 'login/index.html' : 'index.html';
+    // The page files sit at the top of dist/ (app.html, not app/index.html): a folder named "app" would clash
+    // with Railway building in /app, and Vite would then drop the landing page.
+    const page = p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html' : 'index.html';
     const target = isFile ? file : path.join(config.staticDir, page);
     if (!isFile && !fs.existsSync(target)) {
       // A missing page must never take the whole server down; say what's wrong instead.
@@ -493,7 +495,7 @@ server.listen(config.port, () => {
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Database: ${config.dbPath}`);
-  const pages = ['index.html', 'login/index.html', 'app/index.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
+  const pages = ['index.html', 'login.html', 'app.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
   console.log(`  Pages in ${config.staticDir}: ${pages.join(', ')}`);
   if (path.resolve(config.dbPath).startsWith(path.resolve(config.staticDir) + path.sep)) {
     console.warn('  WARNING: the database is inside the web build folder. Mount the volume at /data instead.');

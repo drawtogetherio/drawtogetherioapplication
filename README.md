@@ -143,10 +143,10 @@ Easy to move to Postgres later; all queries are in `server/db.ts`.
 ```bash
 # Solo drawing (static build, no server):
 npm run build && (cd dist && python3 -m http.server 4180)
-node tests/smoke.mjs http://localhost:4180/app/
-node tests/touch.mjs http://localhost:4180/app/
-node tests/replay.mjs http://localhost:4180/app/
-node tests/pickers.mjs http://localhost:4180/app/   # brush library, mode drop-downs, R/Z view keys
+node tests/smoke.mjs http://localhost:4180/app.html
+node tests/touch.mjs http://localhost:4180/app.html
+node tests/replay.mjs http://localhost:4180/app.html
+node tests/pickers.mjs http://localhost:4180/app.html   # brush library, mode drop-downs, R/Z view keys
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev

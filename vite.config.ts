@@ -9,14 +9,16 @@ const prettyUrls: Plugin = {
   name: 'pretty-urls',
   configureServer(server) {
     server.middlewares.use((req, _res, next) => {
-      const m = /^\/(app|login)(\?.*)?$/.exec(req.url ?? '');
-      if (m) req.url = `/${m[1]}/${m[2] ?? ''}`;
+      const m = /^\/(app|login)\/?(\?.*)?$/.exec(req.url ?? '');
+      if (m) req.url = `/${m[1]}.html${m[2] ?? ''}`;
       next();
     });
   },
 };
 
-// Pages: / landing, /login, /app (the drawing app).
+// Pages: / landing (index.html), /login (login.html), /app (app.html, the drawing app).
+// Keep page files at the top level: Railway builds in a folder called /app, so an app/ folder of pages
+// makes Vite resolve /app/index.html to the wrong file and silently drop the landing page.
 // `npm run build:single` produces one self-contained HTML file of the app (used for previews).
 export default defineConfig(({ mode }) => ({
   base: mode === 'single' ? './' : '/',
@@ -26,11 +28,11 @@ export default defineConfig(({ mode }) => ({
     target: 'es2020',
     rollupOptions: {
       input: mode === 'single'
-        ? { app: path.resolve(__dirname, 'app/index.html') }
+        ? { app: path.resolve(import.meta.dirname, 'app.html') }
         : {
-          landing: path.resolve(__dirname, 'index.html'),
-          login: path.resolve(__dirname, 'login/index.html'),
-          app: path.resolve(__dirname, 'app/index.html'),
+          landing: path.resolve(import.meta.dirname, 'index.html'),
+          login: path.resolve(import.meta.dirname, 'login.html'),
+          app: path.resolve(import.meta.dirname, 'app.html'),
         },
     },
   },
