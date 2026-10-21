@@ -10,15 +10,12 @@ import { icon } from './icons';
 import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, nameText, profileCardBody } from './people';
 import { confirmDialog, exportDialog, modal } from './dialogs';
 
-interface RemoteStroke { renderer: StrokeRenderer; layerId: string; touched: number }
+interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number }
 interface Bubble { x: number; y: number; drawing: boolean; t: number }
 
 const BUBBLE_LINGER = 1200;
 
-/**
- * Everything that appears only in a shared room: other people's live strokes and name bubbles,
- * the member list, and chat.
- */
+/** Other people's live strokes and name bubbles, the member list, and chat. */
 export class RoomUI {
   readonly membersPanel = h('div.panel.members-panel');
   readonly chatEl: HTMLElement;
@@ -53,6 +50,13 @@ export class RoomUI {
     this.strokes.clear();
     this.bubbles.clear();
     this.unsub = room.on((e) => this.handle(e));
+    room.liveBuffer = (op) => {
+      if (op.t !== 'stroke') return undefined;
+      const s = this.strokes.get(op.id);
+      if (!s || s.count !== op.pts.length) return undefined;
+      s.renderer.end();
+      return s.buffer;
+    };
     this.chatEl.hidden = false;
     this.renderChat();
     this.renderMembers();
@@ -68,11 +72,17 @@ export class RoomUI {
     this.toggleChat(false);
   }
 
+  private dropStroke(id: string) {
+    if (!this.strokes.delete(id)) return false;
+    this.ed.view.remoteLive.delete(id);
+    return true;
+  }
+
   private handle(e: RoomEvent) {
     const ed = this.ed;
     switch (e.kind) {
       case 'op':
-        if (this.strokes.delete(e.op.id)) { ed.view.remoteLive.delete(e.op.id); }
+        this.dropStroke(e.op.id);
         return;
       case 'members':
         this.renderMembers();
@@ -87,11 +97,11 @@ export class RoomUI {
         this.renderTyping();
         return;
       case 'live': {
-        let s = this.strokes.get(e.live.stroke);
         const l = e.live;
+        let s = this.strokes.get(l.stroke);
         if (!s) {
           const buffer = new TiledSurface();
-          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), layerId: l.layer, touched: 0 };
+          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), buffer, count: 0, touched: 0 };
           this.strokes.set(l.stroke, s);
           const layer = ed.doc.layer(l.layer);
           ed.view.remoteLive.set(l.stroke, {
@@ -101,6 +111,7 @@ export class RoomUI {
           });
         }
         s.touched = Date.now();
+        s.count += l.pts.length;
         for (let i = 0; i + 2 < l.pts.length; i += 3) {
           const r = s.renderer.add(l.pts[i], l.pts[i + 1], l.pts[i + 2]);
           if (r) ed.view.invalidate(r);
@@ -110,7 +121,7 @@ export class RoomUI {
         return;
       }
       case 'live-end':
-        if (this.strokes.delete(e.stroke)) { ed.view.remoteLive.delete(e.stroke); ed.view.invalidate(null); }
+        if (this.dropStroke(e.stroke)) ed.view.invalidate(null);
         return;
       case 'cursor':
         this.bubbles.set(e.from, { x: e.x, y: e.y, drawing: e.drawing, t: Date.now() });
@@ -122,11 +133,10 @@ export class RoomUI {
     }
   }
 
-  /** Housekeeping: drop stale live strokes, typing indicators and bubbles. */
   private tick() {
     const now = Date.now();
     for (const [id, s] of this.strokes) {
-      if (now - s.touched > 10_000) { this.strokes.delete(id); this.ed.view.remoteLive.delete(id); this.ed.view.invalidate(null); }
+      if (now - s.touched > 10_000 && this.dropStroke(id)) this.ed.view.invalidate(null);
     }
     if (this.room) {
       let changed = false;
@@ -179,7 +189,6 @@ export class RoomUI {
     ctx.strokeStyle = m.favoriteColor;
     ctx.lineWidth = 2;
     ctx.stroke();
-    // avatar
     const ax = bx + pad + A / 2, ay = by + H / 2;
     ctx.save();
     ctx.beginPath();
@@ -216,14 +225,12 @@ export class RoomUI {
     panel.append(h('div.panel-head', {}, h('span.panel-title', {}, `In this room · ${members.length}`)));
     const list = h('div.member-list');
     for (const m of members) {
-      const row = h('button.member-row', { type: 'button', onclick: () => this.profileCard(m) },
+      list.append(h('button.member-row', { type: 'button', onclick: () => this.profileCard(m) },
         avatarEl(m, 32),
         h('span.member-text', {}, nameLine(m, m.role, m.id === room.you), h('small', {}, '@' + m.handle)),
-      );
-      list.append(row);
+      ));
     }
     panel.append(list);
-    if (room.isHost) panel.append(h('p.muted.small', {}, 'Hosts can edit anyone’s layers and remove people from the room.'));
   }
 
   profileCard(m: Member) {
@@ -238,10 +245,10 @@ export class RoomUI {
     }
     if (canKick) {
       actions.push(h('button.btn.danger', {
-        html: icon('kick', 16) + '<span>Remove from room</span>',
+        html: icon('kick', 16) + '<span>Remove</span>',
         onclick: async () => {
           close();
-          if (await confirmDialog('Remove from room?', `${m.displayName} will be disconnected and can’t rejoin for 10 minutes. Their layers stay in the room.`, 'Remove')) {
+          if (await confirmDialog(`Remove ${m.displayName}?`, 'They can’t rejoin for 10 minutes. Their layers stay.', 'Remove')) {
             room.send({ type: 'kick', user: m.id });
           }
         },
@@ -280,7 +287,6 @@ export class RoomUI {
     const room = this.room;
     if (!room) return;
     const msgs = room.chat.slice(-(this.chatOpen ? 50 : 6));
-    // Join requests sit under the messages and only hosts get them.
     this.chatLog.replaceChildren(...msgs.map((m) => this.chatLine(m)), ...room.requests.map((u) => this.requestLine(u)));
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
     this.fadeChat();
@@ -306,13 +312,12 @@ export class RoomUI {
     return el;
   }
 
-  /** When chat is closed, messages fade out after a while (like a game chat). */
+  /** With chat closed, old messages fade like a game chat. */
   private fadeChat() {
     clearTimeout(this.fadeTimer);
     const now = Date.now();
     for (const el of this.chatLog.children as HTMLCollectionOf<HTMLElement>) {
-      const old = now - Number(el.dataset.at) > 15_000;
-      el.classList.toggle('faded', !this.chatOpen && old);
+      el.classList.toggle('faded', !this.chatOpen && now - Number(el.dataset.at) > 15_000);
     }
   }
 
@@ -328,12 +333,12 @@ export class RoomUI {
 
   private kickedShown: RoomClient | null = null;
   private kickedNotice() {
-    if (this.kickedShown === this.room) return; // status can be reported more than once
+    if (this.kickedShown === this.room) return;
     this.kickedShown = this.room;
-    const body = h('div.modal-body', {}, h('p', {}, 'A host removed you from this room. You can keep your own copy by exporting before you leave.'));
+    const body = h('div.modal-body', {}, h('p', {}, 'A host removed you from this room.'));
     const ok = h('button.btn.primary', {}, 'Back to start');
     const save = h('button.btn', { html: icon('download', 16) + '<span>Export a copy</span>', onclick: () => exportDialog(this.ed) });
-    const close = modal('You were removed', body, [save, ok], () => this.onLeave(), false);
+    const close = modal('Removed', body, [save, ok], () => this.onLeave(), false);
     ok.addEventListener('click', () => close());
   }
 }

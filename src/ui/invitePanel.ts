@@ -4,7 +4,6 @@ import { h } from './dom';
 import { avatarEl, nameLine } from './people';
 import { presenceLabel } from './presence';
 
-/** Hosts invite friends to the room they're in (the friend icon, bottom right). */
 export class InvitePanel {
   readonly el = h('div.panel.invite-panel');
   private invited = new Set<string>();

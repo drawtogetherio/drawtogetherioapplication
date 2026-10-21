@@ -19,27 +19,26 @@ async function main() {
     <div class="login-card">
       ${LOGO_SVG}
       <h1>${joining ? 'Log in to join the room' : 'Log in to Doodlehive'}</h1>
-      <p>${joining ? 'Your friend is waiting on the canvas.' : 'Draw with friends, keep your canvases, and pick up where you left off.'}</p>
+      <p>${joining ? 'Your friend is waiting on the canvas.' : 'Draw with friends and keep your canvases.'}</p>
       <div id="login-body"><p class="fine">Loading…</p></div>
     </div>
   </main>`;
   const body = document.getElementById('login-body')!;
   const cfg = await api.config();
-  if (!cfg) { body.innerHTML = '<p class="login-error">Can’t reach the Doodlehive server right now. Please try again in a moment.</p>'; return; }
-  // Already logged in? Go straight on.
+  if (!cfg) { body.innerHTML = '<p class="login-error">Can’t reach the server. Try again in a moment.</p>'; return; }
   if (await api.me().catch(() => null)) { location.replace(next); return; }
 
   body.innerHTML = '';
-  if (params.get('error')) body.insertAdjacentHTML('beforeend', '<p class="login-error" role="alert">Discord login didn’t finish. Please try again.</p>');
+  if (params.get('error')) body.insertAdjacentHTML('beforeend', '<p class="login-error" role="alert">Discord login didn’t finish. Try again.</p>');
   if (cfg.discord) {
     const a = document.createElement('a');
     a.className = 'btn discord';
     a.href = api.discordUrl(next);
     a.innerHTML = `${DISCORD_SVG}<span>Continue with Discord</span>`;
     body.append(a);
-    body.insertAdjacentHTML('beforeend', '<p class="fine">We only use your Discord name to set up your account. No password needed, and we never post anything.</p>');
+    body.insertAdjacentHTML('beforeend', '<p class="fine">We only use your Discord name. Nothing is ever posted.</p>');
   } else if (!cfg.devLogin) {
-    body.insertAdjacentHTML('beforeend', '<p class="login-error">Login isn’t switched on yet. Check back soon!</p>');
+    body.insertAdjacentHTML('beforeend', '<p class="login-error">Login isn’t on yet.</p>');
   }
   if (cfg.devLogin) {
     const form = document.createElement('form');
@@ -61,7 +60,6 @@ async function main() {
   else body.insertAdjacentHTML('beforeend', '<p class="login-alt">Just want to sketch? <a href="/app?offline=1">Draw without an account</a></p>');
 }
 
-/** Joining a friend's room without Discord: pick a name, get a random handle. */
 function guestForm() {
   const form = document.createElement('form');
   form.className = 'guest-login';

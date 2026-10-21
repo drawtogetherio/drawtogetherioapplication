@@ -9,7 +9,6 @@ const CHOICES: { id: Exclude<Visibility, 'private'>; label: string; note?: strin
   { id: 'unlisted', label: 'Unlisted', note: 'Hidden from friends lists', icon: 'eye' },
 ];
 
-/** Who can join: the three ways to share, plus the extra switches for open links. */
 export function shareFields(initial: ShareSettings) {
   const s: ShareSettings = { ...DEFAULT_SHARE, ...initial, visibility: initial.visibility === 'private' ? 'open' : initial.visibility };
   const toggle = (key: 'requireLogin' | 'friendsCanJoin' | 'approveJoins', label: string) => {
@@ -41,7 +40,6 @@ export function shareFields(initial: ShareSettings) {
   return { el, value: (): ShareSettings => ({ ...s }) };
 }
 
-/** Pick how to share a canvas. Resolves with the settings, or null if cancelled. */
 export function shareDialog(current: ShareSettings, alreadyShared: boolean): Promise<ShareSettings | null> {
   return new Promise((resolve) => {
     let result: ShareSettings | null = null;

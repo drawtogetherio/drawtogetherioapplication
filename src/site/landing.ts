@@ -12,7 +12,7 @@ function downloadButton(os: 'mac' | 'windows', url: string | null | undefined) {
   const label = `<span class="long">Download for </span>${os === 'mac' ? 'Mac' : 'Windows'}`;
   const icon = os === 'mac' ? APPLE_SVG : WINDOWS_SVG;
   if (url) return `<a class="btn" href="${esc(url)}">${icon}<span>${label}</span></a>`;
-  return `<span class="btn" aria-disabled="true" title="The desktop app is on its way">${icon}<span>${label}</span><span class="soon">soon</span></span>`;
+  return `<span class="btn" aria-disabled="true" title="Coming soon">${icon}<span>${label}</span><span class="soon">soon</span></span>`;
 }
 
 function render(downloads: { mac: string | null; windows: string | null } | undefined) {
@@ -34,7 +34,6 @@ function render(downloads: { mac: string | null; windows: string | null } | unde
   <footer class="intro-footer">© ${new Date().getFullYear()} Doodlehive</footer>`;
 }
 
-/** People drawing on one canvas. Bubble positions are percentages of the 960×540 scene. */
 function scene() {
   return `<div class="mock" aria-hidden="true">
     <svg class="doodles" viewBox="0 0 960 540">
@@ -64,7 +63,6 @@ function scene() {
 }
 
 async function main() {
-  // Show the page straight away; download links and the signed-in line fill in once the server answers.
   render(undefined);
   const cfg = await api.config();
   if (!cfg) return;

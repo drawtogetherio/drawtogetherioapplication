@@ -31,10 +31,6 @@ const PRESETS = [
 
 export interface CanvasChoice { width: number; height: number; infinite: boolean; background: string | null; roomName: string; share: ShareSettings }
 
-/**
- * Pick a canvas size. In 'room' mode it also asks for a room name and hands back the settings
- * (the server creates the room); otherwise it creates a local document.
- */
 export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = true, room?: { onCreate: (c: CanvasChoice) => Promise<void>; solo?: boolean }) {
   const preset = h('select', { id: 'canvas-preset', 'aria-label': 'Size' },
     h('option', { value: 'unlimited' }, 'Unlimited'),
@@ -53,7 +49,6 @@ export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = tru
     const infinite = preset.value === 'unlimited';
     wIn.disabled = hIn.disabled = infinite;
     const [w, hh] = size();
-    // Fit the canvas shape inside a 200 × 150 box.
     const k = Math.min(200 / w, 150 / hh);
     shape.style.width = infinite ? '200px' : `${Math.max(8, w * k)}px`;
     shape.style.height = infinite ? '150px' : `${Math.max(8, hh * k)}px`;

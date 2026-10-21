@@ -24,7 +24,6 @@ export const ERASER_PRESETS: BrushPreset[] = [
 
 const stampCache = new Map<string, HTMLCanvasElement>();
 
-/** A soft round dab image for a colour and hardness. */
 function stampFor(color: string, hardness: number): HTMLCanvasElement {
   const key = color + '|' + hardness.toFixed(2);
   let c = stampCache.get(key);
@@ -55,10 +54,7 @@ export function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/**
- * Renders a stroke incrementally into a TiledSurface as a series of dabs. The same class replays
- * a recorded stroke Op, so local drawing and remote replay produce identical pixels.
- */
+/** Renders a stroke as dabs. Local drawing and remote replay use the same path, so pixels match. */
 export class StrokeRenderer {
   private sx = 0; private sy = 0; private sp = 0; // smoothed input
   private lx = 0; private ly = 0; private lp = 0; // last dab position
@@ -85,7 +81,6 @@ export class StrokeRenderer {
     return this.segmentTo(this.sx, this.sy, this.sp);
   }
 
-  /** Finish the stroke: catch the smoothed line up to the final input point. */
   end(): Rect | null {
     if (!this.started) return null;
     return this.segmentTo(this.rawX, this.rawY, this.rawP);
@@ -139,7 +134,6 @@ export class StrokeRenderer {
   }
 }
 
-/** Replay a recorded stroke into a surface. */
 export function renderStroke(target: TiledSurface, brush: BrushParams, color: string, pts: number[]): Rect | null {
   const r = new StrokeRenderer(target, brush, color);
   let dirty: Rect | null = null;

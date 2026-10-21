@@ -1,4 +1,3 @@
-/** Doodlehive mark: a honeycomb cell with a pencil stroke. Uses the theme accent. */
 export const LOGO_SVG = `<svg class="logo-mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
   <path d="M16 2.5l11.7 6.75v13.5L16 29.5 4.3 22.75V9.25z" fill="var(--accent)"/>
   <path d="M10 21.5c2.5-.6 3.6-2.8 5.7-6.4l3.4-4.6 2.6 2.4-4.2 3.6c-3.9 2.8-6.2 3.6-7.5 5z" fill="var(--on-accent)"/>

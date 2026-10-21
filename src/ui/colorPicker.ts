@@ -31,7 +31,6 @@ export function hsvToHex(hh: number, s: number, v: number): string {
   return '#' + [f(5), f(3), f(1)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** HSV colour picker with hex entry, a default palette and recently used colours. */
 export class ColorPicker {
   readonly el: HTMLElement;
   private hue = 0; private sat = 0; private val = 0;
@@ -80,7 +79,6 @@ export class ColorPicker {
     this.sync();
   }
 
-  /** Call when the picker is opened. */
   opened() {
     this.previous.dataset.c = this.ed.color;
     this.previous.style.background = this.ed.color;

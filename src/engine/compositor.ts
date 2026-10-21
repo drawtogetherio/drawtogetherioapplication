@@ -1,16 +1,14 @@
-import { Rect, ctx2d, makeCanvas } from '../core/geom';
+import { Rect, ctx2d, makeCanvas, transformRect } from '../core/geom';
 import { blendOp } from '../core/model';
 import type { DrawDoc } from '../core/document';
 import { TiledSurface } from '../core/tiles';
 
-/** In-progress state of the active layer that is not yet committed to the document. */
 export interface LiveLayer {
   layerId: string;
   buffer?: TiledSurface; // stroke / shape preview
   bufferAlpha?: number;
   bufferOp?: GlobalCompositeOperation;
   clip?: Path2D; // document-space clip for the buffer
-  /** Area lifted out of the layer while a selection is being transformed. */
   hole?: Path2D;
   floating?: { canvas: HTMLCanvasElement; x: number; y: number; m: DOMMatrix };
 }
@@ -23,10 +21,7 @@ function getScratch(w: number, h: number) {
   return scratch;
 }
 
-/**
- * Composite the document into `ctx`, whose current transform maps document coordinates to its
- * pixels, limited to `region` (document coords). The caller sets up any clip.
- */
+/** Composite `region` (document coords) into `ctx`, whose transform maps document space to its pixels. */
 export function composite(
   ctx: CanvasRenderingContext2D, doc: DrawDoc, region: Rect,
   opts: { lives?: LiveLayer[]; paper?: boolean; only?: string; raw?: boolean } = {},
@@ -50,13 +45,18 @@ export function composite(
       ctx.restore();
       continue;
     }
-    // Render the live layer as a group: layer pixels + uncommitted buffer + floating selection.
+    // Layer pixels + uncommitted buffer + floating selection, as one group. Only the region's pixels are touched.
     const W = ctx.canvas.width, H = ctx.canvas.height;
+    const t = ctx.getTransform();
+    const d = transformRect(t, region);
+    const bx = Math.max(0, Math.floor(d.x)), by = Math.max(0, Math.floor(d.y));
+    const bw = Math.min(W, Math.ceil(d.x + d.w)) - bx, bh = Math.min(H, Math.ceil(d.y + d.h)) - by;
+    if (bw <= 0 || bh <= 0) continue;
     const s = getScratch(W, H);
     const sc = ctx2d(s);
     sc.setTransform(1, 0, 0, 1, 0, 0);
-    sc.clearRect(0, 0, W, H);
-    sc.setTransform(ctx.getTransform());
+    sc.clearRect(bx, by, bw, bh);
+    sc.setTransform(t);
     layer.surface.drawTo(sc, region);
     for (const live of mine) {
       if (live.hole) {
@@ -86,12 +86,11 @@ export function composite(
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = p.opacity;
     ctx.globalCompositeOperation = blendOp(p.blend);
-    ctx.drawImage(s, 0, 0, W, H, 0, 0, W, H);
+    ctx.drawImage(s, bx, by, bw, bh, bx, by, bw, bh);
     ctx.restore();
   }
 }
 
-/** Render a document region at 1:1 into a new canvas. */
 export function renderRegion(doc: DrawDoc, r: Rect, opts: { paper?: boolean; only?: string; raw?: boolean } = {}): HTMLCanvasElement {
   const c = makeCanvas(r.w, r.h);
   const ctx = ctx2d(c, true);

@@ -170,9 +170,9 @@ await bob.waitForFunction(() => !!window.doodlehive.ed.room.members.find((m) => 
 // ---- Kick ----
 await alice.locator('.members-btn').click();
 await alice.locator('.member-row', { hasText: 'Bob' }).click();
-await alice.getByRole('button', { name: 'Remove from room' }).click();
-await alice.getByRole('button', { name: 'Remove', exact: true }).click();
-await bob.waitForSelector('text=You were removed', { timeout: 4000 }).then(() => check(true, 'Bob sees he was removed'), () => check(false, 'Bob sees he was removed'));
+await alice.locator('.modal .btn.danger').click();
+await alice.locator('.modal .btn.primary', { hasText: 'Remove' }).click();
+await bob.waitForSelector('text=A host removed you', { timeout: 4000 }).then(() => check(true, 'Bob sees he was removed'), () => check(false, 'Bob sees he was removed'));
 await alice.waitForFunction(() => window.doodlehive.ed.room.members.length === 1);
 check(true, 'Alice’s member list updated');
 await bob.screenshot({ path: `${out}/07-bob-kicked.png` });

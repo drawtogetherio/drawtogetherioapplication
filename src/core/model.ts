@@ -1,6 +1,4 @@
-// The document model. Everything that changes pixels or layers is described as a
-// serialisable Op. Ops are applied deterministically by DrawDoc.apply(), so a remote
-// collaborator can later receive the same Op stream and reproduce the same canvas.
+// Every change to pixels or layers is a serialisable Op, applied deterministically everywhere.
 
 export const BLEND_MODES = [
   'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn',
@@ -15,7 +13,6 @@ export const BLEND_LABELS: Record<BlendMode, string> = {
   saturation: 'Saturation', color: 'Color', luminosity: 'Luminosity', add: 'Add (Linear Dodge)',
 };
 
-/** Canvas2D composite operation for a layer blend mode. */
 export function blendOp(b: BlendMode): GlobalCompositeOperation {
   return b === 'normal' ? 'source-over' : b === 'add' ? 'lighter' : b;
 }
@@ -27,7 +24,7 @@ export interface LayerProps {
   opacity: number; // 0..1
   blend: BlendMode;
   alphaLock: boolean; // paint only where the layer already has pixels
-  /** User id of the creator in a shared room. Only they (or a host) may edit it. */
+  /** Creator in a room; only they or a host may edit it. */
   owner?: string;
 }
 
@@ -36,7 +33,7 @@ export interface FolderProps {
   name: string;
   visible: boolean;
   owner?: string;
-  /** A member's top-level folder in a room; named and coloured from their profile. */
+  /** A member's top-level folder in a room. */
   user?: boolean;
   color?: string | null;
 }
@@ -46,7 +43,6 @@ export interface DocSettings {
   width: number; // ignored for infinite canvases
   height: number;
   infinite: boolean;
-  /** Paper colour, or null for transparent. */
   background: string | null;
 }
 
@@ -62,7 +58,6 @@ export interface BrushParams {
   smoothing: number; // 0..1 streamline
 }
 
-/** A selection outline in document coordinates (closed polygon, flat x,y list). */
 export interface Selection { pts: number[] }
 
 export type ShapeKind = 'line' | 'rect' | 'ellipse';
@@ -72,7 +67,7 @@ interface OpBase { id: string; author?: string }
 export type Op =
   | (OpBase & {
       t: 'stroke'; layer: string; erase: boolean; brush: BrushParams; color: string;
-      /** Raw input samples, flat [x, y, pressure, ...]. Smoothing is applied by the renderer. */
+      /** Raw samples, flat x, y, pressure; smoothing happens when rendering. */
       pts: number[]; clip?: Selection;
     })
   | (OpBase & {
@@ -85,7 +80,6 @@ export type Op =
     })
   | (OpBase & {
       t: 'transform'; layer: string; sel: Selection;
-      /** Matrix a,b,c,d,e,f mapping the lifted pixels to their new place. */
       m: [number, number, number, number, number, number];
     })
   | (OpBase & { t: 'layer.add'; layer: LayerProps; parent: string | null; index: number; copyOf?: string })
@@ -96,12 +90,9 @@ export type Op =
   | (OpBase & { t: 'folder.add'; folder: FolderProps; parent: string | null; index: number })
   | (OpBase & { t: 'folder.remove'; folder: string })
   | (OpBase & { t: 'folder.props'; folder: string; props: Partial<Pick<FolderProps, 'name' | 'visible' | 'color'>> })
-  /** Move a layer or folder. index counts from the bottom of the destination's children. */
+  /** index counts from the bottom. */
   | (OpBase & { t: 'node.move'; node: string; parent: string | null; index: number })
-  /**
-   * Raw tile pixels (PNG data URLs, null = empty). Used by undo/redo so they can be synced like
-   * any other edit. `img` is a local decoded copy and is never sent.
-   */
+  /** Raw tile pixels as PNG data URLs (undo/redo). `img` is the decoded local copy, never sent. */
   | (OpBase & { t: 'tiles'; layer: string; tiles: Record<string, string | null>; img?: Record<string, ImageData | null> });
 
 export type OpType = Op['t'];

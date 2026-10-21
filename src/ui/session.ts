@@ -11,13 +11,11 @@ import { saveThumbnail } from '../io/thumbnail';
 import type { LiveEvent } from '../net/api';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
-const PRESENCE_MS = 30_000;
 const THUMB_DELAY_MS = 15_000;
 
-/** Login state, the home screen, and opening / leaving canvases (every saved canvas is a room). */
 export class Session {
   server: ServerConfig | null = null;
-  /** True when drawing without an account (no server, or chosen on the login page). */
+  /** No server, or "draw without an account". */
   offline = false;
   private thumbTimer = 0;
   private thumbDirty = false;
@@ -44,9 +42,9 @@ export class Session {
   async start() {
     this.server = await api.config();
     if (!this.server || new URLSearchParams(location.search).has('offline')) {
-      // No server (static build / preview) or "Draw without an account": a local canvas only.
       this.offline = true;
       this.app.refreshAccount();
+      this.booted();
       newCanvasDialog((doc) => this.ed.setDoc(doc), false);
       return;
     }
@@ -56,7 +54,6 @@ export class Session {
       return;
     }
     this.app.refreshAccount();
-    setInterval(() => { if (!document.hidden) api.ping().catch(() => {}); }, PRESENCE_MS);
     this.listen();
     if (this.me?.needsSetup) {
       const saved = await profileDialog(this.me, true);
@@ -68,7 +65,7 @@ export class Session {
     else this.showHome();
   }
 
-  /** Live updates: friends changing status or rooms, and invites. EventSource reconnects by itself. */
+  /** Friends' presence and invites, pushed by the server. */
   private listen() {
     const es = new EventSource('/api/events');
     es.onmessage = (ev) => {
@@ -93,9 +90,18 @@ export class Session {
   showHome() {
     if (this.offline) return;
     this.app.home.show();
+    this.booted();
   }
 
-  /** "Create new": draw alone (a private canvas) or a shared room. */
+  /** The grey start screen stays up until there is something to look at. */
+  private booted(text?: string) {
+    const el = document.getElementById('boot');
+    if (!el) return;
+    if (text) { el.lastElementChild!.textContent = text; return; }
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 300);
+  }
+
   createNew() {
     if (this.me?.guest) { this.app.toast('Log in with Discord to make your own canvases'); return; }
     let close = () => {};
@@ -106,8 +112,8 @@ export class Session {
       });
     const body = h('div.modal-body', {},
       h('div.preset-grid.home-grid', {},
-        card('Draw alone', 'A private canvas, saved to your account. You can share it later.', 'brush', true),
-        card('Shared room', 'Invite friends with a link and draw on the same canvas.', 'users', false),
+        card('Draw alone', 'Private, saved to your account', 'brush', true),
+        card('Shared room', 'Draw together on one canvas', 'users', false),
       ),
     );
     close = modal('Create new', body, []);
@@ -135,6 +141,7 @@ export class Session {
     const stopWaiting = () => { waitClose?.(); waitClose = null; };
     room.on((e) => {
       if (e.kind === 'status' && room.status === 'waiting' && !waitClose) {
+        this.booted();
         const cancel = h('button.btn', { type: 'button', onclick: () => { stopWaiting(); this.leaveRoom(); } }, 'Cancel');
         waitClose = modal('Waiting to join', h('div.modal-body', {}, h('p.muted', {}, 'The host will let you in shortly.')), [cancel], undefined, false);
       } else if (e.kind !== 'status' || room.status !== 'waiting') {
@@ -144,21 +151,22 @@ export class Session {
         this.ed.setDoc(e.doc, !e.first);
         this.ed.ensureOwnLayer();
         this.app.refreshRoom();
+        this.booted();
         if (e.first && !room.info?.private) this.app.toast(`Joined ${room.info?.name ?? 'room'}`);
+      } else if (e.kind === 'progress') {
+        this.booted(`Loading… ${Math.round((100 * e.done) / e.total)}%`);
       } else if (e.kind === 'op') {
         this.scheduleThumb();
       } else if (e.kind === 'error') {
         this.app.toast(e.message);
         if (room.status === 'closed') this.leaveRoom();
       } else if (e.kind === 'status' || e.kind === 'members' || e.kind === 'room') {
-        // Closed for good (private, deleted, gone): back to the home screen.
         if (room.status === 'closed' && this.ed.room === room) { this.leaveRoom(); return; }
         this.app.refreshRoom();
       }
     });
   }
 
-  /** Canvas owners keep a small preview of their canvas for the home screen. */
   scheduleThumb() {
     const room = this.ed.room;
     if (!room || room.info?.ownerId !== room.you) return;

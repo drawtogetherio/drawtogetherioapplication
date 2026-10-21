@@ -8,7 +8,6 @@ export function selectionBounds(sel: Selection): Rect {
   return rectRoundOut(rectFromPoints(sel.pts)!, 1);
 }
 
-/** Copy the selected pixels of a surface into a floating canvas. */
 export function liftSelection(surface: TiledSurface, sel: Selection): Floating {
   const b = selectionBounds(sel);
   const c = makeCanvas(b.w, b.h);
@@ -21,7 +20,6 @@ export function liftSelection(surface: TiledSurface, sel: Selection): Floating {
   return { canvas: c, x: b.x, y: b.y };
 }
 
-/** Erase the selected area from a surface. */
 export function clearSelection(surface: TiledSurface, sel: Selection) {
   const path = polyPath(sel.pts);
   surface.draw(selectionBounds(sel), (ctx) => {
@@ -35,7 +33,6 @@ export function floatingBounds(f: Floating, m: DOMMatrixReadOnly): Rect {
   return rectRoundOut(transformRect(m, { x: f.x, y: f.y, w: f.canvas.width, h: f.canvas.height }), 2);
 }
 
-/** Paint a floating canvas back into a surface through a matrix. */
 export function placeFloating(surface: TiledSurface, f: Floating, m: DOMMatrixReadOnly) {
   surface.draw(floatingBounds(f, m), (ctx) => {
     ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f);

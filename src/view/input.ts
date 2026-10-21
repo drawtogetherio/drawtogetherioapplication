@@ -3,11 +3,7 @@ import { PointerInfo, Tool } from '../tools/tool';
 
 interface Touch { x: number; y: number; x0: number; y0: number }
 
-/**
- * Routes pointer input. Pen and mouse draw with the current tool; fingers draw only until a pen
- * has been used (palm rejection), and two fingers pan / pinch-zoom / rotate the view.
- * Procreate-style taps: two fingers = undo, three fingers = redo.
- */
+/** Pen and mouse draw; fingers draw until a pen is used, then pan, pinch and rotate. Two-finger tap undoes, three redoes. */
 export class InputController {
   private toolPointer: number | null = null;
   private toolStart = 0;
@@ -18,7 +14,7 @@ export class InputController {
   private tap: { t0: number; max: number; moved: boolean } | null = null;
   private pan: { id: number; x: number; y: number } | null = null;
   spaceHeld = false;
-  /** R held: drag rotates the view. Z held: drag zooms (right/up = in). Like Clip Studio. */
+  /** R + drag rotates, Z + drag zooms. */
   viewKey: 'rotate' | 'zoom' | null = null;
   private viewDrag: { id: number; mode: 'rotate' | 'zoom'; x0: number; y0: number; m0: DOMMatrix; a0: number } | null = null;
   altPick = false; // Alt held: temporary eyedropper
@@ -32,7 +28,6 @@ export class InputController {
     el.addEventListener('pointerleave', () => { this.ed.hover = null; this.ed.view.requestRender(); });
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
-    // Stop iOS from treating long presses / double taps on the canvas as text selection or zoom.
     for (const t of ['touchstart', 'touchmove', 'gesturestart', 'gesturechange']) {
       el.addEventListener(t, (e) => e.preventDefault(), { passive: false });
     }
@@ -45,7 +40,7 @@ export class InputController {
     const type = (e.pointerType === 'pen' || e.pointerType === 'touch' ? e.pointerType : 'mouse') as PointerInfo['type'];
     let p = 1;
     if (type === 'pen') {
-      // Some drivers report 0 pressure on the first sample; reuse the last known value.
+      // Some drivers report 0 pressure on the first sample.
       p = e.pressure > 0 ? e.pressure : this.lastPressure;
       this.lastPressure = p;
       p = Math.pow(Math.min(1, Math.max(0.001, p)), this.ed.settings.pressureGamma);
@@ -74,7 +69,6 @@ export class InputController {
     }
     if (e.button !== 0) return;
     if (e.pointerType === 'pen') {
-      // Pen wins over any palm/finger contact.
       this.ed.settings.fingerDraws = false;
       if (this.toolPointer !== null && this.toolType === 'touch') this.abortTool();
       this.gesture = null;
@@ -110,7 +104,7 @@ export class InputController {
       return;
     }
     if (this.toolPointer !== null && this.toolType === 'touch') {
-      // A second finger arrived: this is a gesture. Drop a just-started stroke, keep a long one.
+      // Second finger: a gesture. Drop a stroke that just started, keep a long one.
       if (performance.now() - this.toolStart < 300) this.abortTool();
       else { this.activeTool.up(this.info(e)); this.toolPointer = null; }
     }
@@ -171,7 +165,6 @@ export class InputController {
       const cx = vp.w / 2, cy = vp.h / 2;
       let deg = ((Math.atan2(p.y - cy, p.x - cx) - d.a0) * 180) / Math.PI;
       if (e.shiftKey) {
-        // Snap the resulting view angle to 15° steps.
         const start = (Math.atan2(d.m0.b, d.m0.a) * 180) / Math.PI;
         deg = Math.round((start + deg) / 15) * 15 - start;
       }
@@ -203,7 +196,6 @@ export class InputController {
     if (this.pan && e.pointerId === this.pan.id) { this.pan = null; return; }
     if (e.pointerId === this.toolPointer) {
       this.toolPointer = null;
-      // iOS may cancel a pen stroke when the palm touches; keep what was drawn.
       const p = this.info(e);
       this.activeTool.up(p);
       this.ed.sendCursor(p.x, p.y, false);
@@ -228,7 +220,6 @@ export class InputController {
     const r = this.el.getBoundingClientRect();
     const vp = this.ed.view.viewport;
     if (e.ctrlKey || e.metaKey) {
-      // Trackpad pinch arrives as ctrl+wheel.
       vp.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.01)));
     } else if (e.altKey) {
       vp.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.002));

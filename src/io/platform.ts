@@ -1,5 +1,4 @@
-// Platform adapters. The web build downloads files; desktop (Tauri) and iPad (Capacitor) wrappers
-// can register native implementations here later without touching the rest of the app.
+// Saving files: the web build downloads; native wrappers register their own handler.
 
 export type SaveHandler = (blob: Blob, filename: string) => Promise<void>;
 

@@ -138,6 +138,14 @@ separately (~30 times a second) so others see them before they're finished.
 **Database.** SQLite via Node's built-in `node:sqlite` (Node 22.5+), file at `server/data/`.
 Easy to move to Postgres later; all queries are in `server/db.ts`.
 
+**Safety.** Everything goes through the server; people never connect to each other, so nobody can see
+anyone's address. Addresses are only used in memory to rate limit (guest sign-ups, logins, uploads,
+friend requests, room creation, sockets) and are never stored or logged. Every room message is checked
+for shape and size before it is saved or relayed (`server/validate.ts`); cross-site requests and
+sockets are refused; pages carry a content security policy and anti-framing headers; cookies are
+HttpOnly, SameSite and Secure; uploads are checked by their bytes; sessions expire after 30 days and
+old guest accounts are swept.
+
 **Platforms.** The same web app is meant to be wrapped with Tauri (Windows/Mac) and Capacitor (iPad).
 
 ### Known limits (fine for now, worth revisiting)
@@ -160,5 +168,6 @@ DB_PATH=/tmp/dw-test.db npm run dev
 DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room/
 DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, private canvases
 node tests/share.mjs                          # sharing, joining from friends, approval, invites, presence
+node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

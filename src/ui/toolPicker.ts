@@ -11,10 +11,7 @@ export const SHAPE_KINDS: [ShapeKind, string, string][] = [['line', 'Line', 'lin
 
 const previewCache = new Map<string, HTMLCanvasElement>();
 
-/**
- * A pressure squiggle drawn with the real brush engine: light at both ends, full pressure in the middle,
- * so size and opacity response are visible at a glance.
- */
+/** A squiggle drawn with the real brush engine, light at the ends and full pressure in the middle. */
 export function brushPreview(params: BrushParams, w = 220, hh = 52, color = '#f2f2f6'): HTMLCanvasElement {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const key = JSON.stringify(params) + w + 'x' + hh + color + dpr;
@@ -50,7 +47,6 @@ function cloneCanvas(src: HTMLCanvasElement, w: number, hh: number): HTMLCanvasE
   return c;
 }
 
-/** Procreate-style brush library: each preset with its name and a live stroke preview. */
 export function brushLibrary(ed: Editor, erase: boolean, onPick: () => void): HTMLElement {
   const st = ed.settings;
   const presets: BrushPreset[] = erase ? ERASER_PRESETS : BRUSH_PRESETS;
@@ -71,7 +67,6 @@ export function brushLibrary(ed: Editor, erase: boolean, onPick: () => void): HT
   return h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, erase ? 'Eraser' : 'Brush Library')), list);
 }
 
-/** Small drop-down with just icons, used for selection modes and shape kinds. */
 export function iconChoices<T extends string>(items: [T, string, string][], value: T, pick: (v: T) => void): HTMLElement {
   const el = h('div.panel.icon-choices', { role: 'listbox' });
   for (const [v, label, ic] of items) {

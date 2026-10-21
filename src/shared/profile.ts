@@ -1,4 +1,4 @@
-// Profile rules shared by the browser and the server, so both validate the same way.
+// Profile rules shared by browser and server.
 
 export const HANDLE_WORDS = [
   'Burntout', 'Artblocked', 'Smudged', 'Overworked', 'Unfinished', 'Sketchy', 'Wobbly', 'Crooked', 'Muddy',
@@ -19,24 +19,12 @@ export const HANDLE_FOODS = [
 
 const RANDOM_HANDLE_RE = new RegExp(`^(${HANDLE_WORDS.join('|')})(${HANDLE_FOODS.join('|')})(\\d{0,4})$`);
 
-/** Guests (people who join a room without logging in) get a random <Word><Food> handle. */
-export function randomHandle(rand: () => number = Math.random): string {
-  const w = HANDLE_WORDS[Math.floor(rand() * HANDLE_WORDS.length)];
-  const f = HANDLE_FOODS[Math.floor(rand() * HANDLE_FOODS.length)];
-  return w + f;
-}
-
-/** "BurntoutPasta" or "BurntoutPasta42": the guest handle format. */
 export function isRandomHandle(h: string) { return RANDOM_HANDLE_RE.test(h); }
 
 export const HANDLE_MIN = 2;
 export const HANDLE_MAX = 24;
 
-/**
- * Handles people with an account pick themselves: 2–24 letters, numbers, underscores and
- * periods, like Discord usernames. No period at the start or end, and no two in a row.
- * Returns an error message, or null when the handle is fine. Uniqueness ignores case.
- */
+/** 2–24 letters, numbers, underscores and periods, like Discord usernames. Returns the problem, or null. */
 export function handleError(h: string): string | null {
   if (h.length < HANDLE_MIN) return `Use at least ${HANDLE_MIN} characters.`;
   if (h.length > HANDLE_MAX) return `Keep it to ${HANDLE_MAX} characters or fewer.`;
@@ -47,7 +35,6 @@ export function handleError(h: string): string | null {
 
 export function isValidHandle(h: string) { return handleError(h) === null; }
 
-/** Turn a Discord username (or any name) into a handle suggestion, or '' if nothing usable is left. */
 export function suggestHandle(name: string): string {
   const h = name.normalize('NFKD').replace(/[^A-Za-z0-9_.]/g, '').replace(/\.{2,}/g, '.').replace(/^\.+|\.+$/g, '').slice(0, HANDLE_MAX).replace(/\.+$/, '');
   return h.length >= HANDLE_MIN ? h : '';
@@ -55,14 +42,10 @@ export function suggestHandle(name: string): string {
 
 export const DISPLAY_NAME_MAX = 32;
 
-/**
- * Clean a display name: fancy Unicode letters become plain ones (NFKC), invisible and
- * direction-changing characters are removed, and stacked accents ("zalgo") are capped.
- */
+/** NFKC, no invisible or direction-changing characters, at most two combining marks per character. */
 export function sanitizeDisplayName(raw: string): string {
   let s = raw.normalize('NFKC');
   s = s.replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cs}\p{Zl}\p{Zp}]/gu, '');
-  // Allow at most two combining marks on any character.
   s = s.replace(/(\P{M})(\p{M}{0,2})\p{M}*/gu, '$1$2');
   s = s.replace(/^\p{M}+/u, '');
   s = s.replace(/\s+/gu, ' ').trim();
@@ -77,7 +60,6 @@ export function graphemeCount(s: string): number {
   return n;
 }
 
-/** Returns an error message, or null when the name is fine. Expects a sanitized name. */
 export function validateDisplayName(s: string): string | null {
   if (!s) return 'Pick a display name.';
   if (graphemeCount(s) > DISPLAY_NAME_MAX || s.length > DISPLAY_NAME_MAX * 4) return `Keep it to ${DISPLAY_NAME_MAX} characters or fewer.`;
@@ -87,7 +69,6 @@ export function validateDisplayName(s: string): string | null {
 
 export const STATUS_MAX = 80;
 
-/** Status message: same cleaning as display names; empty is allowed. Returns null if too long. */
 export function cleanStatus(raw: string): string | null {
   const s = sanitizeDisplayName(raw);
   return graphemeCount(s) > STATUS_MAX || s.length > STATUS_MAX * 4 ? null : s;
@@ -100,7 +81,6 @@ export function normalizeColor(c: string): string | null {
 
 export interface LinkPlatform { id: string; label: string; pattern: RegExp; url: (u: string) => string; hint: string }
 
-/** Profiles people can list. These are just usernames, no account connection. */
 export const LINK_PLATFORMS: LinkPlatform[] = [
   { id: 'twitter', label: 'Twitter', pattern: /^[A-Za-z0-9_]{1,15}$/, url: (u) => `https://twitter.com/${u}`, hint: 'username' },
   { id: 'instagram', label: 'Instagram', pattern: /^[A-Za-z0-9._]{1,30}$/, url: (u) => `https://instagram.com/${u}`, hint: 'username' },
@@ -114,7 +94,6 @@ export const LINK_PLATFORMS: LinkPlatform[] = [
   { id: 'pixiv', label: 'pixiv', pattern: /^\d{1,12}$/, url: (u) => `https://www.pixiv.net/users/${u}`, hint: 'user ID (numbers)' },
 ];
 
-/** Normalise one link username; returns null if invalid. Empty string means "remove". */
 export function normalizeLink(platform: string, value: string): string | null {
   const p = LINK_PLATFORMS.find((x) => x.id === platform);
   if (!p) return null;
@@ -128,41 +107,31 @@ export interface PublicProfile {
   id: string;
   handle: string;
   displayName: string;
-  /** Avatar URL (small, pre-scaled) or null. */
   avatar: string | null;
   favoriteColor: string;
   links: Record<string, string>;
-  /** Effective premium status (flag set and not expired). */
   premium: boolean;
   premiumUntil: number | null;
-  /** Short status message ("Working on a comic"); empty when unset. */
   status: string;
-  /** Premium: two colours for the name/profile gradient, or null. */
   gradient: [string, string] | null;
-  /** Premium: animated (GIF) picture URL, or null. `avatar` stays a small still version. */
+  /** Premium GIF; `avatar` is its still. */
   avatarAnimated: string | null;
-  /** Joined a room without logging in: random handle, no friends or saved canvases. */
   guest: boolean;
 }
 
-/** What friends see. `offline` covers both "not here" and "appear offline". */
+/** `offline` also covers "appear offline". */
 export type Presence = 'online' | 'away' | 'dnd' | 'offline';
-/** What you pick on your card. `auto` shows online while you're here. */
 export type PresenceMode = 'auto' | 'away' | 'dnd' | 'invisible';
 export const PRESENCE_MODES: PresenceMode[] = ['auto', 'away', 'dnd', 'invisible'];
 
 export interface MyProfile extends PublicProfile {
   presenceMode: PresenceMode;
-  /** True until the person has confirmed their profile once. */
   needsSetup: boolean;
   provider: 'discord' | 'dev' | 'guest';
-  /** App colour theme id (see shared/themes.ts). */
   theme: string;
 }
 
-/** Avatars are stored at this size; they are only ever shown small. */
 export const AVATAR_SIZE = 128;
 export const AVATAR_MAX_BYTES = 48 * 1024;
-/** Premium animated pictures are stored as uploaded (GIF), so they get a bigger, still modest limit. */
 export const AVATAR_ANIM_MAX_BYTES = 768 * 1024;
 export const AVATAR_ANIM_MAX_SIZE = 512;

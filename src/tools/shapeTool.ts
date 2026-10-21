@@ -4,7 +4,6 @@ import { ShapeSpec, renderShape, shapeBounds } from '../engine/shapes';
 import type { Editor } from '../editor';
 import { PointerInfo, Tool } from './tool';
 
-/** Line, rectangle and ellipse. Shift constrains (square / circle / 45° lines), Alt draws from the centre. */
 export class ShapeTool implements Tool {
   private start: { x: number; y: number } | null = null;
   private spec: ShapeSpec | null = null;

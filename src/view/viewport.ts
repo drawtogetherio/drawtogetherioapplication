@@ -3,7 +3,6 @@ import { Point, Rect, clamp } from '../core/geom';
 export const MIN_ZOOM = 0.02;
 export const MAX_ZOOM = 64;
 
-/** Pan / zoom / rotate / flip of the view. Maps document coordinates to screen CSS pixels. */
 export class Viewport {
   cx = 0; cy = 0; // document point shown at the screen centre
   zoom = 1;
@@ -30,7 +29,6 @@ export class Viewport {
     return { x: p.x, y: p.y };
   }
 
-  /** Set the view from an arbitrary similarity matrix (keeps the current flip state). */
   setFromMatrix(m: DOMMatrixReadOnly) {
     const det = m.a * m.d - m.b * m.c;
     this.zoom = clamp(Math.sqrt(Math.abs(det)), MIN_ZOOM, MAX_ZOOM);
@@ -57,7 +55,6 @@ export class Viewport {
     this.onChange();
   }
 
-  /** Flip the view around the screen centre, like flipping a sheet of paper. */
   flip(horizontal: boolean) {
     if (horizontal) this.flipX *= -1; else this.flipY *= -1;
     this.rot = -this.rot;

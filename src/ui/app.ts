@@ -26,7 +26,6 @@ import { shareDialog } from './share';
 import { LOGO_SVG } from '../site/brand';
 import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } from './toolPicker';
 
-/** Tools whose button opens a drop-down when tapped while already selected. */
 const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'select', 'shape'];
 
 const TOOLS: { id: ToolId; label: string; key: string }[] = [
@@ -60,7 +59,6 @@ export class App {
   private membersPop = h('div.popover.members-pop', { hidden: true });
   private invitePanel = new InvitePanel();
   private invitePop = h('div.popover.invite-pop', { hidden: true });
-  /** Drop-down under a tool button: brush library, selection modes, shape kinds. */
   private toolPop = h('div.popover.tool-pop', { hidden: true });
   private toolPopFor: ToolId | null = null;
 
@@ -84,7 +82,6 @@ export class App {
     this.invitePop.append(this.invitePanel.el);
     dismissOnOutside(this.invitePop, [this.dock], () => { this.invitePop.hidden = true; });
 
-    // ---- Top bar ----
     const btn = (name: string, title: string, fn: () => void, cls = '') =>
       h(`button.icon-btn${cls}` as 'button', { title, 'aria-label': title, html: icon(name), onclick: fn });
 
@@ -110,7 +107,7 @@ export class App {
     const right = h('div.bar-group');
     for (const t of TOOLS) {
       const picker = PICKER_TOOLS.includes(t.id);
-      const title = `${t.label} (${t.key})${picker ? ', tap again for options' : ''}`;
+      const title = `${t.label} (${t.key})`;
       const b = btn(t.id, title, () => {
         if (picker && ed.toolId === t.id) this.togglePicker(t.id, b);
         else { this.closePicker(); ed.setTool(t.id); }
@@ -136,7 +133,6 @@ export class App {
 
     const topbar = h('header.topbar', {}, left, right);
 
-    // ---- Left sidebar (Procreate style) ----
     this.sizeSlider = new Slider({
       min: 1, max: 500, value: ed.sizeParams.size, vertical: true, curve: 2.4, label: 'Size',
       format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); },
@@ -162,7 +158,6 @@ export class App {
     this.refreshRoom();
   }
 
-  /** Account section of the menu changes after login / logout. */
   refreshAccount() {
     // The account's saved theme wins over the one remembered on this device.
     const me = this.ed.me;
@@ -171,7 +166,6 @@ export class App {
     this.home.renderAccount();
   }
 
-  /** Swatches for the app colour theme. Premium themes are locked without premium. */
   private themeRow(): HTMLElement {
     const me = this.ed.me;
     const row = h('div.theme-row', {}, h('div.menu-label', {}, 'Theme'));
@@ -196,7 +190,6 @@ export class App {
     return row;
   }
 
-  /** Room dock (bottom right): connection state, members, chat, invite link. */
   refreshRoom() {
     const room = this.ed.room, d = this.dock;
     this.renderMenuDyn();
@@ -210,7 +203,6 @@ export class App {
     }
     const own = room.info?.ownerId === room.you;
     if (room.info?.private) {
-      // A canvas just for you: no member list or chat, just a way to share it.
       if (own) d.append(h('button.btn.share-btn', { html: icon('users', 16) + '<span>Share</span>', onclick: () => this.shareCanvas() }));
       return;
     }
@@ -240,7 +232,6 @@ export class App {
 
   copyInvite() { return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
 
-  /** Share a private canvas, or change who can join a shared one. Copies the link after first sharing. */
   async shareCanvas() {
     const room = this.ed.room;
     if (!room?.info) return;
@@ -285,7 +276,6 @@ export class App {
     }
   }
 
-  /** The selection and shape buttons show the mode they will use. */
   private updateToolIcons() {
     const st = this.ed.settings;
     const sel = SELECT_MODES.find((m) => m[0] === st.selectMode)!;
@@ -312,14 +302,12 @@ export class App {
     this.toolPop.hidden = false;
     this.toolPopFor = id;
     for (const [tid, b] of this.toolButtons) b.classList.toggle('open', tid === id && b === anchor);
-    // Drop down from the anchor, kept on screen.
     const r = anchor.getBoundingClientRect();
     const w = this.toolPop.offsetWidth;
     this.toolPop.style.top = `${Math.round(r.bottom + 6)}px`;
     this.toolPop.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)))}px`;
   }
 
-  /** Options-bar twin of the toolbar drop-down (current mode icon + name). */
   private modeButton([, label, ic]: [string, string, string]) {
     const b: HTMLButtonElement = h('button.preset-btn', {
       title: 'Change mode', 'aria-label': `Mode: ${label}. Change mode`,
@@ -347,7 +335,6 @@ export class App {
     this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), 1800);
   }
 
-  // ---- Tool options bar (Clip Studio style sub-tool properties) ----
   private renderOptions() {
     const ed = this.ed, st = ed.settings, o = this.options;
     clear(o);
@@ -413,16 +400,16 @@ export class App {
           h('button.btn', { onclick: () => { this.select.cancel(); } }, 'Cancel'),
         );
       } else {
-        o.append(h('span.hint', {}, ed.selection ? 'Drag inside to move, corners to scale, the blue dot to rotate.' : 'Drag to select. Painting stays inside the selection.'));
+        o.append(h('span.hint', {}, ed.selection ? 'Drag to move, corners scale, dot rotates' : 'Drag to select'));
       }
     } else if (ed.toolId === 'shape') {
       o.append(
         this.modeButton(SHAPE_KINDS.find((m) => m[0] === st.shape)!),
         toggle('Filled', st.shapeFill, (v) => { st.shapeFill = v; }),
-        h('span.hint', {}, 'Uses brush size and opacity. Shift constrains, Alt draws from centre.'),
+        h('span.hint', {}, 'Shift constrains, Alt from centre'),
       );
     } else if (ed.toolId === 'eyedropper') {
-      o.append(h('span.hint', {}, 'Tap the canvas to pick a colour. Tip: hold Alt with the brush to pick quickly.'));
+      o.append(h('span.hint', {}, 'Tap to pick. Alt + brush also works'));
     }
   }
 
@@ -439,7 +426,7 @@ export class App {
       h('div.panel', {},
         this.menuDyn,
         gamma.el,
-        h('label.check.menu-check', {}, finger, 'Draw with finger (off once a pen is used)'),
+        h('label.check.menu-check', {}, finger, 'Draw with finger'),
         h('div.menu-sep'),
         h('div.shortcuts', { html: SHORTCUTS }),
       ),
@@ -450,7 +437,6 @@ export class App {
     return pop;
   }
 
-  /** Account, room and file actions; rebuilt whenever the menu opens. */
   private renderMenuDyn() {
     const ed = this.ed, s = this.session, d = this.menuDyn, st = ed.settings;
     const close = () => { (d.closest('.popover') as HTMLElement).hidden = true; };
@@ -492,8 +478,8 @@ export class App {
         return h('label.check.menu-check', {}, cb, label);
       };
       d.append(
-        tog('Show name bubbles where others draw', () => st.showBubbles, (v) => { st.showBubbles = v; }),
-        tog('Hide other people’s folders in Layers', () => st.hideOthersFolders, (v) => { st.hideOthersFolders = v; }),
+        tog('Name bubbles', () => st.showBubbles, (v) => { st.showBubbles = v; }),
+        tog('Only my folder in Layers', () => st.hideOthersFolders, (v) => { st.hideOthersFolders = v; }),
         h('div.menu-sep'),
       );
     }
@@ -502,7 +488,7 @@ export class App {
 
   async newCanvas() {
     const empty = this.ed.doc.log.length <= 1;
-    if (!empty && !(await confirmDialog('Start a new canvas?', 'Your current drawing will be discarded. Export it first if you want to keep it.', 'Discard and start new'))) return;
+    if (!empty && !(await confirmDialog('Start a new canvas?', 'The current drawing is discarded.', 'Discard'))) return;
     newCanvasDialog((doc) => this.ed.setDoc(doc));
   }
 
@@ -584,13 +570,12 @@ export class App {
     vp.zoomAt(vp.w / 2, vp.h / 2, f);
   }
 
-  /** Delete key clears the selected area of the active layer. */
   private deleteSelection() {
     const ed = this.ed;
     if (!ed.selection) return;
     this.select.commit();
     const sel = ed.selection!;
-    // An eraser "shape" covering the selection keeps this a normal, syncable op.
+    // An erasing shape op, so it syncs and undoes like any edit.
     const xs = sel.pts.filter((_, i) => i % 2 === 0), ys = sel.pts.filter((_, i) => i % 2 === 1);
     const x0 = Math.min(...xs) - 2, y0 = Math.min(...ys) - 2, x1 = Math.max(...xs) + 2, y1 = Math.max(...ys) + 2;
     ed.apply({

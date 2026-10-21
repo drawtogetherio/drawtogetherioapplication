@@ -14,10 +14,7 @@ const PSD_BLEND: Record<BlendMode, PsdBlend> = {
   luminosity: 'luminosity', add: 'linear dodge',
 };
 
-/**
- * The area that gets exported: the canvas for fixed sizes, or the bounds of the artwork for
- * unlimited canvases (so a whiteboard exports only what is drawn).
- */
+/** The canvas, or the drawn area of an unlimited one. */
 export function exportRect(doc: DrawDoc): Rect | null {
   const b = doc.bounds();
   if (!b) return null;
@@ -26,7 +23,6 @@ export function exportRect(doc: DrawDoc): Rect | null {
 
 export interface ExportOptions {
   format: ExportFormat; quality: number; transparent: boolean; name: string;
-  /** Display name for folders (member folders are named after their owner). */
   folderName?: (f: FolderProps) => string;
 }
 
@@ -62,7 +58,6 @@ async function buildPsd(doc: DrawDoc, r: Rect, paper: boolean, folderName?: (f: 
     ctx.fillRect(0, 0, r.w, r.h);
     children.push({ name: 'Background', canvas: bg, left: 0, top: 0 });
   }
-  // Mirror the folder tree as PSD groups.
   const build = (parent: string | null): PsdLayer[] => doc.children(parent).map((id) => {
     const n = doc.node(id)!;
     if (n.kind === 'folder') {

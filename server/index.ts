@@ -10,7 +10,8 @@ import {
 } from './db.ts';
 import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser, saveShare } from './rooms.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
-import { closeAllStreams, isConnected, openStream, sendTo } from './live.ts';
+import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
+import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import {
   AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
@@ -21,6 +22,12 @@ type Req = http.IncomingMessage;
 type Res = http.ServerResponse;
 
 const COOKIE = 'dw_session';
+const SESSION_MS = 30 * 864e5;
+const MINUTE = 60_000, HOUR = 3600_000;
+
+class HttpError extends Error {
+  constructor(public status: number, message: string, public field?: string) { super(message); }
+}
 
 function cookies(req: Req): Record<string, string> {
   const out: Record<string, string> = {};
@@ -60,8 +67,8 @@ async function jsonBody(req: Req): Promise<Record<string, unknown>> {
   try { return JSON.parse((await body(req, 64 * 1024)).toString('utf8') || '{}'); } catch { throw new HttpError(400, 'Invalid request.'); }
 }
 
-class HttpError extends Error {
-  constructor(public status: number, message: string, public field?: string) { super(message); }
+function limit(key: string, n: number, windowMs: number) {
+  if (!allow(key, n, windowMs)) throw new HttpError(429, 'Too many requests. Try again in a bit.');
 }
 
 function requireUser(req: Req): UserRow {
@@ -71,29 +78,44 @@ function requireUser(req: Req): UserRow {
   return u;
 }
 
-/** Logged in with an account (not a guest). Guests can draw in rooms they're invited to, nothing more. */
 function requireMember(req: Req, what: string): UserRow {
   const u = requireUser(req);
   if (u.provider === 'guest') throw new HttpError(403, `Log in with Discord to ${what}.`);
   return u;
 }
 
-/** Image size from a GIF header (logical screen width/height). */
 function gifSize(buf: Buffer): { w: number; h: number } | null {
   const sig = buf.subarray(0, 6).toString('latin1');
   if (sig !== 'GIF87a' && sig !== 'GIF89a') return null;
   return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) };
 }
 
-/** Accept a small thumbnail image for a canvas. */
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const isWebp = (b: Buffer) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP';
+const isPng = (b: Buffer) => b.subarray(0, 8).equals(PNG_SIG);
+const isJpeg = (b: Buffer) => b[0] === 0xff && b[1] === 0xd8;
+
 function checkThumb(buf: Buffer): string {
-  if (buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
-  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
-  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  if (isWebp(buf)) return 'image/webp';
+  if (isPng(buf)) return 'image/png';
+  if (isJpeg(buf)) return 'image/jpeg';
   throw new HttpError(400, 'Thumbnails must be WebP, PNG or JPEG.');
 }
 
-/** Where to go after logging in: a path on this site only (never "//other.site"). */
+function checkAvatar(buf: Buffer): string {
+  if (buf.length > AVATAR_MAX_BYTES) throw new HttpError(413, 'That image is too large.');
+  if (isWebp(buf)) {
+    if (buf.includes(Buffer.from('ANIM'))) throw new HttpError(400, 'Animated images aren’t supported.');
+    return 'image/webp';
+  }
+  if (isPng(buf)) {
+    if (buf.includes(Buffer.from('acTL'))) throw new HttpError(400, 'Animated images aren’t supported.');
+    return 'image/png';
+  }
+  if (isJpeg(buf)) return 'image/jpeg';
+  throw new HttpError(400, 'Use a PNG, JPEG or WebP image.');
+}
+
 function safeNext(next: string | null | undefined) {
   return next && /^\/(?![/\\])/.test(next) ? next.slice(0, 200) : '/app';
 }
@@ -107,42 +129,37 @@ function ownRoom(req: Req, id: string) {
 }
 
 function login(res: Res, user: UserRow) {
-  setCookie(res, COOKIE, createSession(user.id), 30 * 86400);
+  setCookie(res, COOKIE, createSession(user.id), SESSION_MS / 1000);
 }
 
-/** Accept only small, static WebP/PNG/JPEG images. */
-function checkAvatar(buf: Buffer): string {
-  if (buf.length > AVATAR_MAX_BYTES) throw new HttpError(413, 'That image is too large.');
-  if (buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') {
-    if (buf.includes(Buffer.from('ANIM'))) throw new HttpError(400, 'Animated images aren’t supported.');
-    return 'image/webp';
-  }
-  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
-    if (buf.includes(Buffer.from('acTL'))) throw new HttpError(400, 'Animated images aren’t supported.');
-    return 'image/png';
-  }
-  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
-  throw new HttpError(400, 'Use a PNG, JPEG or WebP image.');
-}
-
-/** Someone's profile changed: refresh the rooms they're in and their friends' lists. */
-function notifyRooms(userId: string) {
+function profileChanged(userId: string) {
   for (const r of roomsWithUser(userId)) r.profileChanged();
   notifyFriends(userId);
+}
+
+function sendImage(res: Res, buf: Uint8Array | null | undefined, type: string, cache: string) {
+  if (!buf) { res.writeHead(404); return res.end(); }
+  res.writeHead(200, { 'Content-Type': type, 'Cache-Control': `${cache}, max-age=31536000, immutable` });
+  res.end(Buffer.from(buf));
 }
 
 async function route(req: Req, res: Res) {
   const url = new URL(req.url ?? '/', 'http://x');
   const p = url.pathname;
   const m = req.method ?? 'GET';
+  securityHeaders(res);
 
   if (p === '/healthz') return json(res, 200, { ok: true });
-  // www.doodlehive.net → doodlehive.net (one canonical address keeps login cookies in one place).
   const host = String(req.headers.host ?? '');
   const canonical = new URL(config.publicUrl).host;
   if (config.production && host === 'www.' + canonical) {
     res.writeHead(301, { Location: config.publicUrl + (req.url ?? '/') });
     return res.end();
+  }
+  const api = p.startsWith('/api/') || p.startsWith('/auth/');
+  if (api) {
+    if (m !== 'GET' && m !== 'HEAD' && !sameSite(req)) throw new HttpError(403, 'Blocked.');
+    limit('ip:' + clientIp(req), 600, MINUTE);
   }
 
   // ---- Auth ----
@@ -161,6 +178,7 @@ async function route(req: Req, res: Res) {
   }
   if (p === '/auth/discord/callback' && m === 'GET') {
     if (!config.discord) return redirect(res, config.clientUrl);
+    limit('login:' + clientIp(req), 30, 10 * MINUTE);
     const [state, rawNext] = (cookies(req).dw_oauth ?? '').split('|');
     const next = safeNext(rawNext);
     const failed = config.clientUrl + '/login?error=1&next=' + encodeURIComponent(next);
@@ -187,6 +205,7 @@ async function route(req: Req, res: Res) {
   }
   if (p === '/auth/dev' && m === 'POST') {
     if (!config.devLogin) return json(res, 404, { error: 'Not available.' });
+    limit('login:' + clientIp(req), 60, 10 * MINUTE);
     const b = await jsonBody(req);
     const name = sanitizeDisplayName(String(b.name ?? ''));
     const err = validateDisplayName(name);
@@ -195,8 +214,8 @@ async function route(req: Req, res: Res) {
     login(res, user);
     return json(res, 200, myProfile(user));
   }
-  // Join a room without an account: a guest with a random handle.
   if (p === '/auth/guest' && m === 'POST') {
+    limit('guest:' + clientIp(req), 20, HOUR);
     const b = await jsonBody(req);
     const name = sanitizeDisplayName(String(b.name ?? ''));
     const err = validateDisplayName(name);
@@ -216,6 +235,7 @@ async function route(req: Req, res: Res) {
   if (p === '/api/me' && m === 'GET') return json(res, 200, myProfile(requireUser(req)));
   if (p === '/api/me' && m === 'PATCH') {
     const u = requireUser(req);
+    limit('me:' + u.id, 120, 10 * MINUTE);
     const b = await jsonBody(req);
     const sets: string[] = [];
     const vals: (string | number)[] = [];
@@ -278,18 +298,19 @@ async function route(req: Req, res: Res) {
     }
     if (b.done === true) sets.push('needs_setup = 0');
     if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, u.id);
-    notifyRooms(u.id);
+    profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
   if (p === '/api/me/avatar' && (m === 'PUT' || m === 'DELETE')) {
     const u = requireUser(req);
     if (m === 'DELETE') db.prepare('UPDATE users SET avatar = NULL, avatar_type = NULL WHERE id = ?').run(u.id);
     else {
+      limit('upload:' + u.id, 30, HOUR);
       const buf = await body(req, AVATAR_MAX_BYTES);
       const type = checkAvatar(buf);
       db.prepare('UPDATE users SET avatar = ?, avatar_type = ?, avatar_version = avatar_version + 1 WHERE id = ?').run(buf, type, u.id);
     }
-    notifyRooms(u.id);
+    profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
   if (p === '/api/me/avatar-animated' && (m === 'PUT' || m === 'DELETE')) {
@@ -297,13 +318,14 @@ async function route(req: Req, res: Res) {
     if (m === 'DELETE') db.prepare('UPDATE users SET avatar_anim = NULL WHERE id = ?').run(u.id);
     else {
       if (!isPremium(u)) throw new HttpError(403, 'Animated pictures are part of premium.');
+      limit('upload:' + u.id, 30, HOUR);
       const buf = await body(req, AVATAR_ANIM_MAX_BYTES);
       const size = gifSize(buf);
       if (!size) throw new HttpError(400, 'Animated pictures need to be GIFs.');
       if (size.w > AVATAR_ANIM_MAX_SIZE || size.h > AVATAR_ANIM_MAX_SIZE) throw new HttpError(400, `Use a GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} pixels.`);
       db.prepare('UPDATE users SET avatar_anim = ?, avatar_anim_version = avatar_anim_version + 1 WHERE id = ?').run(buf, u.id);
     }
-    notifyRooms(u.id);
+    profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
   if (p === '/api/handle/random' && m === 'GET') {
@@ -312,6 +334,7 @@ async function route(req: Req, res: Res) {
   }
   if (p === '/api/handle/check' && m === 'GET') {
     const u = requireUser(req);
+    limit('handle:' + u.id, 120, MINUTE);
     const h = (url.searchParams.get('h') ?? '').trim().replace(/^@/, '');
     const error = handleError(h);
     const available = !error && !handleTaken(h, u.id);
@@ -320,22 +343,19 @@ async function route(req: Req, res: Res) {
   let mm = /^\/avatars\/([\w-]+)$/.exec(p);
   if (mm && m === 'GET') {
     const row = db.prepare('SELECT avatar, avatar_type FROM users WHERE id = ?').get(mm[1]) as { avatar: Uint8Array | null; avatar_type: string } | undefined;
-    if (!row?.avatar) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { 'Content-Type': row.avatar_type, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
-    return res.end(Buffer.from(row.avatar));
+    return sendImage(res, row?.avatar, row?.avatar_type ?? '', 'public');
   }
   mm = /^\/avatars\/([\w-]+)\/anim$/.exec(p);
   if (mm && m === 'GET') {
     const row = db.prepare('SELECT avatar_anim FROM users WHERE id = ?').get(mm[1]) as { avatar_anim: Uint8Array | null } | undefined;
-    if (!row?.avatar_anim) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { 'Content-Type': 'image/gif', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
-    return res.end(Buffer.from(row.avatar_anim));
+    return sendImage(res, row?.avatar_anim, 'image/gif', 'public');
   }
 
   // ---- Friends ----
   if (p === '/api/friends' && m === 'GET') return json(res, 200, listFriends(requireUser(req).id));
   if (p === '/api/friends' && m === 'POST') {
     const u = requireMember(req, 'add friends');
+    limit('friend:' + u.id, 60, HOUR);
     const b = await jsonBody(req);
     try { return json(res, 200, { result: requestFriend(u, String(b.handle ?? '')), ...listFriends(u.id) }); }
     catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message, 'handle'); throw e; }
@@ -350,13 +370,11 @@ async function route(req: Req, res: Res) {
     } catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message); throw e; }
     return json(res, 200, listFriends(u.id));
   }
-  if (p === '/api/presence' && m === 'POST') { requireUser(req); return json(res, 200, { ok: true }); }
-  // Live updates for an open app tab (friends' presence, invites).
   if (p === '/api/events' && m === 'GET') {
     const u = requireUser(req);
+    if (streamCount(u.id) >= 8) throw new HttpError(429, 'Too many open tabs.');
     openStream(u.id, res, (connected) => {
       if (connected) { notifyFriends(u.id); return; }
-      // Give a reload a moment before telling friends they left.
       setTimeout(() => {
         if (isConnected(u.id) || roomsWithUser(u.id).length) return;
         forget(u.id);
@@ -365,7 +383,6 @@ async function route(req: Req, res: Res) {
     });
     return;
   }
-
   mm = /^\/api\/users\/([\w-]+)$/.exec(p);
   if (mm && m === 'GET') {
     requireUser(req);
@@ -376,6 +393,7 @@ async function route(req: Req, res: Res) {
   // ---- Rooms ----
   if (p === '/api/rooms' && m === 'POST') {
     const u = requireMember(req, 'make your own canvases');
+    limit('rooms:' + u.id, 30, HOUR);
     const b = await jsonBody(req);
     const s = (b.settings ?? {}) as Record<string, unknown>;
     const infinite = !!s.infinite;
@@ -390,7 +408,8 @@ async function route(req: Req, res: Res) {
   if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));
   mm = /^\/api\/rooms\/([a-z0-9]+)\/thumb$/.exec(p);
   if (mm && m === 'PUT') {
-    ownRoom(req, mm[1]);
+    const u = ownRoom(req, mm[1]);
+    limit('thumb:' + u.id, 120, HOUR);
     const buf = await body(req, 96 * 1024);
     checkThumb(buf);
     db.prepare('UPDATE rooms SET thumb = ?, thumb_version = thumb_version + 1 WHERE id = ?').run(buf, mm[1]);
@@ -400,10 +419,21 @@ async function route(req: Req, res: Res) {
   if (mm && m === 'GET') {
     ownRoom(req, mm[1]);
     const row = db.prepare('SELECT thumb FROM rooms WHERE id = ?').get(mm[1]) as { thumb: Uint8Array | null };
-    if (!row.thumb) { res.writeHead(404); return res.end(); }
-    const buf = Buffer.from(row.thumb);
-    res.writeHead(200, { 'Content-Type': checkThumb(buf), 'Cache-Control': 'private, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
-    return res.end(buf);
+    return sendImage(res, row.thumb, row.thumb ? checkThumb(Buffer.from(row.thumb)) : '', 'private');
+  }
+  mm = /^\/api\/rooms\/([a-z0-9]+)\/invite$/.exec(p);
+  if (mm && m === 'POST') {
+    const u = requireMember(req, 'invite friends');
+    const r = getRoom(mm[1]);
+    if (!r || !r.isHost(u.id)) throw new HttpError(403, 'Only hosts can invite people.');
+    if (r.info.private) throw new HttpError(409, 'Share this canvas first.');
+    limit('invite:' + u.id, 60, 10 * MINUTE);
+    const b = await jsonBody(req);
+    const to = String(b.user ?? '');
+    if (!areFriends(u.id, to)) throw new HttpError(403, 'You can only invite friends.');
+    r.invite(to);
+    sendTo(to, { type: 'invite', room: { id: r.info.id, name: r.info.name }, from: { id: u.id, displayName: u.display_name } });
+    return json(res, 200, { ok: true });
   }
   mm = /^\/api\/rooms\/([a-z0-9]+)$/.exec(p);
   if (mm && m === 'PATCH') {
@@ -424,20 +454,6 @@ async function route(req: Req, res: Res) {
     getRoom(mm[1])!.updateInfo(patch);
     return json(res, 200, getRoom(mm[1])!.info);
   }
-  // Hosts invite friends from the canvas.
-  const inv = /^\/api\/rooms\/([a-z0-9]+)\/invite$/.exec(p);
-  if (inv && m === 'POST') {
-    const u = requireMember(req, 'invite friends');
-    const r = getRoom(inv[1]);
-    if (!r || !r.isHost(u.id)) throw new HttpError(403, 'Only hosts can invite people.');
-    if (r.info.private) throw new HttpError(409, 'Share this canvas first.');
-    const b = await jsonBody(req);
-    const to = String(b.user ?? '');
-    if (!areFriends(u.id, to)) throw new HttpError(403, 'You can only invite friends.');
-    r.invite(to);
-    sendTo(to, { type: 'invite', room: { id: r.info.id, name: r.info.name }, from: { id: u.id, displayName: u.display_name } });
-    return json(res, 200, { ok: true });
-  }
   if (mm && m === 'DELETE') {
     ownRoom(req, mm[1]);
     deleteRoom(mm[1]);
@@ -451,43 +467,58 @@ async function route(req: Req, res: Res) {
     return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length });
   }
 
-  // ---- Static client (production) ----
-  // HEAD too: link previews, uptime checks and some proxies probe pages with HEAD before loading them.
-  if ((m === 'GET' || m === 'HEAD') && !p.startsWith('/api/') && fs.existsSync(config.staticDir)) {
-    const file = path.join(config.staticDir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
-    const isFile = file.startsWith(config.staticDir) && fs.existsSync(file) && fs.statSync(file).isFile();
-    // Pages: / is the landing page, /login the login page, and /app (with any sub-path) the app itself.
-    // The page files sit at the top of dist/ (app.html, not app/index.html): a folder named "app" would clash
-    // with Railway building in /app, and Vite would then drop the landing page.
-    const page = p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html' : 'index.html';
-    const target = isFile ? file : path.join(config.staticDir, page);
-    if (!isFile && !fs.existsSync(target)) {
-      // A missing page must never take the whole server down; say what's wrong instead.
-      console.error(`Missing page ${target}. Was "npm run build" run, and is nothing mounted over ${config.staticDir}?`);
-      res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-      return res.end('Doodlehive is updating. Please try again in a minute.');
-    }
-    const ext = path.extname(target);
-    const types: Record<string, string> = {
-      '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png',
-      '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain',
-    };
-    const headers: Record<string, string> = {
-      'Content-Type': types[ext] ?? 'application/octet-stream',
-      // Vite puts a content hash in asset file names, so they can be cached forever; the page itself never is.
-      'Cache-Control': target.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
-    };
-    if (m === 'HEAD') { res.writeHead(200, headers); return res.end(); }
-    const stream = fs.createReadStream(target);
-    stream.on('error', (e) => { console.error('Static file error:', e.message); res.destroy(); });
-    if (/\.(html|js|css|svg|json)$/.test(target) && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
-      res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' });
-      return stream.pipe(zlib.createGzip()).pipe(res);
-    }
-    res.writeHead(200, headers);
-    return stream.pipe(res);
-  }
+  if ((m === 'GET' || m === 'HEAD') && !api && fs.existsSync(config.staticDir)) return serveStatic(req, res, p, m);
   json(res, 404, { error: 'Not found.' });
+}
+
+// ---- Static files (production) ----
+
+const TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain',
+};
+const COMPRESSIBLE = /\.(html|js|css|svg|json)$/;
+interface Cached { mtime: number; etag: string; raw: Buffer; gz: Buffer | null }
+const fileCache = new Map<string, Cached>();
+
+function loadFile(file: string): Cached | null {
+  let st: fs.Stats;
+  try { st = fs.statSync(file); } catch { return null; }
+  if (!st.isFile()) return null;
+  const hit = fileCache.get(file);
+  if (hit && hit.mtime === st.mtimeMs) return hit;
+  const raw = fs.readFileSync(file);
+  const c: Cached = { mtime: st.mtimeMs, etag: `"${st.size.toString(16)}-${Math.round(st.mtimeMs).toString(36)}"`, raw, gz: COMPRESSIBLE.test(file) ? zlib.gzipSync(raw, { level: 9 }) : null };
+  if (fileCache.size > 200) fileCache.clear();
+  fileCache.set(file, c);
+  return c;
+}
+
+function serveStatic(req: Req, res: Res, p: string, m: string) {
+  const dir = config.staticDir;
+  const file = path.join(dir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
+  // Pages sit at the top of dist/: / is the landing page, /login the login page, /app (and sub-paths) the app.
+  const page = p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html' : 'index.html';
+  const target = file.startsWith(dir + path.sep) && !p.endsWith('/') ? file : '';
+  const c = (target && loadFile(target)) || loadFile(path.join(dir, page));
+  if (!c) {
+    console.error(`Missing page ${page} in ${dir}. Was "npm run build" run?`);
+    res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end('Doodlehive is updating. Please try again in a minute.');
+  }
+  const served = target && c === fileCache.get(target) ? target : page;
+  const headers: Record<string, string | number> = {
+    'Content-Type': TYPES[path.extname(served)] ?? 'application/octet-stream',
+    'Cache-Control': served.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
+    ETag: c.etag,
+    Vary: 'Accept-Encoding',
+  };
+  if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, headers); return res.end(); }
+  const gz = c.gz && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? '')) ? c.gz : null;
+  if (gz) headers['Content-Encoding'] = 'gzip';
+  headers['Content-Length'] = (gz ?? c.raw).length;
+  res.writeHead(200, headers);
+  res.end(m === 'HEAD' ? undefined : gz ?? c.raw);
 }
 
 const server = http.createServer((req, res) => {
@@ -498,17 +529,22 @@ const server = http.createServer((req, res) => {
   });
 });
 
-const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 * 1024 });
+const ORIGINS = new Set([config.publicUrl, config.clientUrl]);
+const wss = new WebSocketServer({
+  noServer: true, maxPayload: 8 * 1024 * 1024,
+  perMessageDeflate: { threshold: 2048, serverNoContextTakeover: true, clientNoContextTakeover: true, zlibDeflateOptions: { level: 4 }, concurrencyLimit: 4 },
+});
 server.on('upgrade', (req, socket, head) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const m = /^\/ws\/([a-z0-9]+)$/.exec(url.pathname);
   const user = sessionUser(cookies(req)[COOKIE]);
   const room = m && getRoom(m[1]);
-  if (!m || !user || !room) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
+  const origin = req.headers.origin;
+  const ok = m && user && room && (!origin || ORIGINS.has(origin)) && allow('ws:' + clientIp(req), 60, MINUTE) && room.connections(user.id) < 6;
+  if (!ok) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
   wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); room.join(ws, user); });
 });
 
-// Drop dead connections.
 setInterval(() => {
   for (const ws of wss.clients) {
     const w = ws as typeof ws & { alive?: boolean };
@@ -519,7 +555,14 @@ setInterval(() => {
 }, 30_000);
 wss.on('connection', (ws) => { const w = ws as typeof ws & { alive?: boolean }; w.alive = true; ws.on('pong', () => { w.alive = true; }); });
 
-// Railway (and most hosts) stop the old server with SIGTERM during a deploy: finish cleanly.
+function sweep() {
+  const now = Date.now();
+  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
+  db.prepare(`DELETE FROM users WHERE provider = 'guest' AND created_at < ? AND id NOT IN (SELECT user_id FROM sessions)`).run(now - 30 * 864e5);
+}
+sweep();
+setInterval(sweep, HOUR).unref();
+
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     for (const ws of wss.clients) ws.close(1012, 'Server restarting');
@@ -533,6 +576,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 server.listen(config.port, () => {
   console.log(`Doodlehive server on ${config.publicUrl}`);
   if (!config.persistent) console.warn('  WARNING: no volume attached; accounts and rooms will be lost on the next deploy.');
+  if (config.production && config.devLogin) console.warn('  WARNING: dev login is on in production. Anyone can log in as anyone. Unset DEV_LOGIN.');
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Database: ${config.dbPath}`);

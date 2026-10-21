@@ -9,8 +9,18 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#1c1c20" />
   <title>Doodlehive</title>
+  <style>
+    #boot { position: fixed; inset: 0; z-index: 45; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #2a2a2f; color: #9a9aa3; font: 500 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: opacity 0.25s; }
+    #boot.out { opacity: 0; pointer-events: none; }
+    #boot svg { width: 72px; height: 72px; animation: boot-pulse 1.6s ease-in-out infinite; }
+    @keyframes boot-pulse { 50% { transform: scale(0.94); opacity: 0.8; } }
+  </style>
 </head>
 <body>
+  <div id="boot" aria-live="polite">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5l11.7 6.75v13.5L16 29.5 4.3 22.75V9.25z" fill="var(--accent, #f4c25b)"/><path d="M10 21.5c2.5-.6 3.6-2.8 5.7-6.4l3.4-4.6 2.6 2.4-4.2 3.6c-3.9 2.8-6.2 3.6-7.5 5z" fill="var(--on-accent, #2b1f04)"/></svg>
+    <span>Loading…</span>
+  </div>
   <div id="app"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

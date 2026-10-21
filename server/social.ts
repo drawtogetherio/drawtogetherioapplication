@@ -3,14 +3,12 @@ import { isConnected, sendTo } from './live.ts';
 import { roomsWithUser, type Room } from './rooms.ts';
 import type { Presence, PublicProfile } from '../src/shared/profile.ts';
 
-// ---- Presence ----
-// Online means an app tab is open (live event stream), they're in a room, or they checked in recently.
+// Online: an app tab is open, they're in a room, or they were seen recently.
 
 const ONLINE_MS = 75_000;
 const lastSeen = new Map<string, number>();
 
 export function touch(userId: string) { lastSeen.set(userId, Date.now()); }
-/** They closed the app: stop counting the last check-in. */
 export function forget(userId: string) { lastSeen.delete(userId); }
 export function isOnline(userId: string) {
   return isConnected(userId) || roomsWithUser(userId).length > 0 || (lastSeen.get(userId) ?? 0) > Date.now() - ONLINE_MS;
@@ -21,14 +19,10 @@ export function presenceOf(u: UserRow): Presence {
   return u.presence_mode === 'away' ? 'away' : u.presence_mode === 'dnd' ? 'dnd' : 'online';
 }
 
-/** Tell someone's friends to refresh (they came online, changed status, joined a room…). */
 export function notifyFriends(userId: string) {
   for (const id of friendIds(userId)) sendTo(id, { type: 'friends' });
 }
 
-// ---- Friends ----
-
-/** A room you can hop into from your friends list. */
 export interface FriendRoom { id: string; name: string }
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: FriendRoom | null }
 export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
@@ -52,10 +46,7 @@ export function friendIds(me: string): string[] {
   return rows.map((r) => (r.user_a === me ? r.user_b : r.user_a));
 }
 
-/**
- * Whether `me` may join `room` straight from their friends list: friends-only rooms of a friend,
- * or open rooms that allow it. Unlisted and private rooms never show up.
- */
+/** Rooms that show a Join button in a friends list. */
 export function canJoinFromFriends(me: string, room: Room): boolean {
   const s = room.info.share;
   if (room.info.ownerId === me) return true;
@@ -83,14 +74,13 @@ export function listFriends(me: string): FriendsList {
     else if (r.requested_by === me) out.outgoing.push(p);
     else out.incoming.push(p);
   }
-  // Online first, then alphabetical.
   out.friends.sort((a, b) => Number(b.online) - Number(a.online) || a.displayName.localeCompare(b.displayName));
   return out;
 }
 
 export class FriendError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
-/** Send a request by handle. If they already asked you, this accepts instead. */
+/** A request to someone who already asked you accepts instead. */
 export function requestFriend(me: UserRow, handle: string): 'requested' | 'accepted' {
   const h = handle.trim().replace(/^@/, '');
   const them = db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(handle) = lower(?)`).get(h) as UserRow | undefined;
@@ -121,7 +111,6 @@ export function acceptFriend(me: string, other: string) {
   sendTo(other, { type: 'friends' });
 }
 
-/** Unfriend, decline a request, or cancel one you sent. */
 export function removeFriend(me: string, other: string) {
   const [a, b] = pair(me, other);
   db.prepare('DELETE FROM friendships WHERE user_a = ? AND user_b = ?').run(a, b);

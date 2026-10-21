@@ -4,10 +4,7 @@ import type { PublicProfile } from './profile';
 
 export type Role = 'owner' | 'host' | 'member';
 
-/**
- * Who can join a canvas. private: only the owner. open: anyone with the link. friends: the owner's
- * friends. unlisted: anyone with the link, but friends don't see a way in from their friends list.
- */
+/** private: only the owner. open: anyone with the link. friends: the owner's friends. unlisted: link only, hidden from friends lists. */
 export type Visibility = 'private' | 'open' | 'friends' | 'unlisted';
 
 export interface ShareSettings {
@@ -27,7 +24,7 @@ export interface RoomInfo {
   name: string;
   ownerId: string;
   settings: DocSettings;
-  /** Private canvases ("Draw alone") only let their owner in. Same as share.visibility === 'private'. */
+  /** Same as share.visibility === 'private'. */
   private: boolean;
   share: ShareSettings;
 }
@@ -41,7 +38,6 @@ export interface ProjectInfo {
   createdAt: number;
   updatedAt: number;
   thumb: string | null;
-  /** People drawing in it right now. */
   online: number;
 }
 
@@ -49,15 +45,15 @@ export interface Member extends PublicProfile { role: Role }
 
 export interface ChatMsg { id: string; from: string; text: string; at: number; system?: boolean }
 
-/** An in-progress stroke streamed while someone draws, so others see it live. */
+/** A chunk of a stroke in progress. */
 export interface LiveStroke {
-  stroke: string; // id shared by every chunk of one stroke
+  stroke: string;
   layer: string;
   erase: boolean;
   brush: BrushParams;
   color: string;
   clip?: Selection;
-  pts: number[]; // new samples since the previous chunk, flat x,y,pressure
+  pts: number[]; // new samples, flat x,y,pressure
 }
 
 export type ClientMsg =
@@ -69,8 +65,7 @@ export type ClientMsg =
   | { type: 'typing'; on: boolean }
   | { type: 'kick'; user: string }
   | { type: 'set-host'; user: string; on: boolean }
-  | { type: 'admit'; user: string; allow: boolean }
-  | { type: 'ping' };
+  | { type: 'admit'; user: string; allow: boolean };
 
 export type ServerMsg =
   | { type: 'welcome'; room: RoomInfo; you: string; members: Member[]; ops: Op[]; chat: ChatMsg[] }
@@ -84,16 +79,12 @@ export type ServerMsg =
   | { type: 'chat'; msg: ChatMsg }
   | { type: 'typing'; from: string; on: boolean }
   | { type: 'kicked'; by: string }
-  /** You asked to join a room that needs the host's OK. */
   | { type: 'waiting' }
-  /** To hosts: someone is waiting to be let in (or `gone` once answered or they left). */
   | { type: 'join-request'; user: PublicProfile }
   | { type: 'join-request-gone'; user: string }
-  | { type: 'error'; message: string }
-  | { type: 'pong' };
+  | { type: 'error'; message: string };
 
 export const CHAT_MAX = 500;
 export const ROOM_NAME_MAX = 48;
 
-/** Id of a member's top-level folder in a room. */
 export const userFolderId = (userId: string) => 'uf_' + userId;

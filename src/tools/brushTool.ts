@@ -4,7 +4,6 @@ import { StrokeRenderer } from '../engine/brush';
 import type { Editor } from '../editor';
 import { PointerInfo, Tool } from './tool';
 
-/** Brush and eraser. Dabs go into a stroke buffer shown live, then the stroke is committed as one op. */
 export class BrushTool implements Tool {
   private buffer: TiledSurface | null = null;
   private renderer: StrokeRenderer | null = null;
@@ -39,7 +38,7 @@ export class BrushTool implements Tool {
   move(p: PointerInfo) { if (this.buffer) this.add(p); }
 
   private add(p: PointerInfo) {
-    // Store rounded samples and render exactly those, so a replay of the op is pixel-identical.
+    // Rounded samples are what gets rendered, so a replay matches exactly.
     const x = round(p.x), y = round(p.y), pr = round(p.pressure);
     this.pts.push(x, y, pr);
     const r = this.renderer!.add(x, y, pr);
@@ -47,7 +46,6 @@ export class BrushTool implements Tool {
     if (this.ed.room && !this.flushTimer) this.flushTimer = window.setTimeout(() => this.flush(), 33);
   }
 
-  /** Stream new samples so others see the stroke while it is drawn. */
   private flush() {
     clearTimeout(this.flushTimer);
     this.flushTimer = 0;

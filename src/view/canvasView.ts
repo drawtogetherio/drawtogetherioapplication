@@ -6,18 +6,12 @@ import { Viewport } from './viewport';
 
 const MAX_COMPOSITE_PIXELS = 14_000_000;
 
-/**
- * Draws the document to the screen. Layers are composited in document space into a cached
- * canvas aligned to the tile grid (no seams, blend modes evaluated in document space), and that
- * single image is then drawn with the view transform (pan/zoom/rotate/flip).
- */
+/** Layers composite into a cached, tile-aligned canvas, which is drawn with the view transform. */
 export class CanvasView {
   readonly canvas: HTMLCanvasElement;
   readonly viewport = new Viewport();
   dpr = 1;
-  /** This user's uncommitted stroke / transform. */
   live: LiveLayer | null = null;
-  /** Other people's in-progress strokes, by stroke id. */
   readonly remoteLive = new Map<string, LiveLayer>();
   overlay: ((ctx: CanvasRenderingContext2D, m: DOMMatrix) => void) | null = null;
 
@@ -27,6 +21,7 @@ export class CanvasView {
   private dirtyAll = true;
   private frame = 0;
   private checker: CanvasPattern | null = null;
+  private workspace = '';
 
   constructor(public doc: DrawDoc, parent: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -40,6 +35,7 @@ export class CanvasView {
   setDoc(doc: DrawDoc) { this.doc = doc; this.invalidate(null); }
 
   resize() {
+    this.workspace = getComputedStyle(document.body).getPropertyValue('--workspace') || '#2b2b2f';
     const r = this.canvas.parentElement!.getBoundingClientRect();
     this.dpr = Math.min(window.devicePixelRatio || 1, 3);
     this.viewport.w = Math.max(1, r.width);
@@ -51,7 +47,6 @@ export class CanvasView {
     this.requestRender();
   }
 
-  /** Mark a document area (or everything, with null) as needing recomposite. */
   invalidate(r: Rect | null) {
     if (!r) this.dirtyAll = true;
     else this.dirty = rectUnion(this.dirty, r);
@@ -72,14 +67,13 @@ export class CanvasView {
     const D = new DOMMatrix().scaleSelf(dpr, dpr).multiplySelf(M);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--workspace') || '#2b2b2f';
+    ctx.fillStyle = this.workspace;
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     const docRect: Rect | null = doc.settings.infinite ? null : { x: 0, y: 0, w: doc.settings.width, h: doc.settings.height };
     let visible: Rect | null = transformRect(M.inverse(), { x: 0, y: 0, w: vp.w, h: vp.h });
     if (docRect) visible = rectIntersect(visible, docRect);
 
-    // Paper / transparency checkerboard under the composite.
     ctx.setTransform(D);
     if (docRect) {
       ctx.save();
@@ -117,7 +111,6 @@ export class CanvasView {
       }
       let region: Rect | null = this.dirtyAll ? range : this.dirty ? rectIntersect(this.dirty, range) : null;
       if (region) {
-        // Snap the region to whole composite pixels.
         const px0 = Math.floor((region.x - ox) * s), py0 = Math.floor((region.y - oy) * s);
         const px1 = Math.ceil((region.x + region.w - ox) * s), py1 = Math.ceil((region.y + region.h - oy) * s);
         region = { x: ox + px0 / s, y: oy + py0 / s, w: (px1 - px0) / s, h: (py1 - py0) / s };

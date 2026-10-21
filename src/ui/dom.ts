@@ -1,6 +1,5 @@
 type Attrs = Record<string, string | number | boolean | EventListener | undefined | null>;
 
-/** Tiny element builder: h('button.tool', { title: 'Brush', onclick }, child...) */
 export function h<K extends keyof HTMLElementTagNameMap>(sel: K | `${K}.${string}` | `${K}#${string}`, attrs: Attrs = {}, ...children: (Node | string | null | undefined | false)[]): HTMLElementTagNameMap[K] {
   const [tagAndId, ...classes] = sel.split('.');
   const [tag, id] = tagAndId.split('#');
@@ -20,7 +19,6 @@ export function h<K extends keyof HTMLElementTagNameMap>(sel: K | `${K}.${string
 
 export function clear(el: Element) { while (el.firstChild) el.removeChild(el.firstChild); }
 
-/** Close a popover when tapping outside of it (and its toggle button). */
 export function dismissOnOutside(pop: HTMLElement, toggles: HTMLElement[], close: () => void) {
   document.addEventListener('pointerdown', (e) => {
     if (pop.hidden) return;

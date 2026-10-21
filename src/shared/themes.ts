@@ -1,18 +1,11 @@
-/**
- * App colour themes. Only the accent family changes; the dark workspace stays the same so artwork
- * colours read the same in every theme. `premium` themes need an active premium account.
- */
+/** Only the accent changes between themes, so artwork reads the same in all of them. */
 export interface Theme {
   id: string;
   name: string;
   premium: boolean;
-  /** Buttons, selection, active tool, links. */
   accent: string;
-  /** Hover / pressed shade of the accent. */
   accentHover: string;
-  /** Background of the selected layer / preset (accent mixed into the panel colour). */
   accentTint: string;
-  /** Text and icons drawn on top of the accent; dark for light accents. */
   onAccent: string;
 }
 
@@ -30,7 +23,6 @@ export function findTheme(id: string | null | undefined): Theme {
   return THEMES.find((t) => t.id === id) ?? THEMES.find((t) => t.id === DEFAULT_THEME)!;
 }
 
-/** Whether someone may use a theme (free themes always; premium ones with premium). */
 export function canUseTheme(id: string, premium: boolean): boolean {
   const t = THEMES.find((x) => x.id === id);
   return !!t && (!t.premium || premium);

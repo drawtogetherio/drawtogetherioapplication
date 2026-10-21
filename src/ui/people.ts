@@ -9,20 +9,18 @@ export function initials(name: string) {
   return (parts[0] ?? '?').toUpperCase();
 }
 
-/** Readable text colour on top of a background colour. */
 export function inkOn(hex: string) {
   const n = parseInt(hex.slice(1), 16);
   const l = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
   return l > 150 ? '#141418' : '#ffffff';
 }
 
-/** Round avatar: the uploaded picture, or an initial on the person's favourite colour. */
 export function avatarEl(
   p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'> & { avatarAnimated?: string | null },
   size = 28, animate = false,
 ): HTMLElement {
   const el = h('span.avatar', { style: `width:${size}px;height:${size}px;--ring:${p.favoriteColor}` });
-  // The animated picture (premium) only plays where it's showcased; everywhere else uses the small still.
+  // The GIF only plays where it's showcased.
   const src = animate && p.avatarAnimated ? p.avatarAnimated : p.avatar;
   if (src) el.append(h('img', { src, alt: '', width: size, height: size, loading: 'lazy' }));
   else {
@@ -34,19 +32,16 @@ export function avatarEl(
   return el;
 }
 
-/** Badges: crown for the room owner, shield for hosts, star for premium. Owners who are premium get both. */
 export function badges(role: Role | undefined, premium: boolean): HTMLElement {
   const el = h('span.badges');
   el.innerHTML = (role === 'owner' ? CROWN_SVG : role === 'host' ? HOST_SVG : '') + (premium ? STAR_SVG : '');
   return el;
 }
 
-/** Premium name gradient as inline style (text filled with the gradient). */
 export function gradientStyle(g: [string, string] | null | undefined) {
   return g ? `--g1:${g[0]};--g2:${g[1]}` : '';
 }
 
-/** A display name: in the premium gradient when there is one, otherwise optionally in `color`. */
 export function nameText(p: Pick<PublicProfile, 'displayName' | 'gradient'>, cls = 'person-name', color?: string): HTMLElement {
   if (p.gradient) return h(`span.${cls}.gradient-name` as 'span', { style: gradientStyle(p.gradient) }, p.displayName);
   return h(`span.${cls}` as 'span', { style: color ? `color:${color}` : '' }, p.displayName);
@@ -58,7 +53,6 @@ export function nameLine(p: PublicProfile, role?: Role, you = false): HTMLElemen
 }
 
 const imgCache = new Map<string, HTMLImageElement>();
-/** Decoded avatar image for drawing on the canvas (null until loaded). */
 export function avatarImage(url: string, onLoad: () => void): HTMLImageElement | null {
   let img = imgCache.get(url);
   if (!img) {
@@ -70,7 +64,6 @@ export function avatarImage(url: string, onLoad: () => void): HTMLImageElement |
   return img.complete && img.naturalWidth ? img : null;
 }
 
-/** Profile card contents (picture, name, badges, status, colour, links). Used for members and friends. */
 export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLElement | null): HTMLElement {
   const links = h('div.profile-links');
   for (const pl of LINK_PLATFORMS) {
@@ -86,5 +79,5 @@ export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLEleme
       h('div.fav', {}, h('span.fav-swatch', { style: `background:${p.favoriteColor}` }), h('span.muted', {}, p.favoriteColor))),
   );
   return h('div.modal-body.profile-card', {}, head, extra ?? null,
-    links.childElementCount ? links : h('p.muted', {}, 'No other profiles listed.'));
+    links.childElementCount ? links : null);
 }

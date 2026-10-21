@@ -6,7 +6,6 @@ import { exportRect } from './export';
 
 const MAX = 480;
 
-/** A small WebP preview of the canvas for the home screen (whole page, or the drawn area when unlimited). */
 export async function makeThumbnail(doc: DrawDoc): Promise<Blob | null> {
   const s = doc.settings;
   const r = s.infinite ? exportRect(doc) : { x: 0, y: 0, w: s.width, h: s.height };

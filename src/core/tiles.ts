@@ -4,10 +4,7 @@ export const TILE = 256;
 
 export type TileSnapshot = Map<string, ImageData | null>;
 
-/**
- * A sparse, unbounded raster made of 256x256 tiles. Tiles are created lazily when painted,
- * which is what lets the "unlimited" canvas grow in any direction.
- */
+/** A sparse raster of 256×256 tiles, created as they are painted. */
 export class TiledSurface {
   readonly tiles = new Map<string, HTMLCanvasElement>();
 
@@ -26,7 +23,6 @@ export class TiledSurface {
     return t;
   }
 
-  /** Tile keys overlapping a document-space rect. */
   keysIn(r: Rect): string[] {
     const out: string[] = [];
     const tx0 = Math.floor(r.x / TILE), ty0 = Math.floor(r.y / TILE);
@@ -35,10 +31,7 @@ export class TiledSurface {
     return out;
   }
 
-  /**
-   * Run a drawing callback against every tile overlapping `r`. The context is translated so the
-   * callback can draw in document coordinates.
-   */
+  /** Draw on every tile overlapping `r`, in document coordinates. */
   draw(r: Rect, fn: (ctx: CanvasRenderingContext2D) => void, create = true) {
     for (const k of this.keysIn(r)) {
       const [tx, ty] = TiledSurface.parse(k);
@@ -52,7 +45,6 @@ export class TiledSurface {
     }
   }
 
-  /** Copy pixel data of the given tiles (null = tile did not exist). */
   snapshot(keys: Iterable<string>, into: TileSnapshot = new Map()): TileSnapshot {
     for (const k of keys) {
       if (into.has(k)) continue;
@@ -62,7 +54,6 @@ export class TiledSurface {
     return into;
   }
 
-  /** Restore tiles from a snapshot. */
   restore(s: TileSnapshot) {
     for (const [k, data] of s) {
       if (!data) { this.tiles.delete(k); continue; }
@@ -71,14 +62,12 @@ export class TiledSurface {
     }
   }
 
-  /** Drop tiles in `keys` that are fully transparent. Snapshot data is reused when given. */
   prune(s: TileSnapshot) {
     for (const [k, data] of s) {
       if (data && isEmpty(data)) { this.tiles.delete(k); s.set(k, null); }
     }
   }
 
-  /** Bounding rect of existing tiles (coarse, tile-aligned). */
   tileBounds(): Rect | null {
     let r: Rect | null = null;
     for (const k of this.tiles.keys()) {
@@ -88,7 +77,6 @@ export class TiledSurface {
     return r;
   }
 
-  /** Exact bounding rect of non-transparent pixels. */
   contentBounds(): Rect | null {
     let r: Rect | null = null;
     for (const [k, t] of this.tiles) {
@@ -109,7 +97,6 @@ export class TiledSurface {
     return r;
   }
 
-  /** Draw tiles (optionally limited to a rect) onto ctx, which maps document space. */
   drawTo(ctx: CanvasRenderingContext2D, r?: Rect) {
     const keys = r ? this.keysIn(r) : [...this.tiles.keys()];
     for (const k of keys) {
@@ -120,7 +107,6 @@ export class TiledSurface {
     }
   }
 
-  /** Render a region of this surface into a new canvas of size r.w x r.h. */
   extract(r: Rect): HTMLCanvasElement {
     const c = makeCanvas(r.w, r.h);
     const ctx = ctx2d(c);

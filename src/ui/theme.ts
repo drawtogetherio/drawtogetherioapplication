@@ -8,7 +8,6 @@ function rgba(hex: string, a: number) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-/** Apply a theme to the whole UI (CSS variables) and remember it on this device. */
 export function applyTheme(id: string | null | undefined) {
   current = findTheme(id);
   const s = document.documentElement.style;
@@ -21,7 +20,6 @@ export function applyTheme(id: string | null | undefined) {
   try { localStorage.setItem(KEY, current.id); } catch { /* storage may be blocked */ }
 }
 
-/** Theme from the last visit, until the account's saved theme arrives. */
 export function initTheme() {
   let id: string | null = null;
   try { id = localStorage.getItem(KEY); } catch { /* ignore */ }
@@ -29,5 +27,4 @@ export function initTheme() {
 }
 
 export const theme = () => current;
-/** Accent colour for things drawn on the canvas (selection outlines, handles). */
 export const accentColor = () => current.accent;

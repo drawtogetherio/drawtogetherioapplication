@@ -10,7 +10,7 @@ import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 
-// Live updates come over the event stream; this slow poll is only a fallback.
+// Fallback to the live event stream.
 const FRIENDS_POLL_MS = 60_000;
 
 const VIS_LABEL: Record<Visibility, string> = { private: 'Just you', open: 'Open link', friends: 'Friends', unlisted: 'Unlisted' };
@@ -26,10 +26,6 @@ export function timeAgo(t: number) {
   return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d > 300 ? 'numeric' : undefined });
 }
 
-/**
- * The /app home screen: friends on the left (online first), recent canvases in the middle with a
- * "Create new" tile, and a + button in the top-left corner.
- */
 export class Home {
   readonly el = h('div.home', { hidden: true });
   private friendsEl = h('div.friends-list');
@@ -102,7 +98,6 @@ export class Home {
   show() {
     this.el.hidden = false;
     this.renderAccount();
-    // Guests only draw in rooms they're invited to: no friends, no canvases of their own.
     const guest = !!this.app.ed.me?.guest;
     this.el.classList.toggle('guest', guest);
     this.plus.hidden = this.friendsPanel.hidden = guest;
@@ -129,7 +124,6 @@ export class Home {
     this.renderMeCard();
   }
 
-  /** You, at the top of the friends list: picture, name, handle and your status (+ to set one). */
   private renderMeCard(editing = false) {
     const me = this.app.ed.me;
     clear(this.meCard);
@@ -170,7 +164,6 @@ export class Home {
     );
   }
 
-  /** Online / Away / Do not disturb / Offline. Friends see the change right away. */
   private presenceMenu(anchor: HTMLElement) {
     const pop = h('div.popover.tile-pop.presence-pop');
     const close = () => { pop.remove(); document.removeEventListener('pointerdown', off, true); };
@@ -293,7 +286,7 @@ export class Home {
     clear(this.grid);
     this.grid.append(h('div.guest-card', {},
       h('p', {}, 'You’re drawing as ', h('strong', {}, me.displayName), ' (@' + me.handle + '). Paste a room link above to join a friend’s canvas.'),
-      h('p.muted', {}, 'Log in with Discord to make your own canvases, add friends and choose your own handle.'),
+      h('p.muted', {}, 'Log in with Discord to make canvases, add friends and pick a handle.'),
       h('button.btn.primary', { type: 'button', onclick: () => this.app.session.logout('/login?next=/app') }, 'Log in with Discord'),
     ));
   }
@@ -308,7 +301,7 @@ export class Home {
       h('span.create-square', { html: icon('plus', 34) }), h('span.tile-name', {}, 'Create new'));
     this.grid.append(create);
     for (const p of list) this.grid.append(this.projectTile(p));
-    if (!list.length) this.grid.append(h('p.projects-empty', {}, 'Your canvases show up here. Start one alone, or make a room and invite friends.'));
+    if (!list.length) this.grid.append(h('p.projects-empty', {}, 'No canvases yet.'));
   }
 
   private projectTile(p: ProjectInfo): HTMLElement {
@@ -356,7 +349,7 @@ export class Home {
         catch (e) { this.app.toast((e as Error).message); }
       }) : null,
       item('trash', 'Delete', async () => {
-        if (!(await confirmDialog('Delete this canvas?', `“${p.name}” will be deleted for everyone. This can’t be undone.`, 'Delete'))) return;
+        if (!(await confirmDialog('Delete this canvas?', `“${p.name}” will be deleted for everyone.`, 'Delete'))) return;
         try { await api.deleteRoom(p.id); this.loadProjects(); } catch (e) { this.app.toast((e as Error).message); }
       }, '.danger'),
     ));

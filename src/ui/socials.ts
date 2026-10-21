@@ -6,7 +6,6 @@ const LOGOS: Record<string, { path: string; hex: string }> = {
   twitch: siTwitch, artstation: siArtstation, tiktok: siTiktok, tumblr: siTumblr, pixiv: siPixiv,
 };
 
-/** A platform's logo in a small rounded square of its brand colour. */
 export function socialLogo(platform: string, size = 28): HTMLElement {
   const logo = LOGOS[platform];
   const el = h('span.social-logo', { style: `width:${size}px;height:${size}px;background:#${logo?.hex ?? '555'}` });

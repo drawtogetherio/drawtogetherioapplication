@@ -21,7 +21,6 @@ type Drag =
 
 const HANDLE_HIT = 22;
 
-/** Rectangle / ellipse / lasso selection with move, rotate and scale handles. */
 export class SelectTool implements Tool {
   xf: Xform | null = null;
   private drag: Drag | null = null;
@@ -47,7 +46,6 @@ export class SelectTool implements Tool {
     return new DOMMatrix().translateSelf(x.T.x, x.T.y).rotateSelf((x.rot * 180) / Math.PI).scaleSelf(x.sx, x.sy).translateSelf(-cx, -cy);
   }
 
-  /** Current outline in document coords (transformed while a transform is active). */
   outline(): number[] | null {
     if (this.xf) return transformPoly(this.xf.sel.pts, this.matrix());
     return this.ed.selection?.pts ?? null;
@@ -132,7 +130,6 @@ export class SelectTool implements Tool {
         return;
       }
     }
-    // Start a new selection.
     this.commit();
     this.drag = { kind: 'select', x0: p.x, y0: p.y, pts: [p.x, p.y] };
   }
@@ -221,7 +218,6 @@ export class SelectTool implements Tool {
     return { pts: out };
   }
 
-  /** Apply the pending transform as an op. */
   commit() {
     const x = this.xf;
     if (!x) return;

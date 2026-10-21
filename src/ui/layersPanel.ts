@@ -12,10 +12,7 @@ const THUMB = 48;
 
 interface Row { node: DocNode; depth: number; el: HTMLElement }
 
-/**
- * Layers and folders. In a room every member has a folder named and coloured after them; they can
- * nest more folders inside. Drag rows to reorder or drop them onto a folder.
- */
+/** Layers and folders; drag rows to reorder or into a folder. */
 export class LayersPanel {
   readonly el: HTMLElement;
   private list: HTMLElement;
@@ -28,7 +25,6 @@ export class LayersPanel {
   private thumbs = new Map<string, HTMLCanvasElement>();
   private thumbTimer = 0;
   private collapsed = new Set<string>();
-  /** Selected folder (folder actions + where new layers go), or null when a layer is selected. */
   selectedFolder: string | null = null;
   private rows: Row[] = [];
   open = false;
@@ -109,7 +105,6 @@ export class LayersPanel {
   }
   private pendingOpacity: { layer: string; from: number; timer: number } | null = null;
 
-  /** Displayed name/colour of a folder; member folders follow the member's profile. */
   folderLabel(f: Folder): { name: string; color: string | null; member?: ReturnType<NonNullable<Editor['room']>['member']> } {
     if (f.props.user && f.props.owner) {
       const m = this.ed.room?.member(f.props.owner);
@@ -161,7 +156,6 @@ export class LayersPanel {
     this.ed.apply({ t: 'layer.remove', id: uid(), layer: l.props.id });
   }
 
-  /** Should this root-level node be listed? (setting: hide other members' folders) */
   private listed(n: DocNode) {
     if (!this.ed.room || !this.ed.settings.hideOthersFolders) return true;
     return n.props.owner === this.ed.room.you;
@@ -255,7 +249,6 @@ export class LayersPanel {
     else { this.selectedFolder = null; this.ed.setActiveLayer(n.props.id); }
   }
 
-  /** Tap selects; dragging vertically moves the row (between rows, or into a folder). */
   private dragStart(e: PointerEvent, row: HTMLElement, node: DocNode) {
     if ((e.target as HTMLElement).closest('.vis, .chev')) return;
     const y0 = e.clientY;

@@ -1,4 +1,3 @@
-// Small geometry helpers shared by the engine, view and tools.
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface Point { x: number; y: number }
@@ -23,7 +22,6 @@ export function rectIntersect(a: Rect, b: Rect): Rect | null {
   return r > x && btm > y ? { x, y, w: r - x, h: btm - y } : null;
 }
 
-/** Expand to whole pixels (outward). */
 export function rectRoundOut(r: Rect, pad = 0): Rect {
   const x = Math.floor(r.x - pad), y = Math.floor(r.y - pad);
   return { x, y, w: Math.ceil(r.x + r.w + pad) - x, h: Math.ceil(r.y + r.h + pad) - y };
@@ -44,7 +42,6 @@ export function rectContains(r: Rect, x: number, y: number) {
   return x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
 }
 
-/** Axis-aligned bounds of a rect after transforming by a matrix. */
 export function transformRect(m: DOMMatrixReadOnly, r: Rect): Rect {
   const pts = [
     m.transformPoint({ x: r.x, y: r.y }), m.transformPoint({ x: r.x + r.w, y: r.y }),
@@ -74,7 +71,6 @@ export function polyPath(pts: number[]): Path2D {
 }
 
 let idCounter = 0;
-/** Unique id for layers and operations. Random prefix keeps ids unique across collaborators later. */
 export function uid(prefix = ''): string {
   const rnd = crypto.getRandomValues(new Uint32Array(2));
   return prefix + rnd[0].toString(36) + rnd[1].toString(36) + (idCounter++).toString(36);

@@ -13,34 +13,28 @@ export interface Folder { kind: 'folder'; props: FolderProps; parent: string | n
 export type DocNode = Layer | Folder;
 
 export interface DocChange {
-  /** Changed document area; null means "everything". */
   rect: Rect | null;
-  /** Layer tree or layer/folder properties changed. */
   structure?: boolean;
 }
 
 export interface ApplyOptions {
-  /** Pre-rendered stroke/shape pixels from the live preview, so we don't render twice. */
+  /** Pixels already rendered by the live preview. */
   buffer?: TiledSurface;
+  /** False for other people's ops: no undo information is kept. */
+  record?: boolean;
 }
 
 type TilesOp = Extract<Op, { t: 'tiles' }>;
 
-/**
- * The shared document: a tree of folders and layers. Every change goes through apply(), which is
- * deterministic and returns the ops that undo it. Undo and redo are therefore ordinary ops too,
- * which is what lets them sync to everyone in a room.
- */
+/** A tree of folders and layers. apply() is deterministic and returns the ops that undo it, so undo syncs like any edit. */
 export class DrawDoc {
   readonly nodes = new Map<string, DocNode>();
-  /** Child ids per parent ('' = root), bottom to top. */
   private kids = new Map<string, string[]>();
-  /** Layers in render order (bottom to top). */
   layers: Layer[] = [];
   readonly history = new History();
-  /** Every applied op in order. */
   readonly log: Op[] = [];
   private listeners = new Set<(c: DocChange) => void>();
+  private record = true;
 
   constructor(public settings: DocSettings) {}
 
@@ -59,25 +53,21 @@ export class DrawDoc {
   indexOf(id: string) { return this.layers.findIndex((l) => l.props.id === id); }
   children(parent: string | null): string[] { return this.kids.get(parent ?? '') ?? []; }
 
-  /** Position of a node among its siblings. */
   place(id: string): { parent: string | null; index: number } {
     const n = this.nodes.get(id)!;
     return { parent: n.parent, index: this.children(n.parent).indexOf(id) };
   }
 
-  /** The layer directly below in the same folder, if it is a layer. */
   layerBelow(id: string): Layer | undefined {
     const { parent, index } = this.place(id);
     return index > 0 ? this.layer(this.children(parent)[index - 1]) : undefined;
   }
 
-  /** Is `id` the same as, or inside, folder `ancestor`? */
   isWithin(id: string, ancestor: string): boolean {
     for (let n = this.nodes.get(id); n; n = n.parent ? this.nodes.get(n.parent) : undefined) if (n.props.id === ancestor) return true;
     return false;
   }
 
-  /** Document bounds for fixed canvases, content bounds for infinite ones. */
   bounds(): Rect | null {
     if (!this.settings.infinite) return { x: 0, y: 0, w: this.settings.width, h: this.settings.height };
     let r: Rect | null = null;
@@ -113,7 +103,7 @@ export class DrawDoc {
     this.layers = out;
   }
 
-  /** Decode PNG tiles of a remote `tiles` op. Must run before apply() for ops received over the wire. */
+  /** Decode the PNG tiles of an op from the wire; needed before apply(). */
   async prepare(op: Op) {
     if (op.t !== 'tiles' || op.img) return;
     const img: Record<string, ImageData | null> = {};
@@ -130,9 +120,10 @@ export class DrawDoc {
     op.img = img;
   }
 
-  /** Apply an op. Returns the ops that undo it (empty if nothing happened). */
   apply(op: Op, opts: ApplyOptions = {}): Op[] {
+    this.record = opts.record !== false;
     const inv = this.applyInner(op, opts);
+    this.record = true;
     if (inv) this.log.push(op);
     return inv ?? [];
   }
@@ -227,7 +218,7 @@ export class DrawDoc {
       case 'layer.remove': {
         const layer = this.layer(op.layer);
         if (!layer) return null;
-        const inv = this.recreate(layer);
+        const inv = this.record ? this.recreate(layer) : [];
         this.detach(layer.props.id);
         this.nodes.delete(layer.props.id);
         this.structural(null);
@@ -246,7 +237,7 @@ export class DrawDoc {
         const upper = this.layer(op.layer);
         const lower = upper && this.layerBelow(upper.props.id);
         if (!upper || !lower) return null;
-        const inv = this.recreate(upper);
+        const inv = this.record ? this.recreate(upper) : [];
         const keys = [...upper.surface.tiles.keys()];
         const lowerInv = this.pixelEdit(lower, keys, () => {
           for (const k of keys) {
@@ -276,7 +267,7 @@ export class DrawDoc {
       case 'folder.remove': {
         const folder = this.folder(op.folder);
         if (!folder) return null;
-        const inv = this.recreate(folder);
+        const inv = this.record ? this.recreate(folder) : [];
         const drop = (id: string) => {
           for (const c of [...this.children(id)]) drop(c);
           this.kids.delete(id);
@@ -309,7 +300,6 @@ export class DrawDoc {
     return null;
   }
 
-  /** Ops that rebuild a node (and its contents) exactly where it is now. */
   private recreate(n: DocNode): Op[] {
     const { parent, index } = this.place(n.props.id);
     if (n.kind === 'layer') {
@@ -324,13 +314,13 @@ export class DrawDoc {
     return ops;
   }
 
-  /** Mutate a layer's pixels and return a `tiles` op that restores the previous state. */
+  /** Mutate a layer's pixels; returns the `tiles` op that restores them (none when not recording). */
   private pixelEdit(layer: Layer, keys: string[], mutate: () => Rect | null, emit = true): Op[] {
-    const before: TileSnapshot = layer.surface.snapshot(keys);
+    const before: TileSnapshot | null = this.record ? layer.surface.snapshot(keys) : null;
     const dirty = mutate();
-    const after = layer.surface.snapshot(keys);
-    layer.surface.prune(after);
+    if (before) layer.surface.prune(layer.surface.snapshot(keys));
     if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), structure: true });
+    if (!before) return [];
     const inv: TilesOp = { t: 'tiles', id: uid(), layer: layer.props.id, tiles: {}, img: Object.fromEntries(before) };
     return [inv];
   }
@@ -351,7 +341,6 @@ function rectOfKeys(keys: string[]): Rect | null {
   return r;
 }
 
-/** Serialise an op for the network: tile images become PNG data URLs. */
 export function toWire(op: Op): Op {
   if (op.t !== 'tiles' || !op.img) return op;
   const tiles: Record<string, string | null> = {};
@@ -367,7 +356,6 @@ export function toWire(op: Op): Op {
   return { ...rest, tiles };
 }
 
-/** Approximate memory cost of ops in tiles (for capping undo history). */
 export function opsCost(ops: Op[]) {
   return ops.reduce((s, o) => s + (o.t === 'tiles' && o.img ? Object.keys(o.img).length : 0), 0);
 }

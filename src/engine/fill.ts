@@ -1,11 +1,7 @@
 import { Rect, ctx2d, makeCanvas } from '../core/geom';
 import { hexToRgb } from './brush';
 
-/**
- * Flood fill. `src` is the sampled image covering `region` (document coords). Returns a canvas
- * of the same size containing the fill colour where the fill applies, or null if the seed is
- * outside the region.
- */
+/** Flood fill over `src` (covering `region`). Returns the fill as a canvas of the same size, or null. */
 export function floodFill(
   src: ImageData, region: Rect, seedX: number, seedY: number, color: string, tolerance: number, expand: number,
 ): HTMLCanvasElement | null {

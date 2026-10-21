@@ -11,7 +11,6 @@ export function sampleColor(ed: Editor, x: number, y: number): string | null {
 
 export class EyedropperTool implements Tool {
   private active = false;
-  /** Tool to return to after picking (set when used as a temporary modifier). */
   returnTo: (() => void) | null = null;
 
   constructor(private ed: Editor) {}

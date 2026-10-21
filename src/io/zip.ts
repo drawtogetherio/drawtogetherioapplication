@@ -1,5 +1,4 @@
-// Minimal uncompressed (STORE) zip writer, used to wrap files for hosts that only accept
-// certain download types.
+// Minimal STORE zip writer.
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);

@@ -31,10 +31,7 @@ export interface EditorSettings {
 
 type Listener = (what: string) => void;
 
-/**
- * Per-user editor state around a document: active tool and layer, colour, selection, and the
- * optional shared room. None of this is part of the shared document.
- */
+/** Per-user state around a document: tool, layer, colour, selection, room. */
 export class Editor {
   doc: DrawDoc;
   readonly view: CanvasView;
@@ -45,11 +42,8 @@ export class Editor {
   recentColors: string[] = [];
   selection: Selection | null = null;
   hover: (Point & { pointer: string }) | null = null;
-  /** Signed-in profile (null when offline / logged out). */
   me: MyProfile | null = null;
-  /** Folder chosen in the layers panel; new layers and folders go inside it. */
   targetFolder: string | null = null;
-  /** Shared room, when drawing together. */
   room: RoomClient | null = null;
   settings: EditorSettings = {
     brush: { ...BRUSH_PRESETS[0].params }, brushPreset: 0,
@@ -81,7 +75,6 @@ export class Editor {
     this.doc.history.onChange = () => this.emit('history');
   }
 
-  /** Choose a sensible active layer: the top one this user may edit. */
   pickActiveLayer() {
     const mine = [...this.doc.layers].reverse().find((l) => this.canEdit(l.props.id));
     this.activeLayer = mine?.props.id ?? '';
@@ -113,7 +106,6 @@ export class Editor {
     this.view.requestRender();
   }
 
-  /** Brush parameters that the size/opacity sliders currently control. */
   get sizeParams(): BrushParams { return this.toolId === 'eraser' ? this.settings.eraser : this.settings.brush; }
 
   setColor(c: string, commitRecent = false) {
@@ -135,9 +127,6 @@ export class Editor {
     this.emit('layers');
   }
 
-  // ---- Permissions ----
-
-  /** In a room, only the owner of a layer/folder (or a host) may change it. */
   canEdit(nodeId: string): boolean {
     if (!this.room) return true;
     const n = this.doc.node(nodeId);
@@ -145,7 +134,6 @@ export class Editor {
     return n.props.owner === this.room.you || this.room.isHost;
   }
 
-  /** The active layer if it can be painted on right now; otherwise explains why and returns null. */
   paintableLayer(): Layer | null {
     const l = this.layer;
     if (!l) { this.toast(this.room ? 'Add a layer in your folder to start drawing' : 'Add a layer to start drawing'); return null; }
@@ -156,7 +144,6 @@ export class Editor {
 
   ownerName(id?: string) { return (id && this.room?.member(id)?.displayName) || 'someone else'; }
 
-  /** Where new layers/folders go: the active layer's folder, or this user's folder in a room. */
   insertionPoint(): { parent: string | null; index: number } {
     const tf = this.targetFolder && this.doc.folder(this.targetFolder);
     if (tf && this.canEdit(tf.props.id)) return { parent: tf.props.id, index: this.doc.children(tf.props.id).length };
@@ -172,9 +159,6 @@ export class Editor {
     return { parent: null, index: this.doc.children(null).length };
   }
 
-  // ---- Edits ----
-
-  /** Apply ops authored by this user as one undo step, and share them with the room. */
   run(ops: Op[], label = 'Edit', opts: ApplyOptions = {}) {
     const inverse: Op[] = [];
     ops.forEach((op, i) => {
@@ -245,7 +229,6 @@ export class Editor {
     this.setActiveLayer(props.id);
   }
 
-  /** Make sure this user has a layer to draw on after joining a room. */
   ensureOwnLayer() {
     if (!this.room) return;
     const mine = this.doc.layers.find((l) => l.props.owner === this.room!.you);
@@ -258,13 +241,10 @@ export class Editor {
     this.setActiveLayer(props.id);
   }
 
-  /** Finish any in-progress transform before other actions. */
   commitPending() { this.currentTool?.commit?.(); }
 
-  /** Selection clip used by painting tools. */
   clipPath(): Path2D | undefined { return this.selection ? polyPath(this.selection.pts) : undefined; }
 
-  /** Area used for "select all" and unbounded fills. */
   workArea(): Rect {
     const s = this.doc.settings;
     if (!s.infinite) return { x: 0, y: 0, w: s.width, h: s.height };
@@ -290,7 +270,6 @@ export class Editor {
   toast(msg: string) { this.emit('toast:' + msg); }
 
   private lastCursor = 0;
-  /** Tell the room where this user is drawing (throttled). */
   sendCursor(x: number, y: number, drawing: boolean) {
     if (!this.room) return;
     const now = performance.now();

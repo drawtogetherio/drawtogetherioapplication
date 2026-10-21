@@ -20,17 +20,14 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
 
 export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null } }
 
-/** `room`: a room you can join from your friends list. */
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 
-/** Pushed to an open tab over /api/events. */
 export type LiveEvent =
   | { type: 'friends' }
   | { type: 'invite'; room: { id: string; name: string }; from: { id: string; displayName: string } };
 export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
 
 export const api = {
-  /** Null when no server is reachable (offline / static preview). */
   async config(): Promise<ServerConfig | null> {
     try {
       const res = await fetch('/api/config', { credentials: 'same-origin' });
@@ -64,6 +61,5 @@ export const api = {
   addFriend: (handle: string) => call<FriendsList & { result: 'requested' | 'accepted' }>('POST', '/api/friends', { handle }),
   acceptFriend: (id: string) => call<FriendsList>('POST', `/api/friends/${id}/accept`),
   removeFriend: (id: string) => call<FriendsList>('DELETE', '/api/friends/' + id),
-  ping: () => call<{ ok: true }>('POST', '/api/presence'),
   room: (id: string) => call<RoomInfo & { owner: PublicProfile | null; online: number }>('GET', '/api/rooms/' + id),
 };

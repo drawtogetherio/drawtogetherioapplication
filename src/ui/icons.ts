@@ -58,7 +58,6 @@ export function icon(name: keyof typeof P | string, size = 22): string {
   return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] ?? ''}</svg>`;
 }
 
-/** Filled badges shown next to names. */
 export const CROWN_SVG = '<svg class="badge crown" viewBox="0 0 24 24" width="14" height="14" aria-label="Room owner" role="img"><path fill="#f5b301" stroke="#9a6b00" stroke-width="1.2" stroke-linejoin="round" d="M3 18l1.6-10 4.6 4.3L12 5l2.8 7.3L19.4 8 21 18z"/><rect x="3" y="18.5" width="18" height="2.5" rx="1" fill="#f5b301" stroke="#9a6b00" stroke-width="1.2"/></svg>';
 export const STAR_SVG = '<svg class="badge star" viewBox="0 0 24 24" width="14" height="14" aria-label="Premium" role="img"><path fill="#7c5cff" stroke="#4b33c9" stroke-width="1.2" stroke-linejoin="round" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
 export const HOST_SVG = '<svg class="badge host" viewBox="0 0 24 24" width="14" height="14" aria-label="Host" role="img"><path fill="#2f9e6e" stroke="#1b6b48" stroke-width="1.2" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg>';

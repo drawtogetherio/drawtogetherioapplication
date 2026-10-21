@@ -5,14 +5,12 @@ export interface SliderOptions {
   min: number; max: number; value: number;
   vertical?: boolean;
   label?: string;
-  /** Exponent for a non-linear feel (e.g. 2 for brush size). */
   curve?: number;
   format?: (v: number) => string;
   step?: number;
   onInput: (v: number) => void;
 }
 
-/** A touch-friendly slider (works the same with finger, pen and mouse). */
 export class Slider {
   readonly el: HTMLElement;
   private fill: HTMLElement;

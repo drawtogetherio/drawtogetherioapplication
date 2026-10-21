@@ -1,7 +1,6 @@
 import type { ServerResponse } from 'node:http';
 
-// One event stream (Server-Sent Events) per open app tab. Used for things that should show up
-// right away: friends coming online or changing status, room invites.
+// One event stream (Server-Sent Events) per open app tab: friends' presence and invites.
 
 export type LiveEvent =
   | { type: 'friends' }
@@ -10,7 +9,8 @@ export type LiveEvent =
 const streams = new Map<string, Set<ServerResponse>>();
 const HEARTBEAT_MS = 25_000;
 
-export function isConnected(userId: string) { return (streams.get(userId)?.size ?? 0) > 0; }
+export function streamCount(userId: string) { return streams.get(userId)?.size ?? 0; }
+export function isConnected(userId: string) { return streamCount(userId) > 0; }
 
 export function sendTo(userId: string, e: LiveEvent) {
   const set = streams.get(userId);
@@ -19,7 +19,6 @@ export function sendTo(userId: string, e: LiveEvent) {
   for (const res of set) res.write(line);
 }
 
-/** Keep `res` open as an event stream. `changed(true|false)` fires when the user's first tab connects or last one goes. */
 export function openStream(userId: string, res: ServerResponse, changed: (connected: boolean) => void) {
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
   res.write('retry: 3000\n\n');

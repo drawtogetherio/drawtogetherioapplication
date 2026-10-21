@@ -64,7 +64,7 @@ addColumn('rooms', 'updated_at', 'INTEGER');
 addColumn('rooms', 'thumb', 'BLOB');
 addColumn('rooms', 'thumb_version', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'presence_mode', `TEXT NOT NULL DEFAULT 'auto'`);
-// Sharing: JSON ShareSettings minus visibility, which lives in its own column ('open' when unset).
+// visibility has its own column so the home screen can filter on it; the other share flags are JSON.
 addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
 addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
 db.exec(`UPDATE rooms SET visibility = 'private' WHERE private = 1 AND visibility <> 'private'`);
@@ -89,7 +89,6 @@ export interface UserRow {
   status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string;
 }
 
-/** Every user column except the picture blobs (those are only read by the /avatars route). */
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
   avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode`;
@@ -107,7 +106,6 @@ export function publicProfile(u: UserRow): PublicProfile {
     id: u.id, handle: u.handle, displayName: u.display_name, favoriteColor: u.favorite_color,
     avatar: u.has_avatar ? `/avatars/${u.id}?v=${u.avatar_version}` : null,
     links: JSON.parse(u.links), premium: isPremium(u), premiumUntil: u.premium_until, status: u.status,
-    // Premium extras only show while premium is active.
     gradient: isPremium(u) && u.gradient ? (u.gradient.split(',') as [string, string]) : null,
     avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
     guest: u.provider === 'guest',
@@ -115,7 +113,6 @@ export function publicProfile(u: UserRow): PublicProfile {
 }
 
 export function myProfile(u: UserRow): MyProfile {
-  // A premium theme falls back to the default once premium runs out.
   const theme = canUseTheme(u.theme, isPremium(u)) ? u.theme : DEFAULT_THEME;
   return {
     ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme,
@@ -132,7 +129,6 @@ export function handleTaken(handle: string, exceptUser?: string) {
   return !!row && row.id !== exceptUser;
 }
 
-/** A free <Word><Food> handle for a guest, adding a number if every tried pair is taken. */
 export function freeHandle(): string {
   for (let i = 0; i < 40; i++) {
     const h = HANDLE_WORDS[crypto.randomInt(HANDLE_WORDS.length)] + HANDLE_FOODS[crypto.randomInt(HANDLE_FOODS.length)];
@@ -144,7 +140,6 @@ export function freeHandle(): string {
   }
 }
 
-/** `base` if it's free, otherwise base2, base3… (trimmed to fit), so new accounts start with their own name. */
 export function freeHandleLike(base: string): string {
   const b = suggestHandle(base) || 'artist';
   if (!handleTaken(b)) return b;
@@ -155,10 +150,6 @@ export function freeHandleLike(base: string): string {
   }
 }
 
-/**
- * Log in (or sign up) through Discord or dev login. New accounts get a handle based on their
- * Discord username (`handleHint`), which they can change during profile setup.
- */
 export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string, displayName: string, handleHint: string): UserRow {
   const existing = db.prepare(`SELECT ${USER_COLS} FROM users WHERE provider = ? AND provider_id = ?`).get(provider, providerId) as UserRow | undefined;
   if (existing) return existing;
@@ -168,7 +159,6 @@ export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string
   return getUser(id)!;
 }
 
-/** Someone joining a room without logging in: random handle, straight in (no profile setup). */
 export function createGuest(displayName: string): UserRow {
   const id = newId('u_');
   db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, needs_setup, created_at)

@@ -35,6 +35,8 @@ async function signUp(page, name, status) {
   check(await page.locator('#status').count() === 0, `${name}: no status at setup`);
   await page.getByRole('button', { name: 'Start drawing' }).click();
   await page.waitForSelector('.home:not([hidden])');
+  await page.waitForSelector('#boot', { state: 'detached' });
+  check(await page.locator('canvas.stage').isHidden() || await page.locator('.home').isVisible(), `${name}: the start screen gives way to home`);
   if (status) {
     // Status lives on your card at the top of the friends list.
     await page.locator('.me-card .me-status-add').click();

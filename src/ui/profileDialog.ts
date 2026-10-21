@@ -10,10 +10,7 @@ import { avatarEl, badges, gradientStyle } from './people';
 import { modal } from './dialogs';
 import { socialLogo } from './socials';
 
-/**
- * Profile editor. Used once after the first login (setup) and later from the account menu.
- * Resolves with the saved profile, or null if closed without saving.
- */
+/** Profile setup and editing. Resolves with the saved profile, or null. */
 export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile | null> {
   return new Promise((resolve) => {
     let current = me;
@@ -22,7 +19,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     const err = (key: string) => { const e = h('p.field-error', { role: 'alert' }); errors.set(key, e); return e; };
     const showErr = (key: string, msg: string) => { const e = errors.get(key) ?? errors.get('form')!; e.textContent = msg; };
 
-    // Avatar
     const avatarBox = h('div.avatar-edit');
     const renderAvatar = () => {
       avatarBox.replaceChildren(avatarEl({ ...current, displayName: nameIn.value || current.displayName, favoriteColor: colorIn.value }, 72, true));
@@ -49,8 +45,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     });
     remove.addEventListener('click', async () => { current = await api.deleteAvatar(); renderAvatar(); });
 
-    // Handle. Accounts pick any free handle (new Discord accounts start with their Discord
-    // username); guests keep a random <Word><Food> one and can only shuffle it.
+    // Guests can only shuffle their random handle.
     const guest = me.provider === 'guest';
     const handleIn = h('input', { type: 'text', id: 'handle', value: me.handle, maxlength: HANDLE_MAX, spellcheck: 'false', autocapitalize: 'off', autocomplete: 'username', 'aria-label': 'Handle' });
     const handleState = h('small.handle-state', { 'aria-live': 'polite' });
@@ -85,7 +80,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     );
     if (!guest) checkHandle();
 
-    // Display name
     const nameIn = h('input', { type: 'text', id: 'display-name', value: me.displayName, maxlength: DISPLAY_NAME_MAX * 2, autocomplete: 'nickname', 'aria-label': 'Display name' });
     const counter = h('span.counter');
     const checkName = () => {
@@ -96,7 +90,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     };
     nameIn.addEventListener('input', checkName);
 
-    // Premium: name gradient and animated picture
     const premium = me.premium;
     const g = me.gradient ?? [me.favoriteColor, '#f4c25b'];
     const gradOn = h('input', { type: 'checkbox', id: 'gradient-on', 'aria-label': 'Use a name gradient' });
@@ -116,7 +109,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
         if (f.type !== 'image/gif') throw new Error('Animated pictures need to be GIFs.');
         if (f.size > AVATAR_ANIM_MAX_BYTES) throw new Error(`That GIF is too large. Keep it under ${Math.round(AVATAR_ANIM_MAX_BYTES / 1024)} KB.`);
         gifBtn.disabled = true;
-        // The GIF plays on your profile and in friends lists; everywhere else uses a still of its first frame.
         current = await api.uploadAnimatedAvatar(f);
         current = await api.uploadAvatar(await makeAvatar(f));
         showErr('gif', '');
@@ -131,7 +123,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       err('gradient'), err('gif'), gif,
     );
 
-    // Profile colour (no alpha)
     const colorIn = h('input', { type: 'color', id: 'fav-color', value: me.favoriteColor, 'aria-label': 'Profile colour' });
     const hexIn = h('input', { type: 'text', id: 'fav-hex', value: me.favoriteColor, maxlength: 7, spellcheck: 'false', 'aria-label': 'Profile colour hex' });
     colorIn.addEventListener('input', () => { hexIn.value = colorIn.value; showErr('favoriteColor', ''); renderAvatar(); });
@@ -140,7 +131,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       if (c) { colorIn.value = c; showErr('favoriteColor', ''); renderAvatar(); } else showErr('favoriteColor', 'Use 6 hex digits, like #f4c25b.');
     });
 
-    // Socials: the ones you've added, plus a + that opens a picker of the rest.
     const links: Record<string, string> = { ...me.links };
     const socials = h('div.social-list');
     const picker = h('div.social-picker', { hidden: true });

@@ -1,10 +1,12 @@
 import { DrawDoc, toWire } from '../core/document';
 import type { Op } from '../core/model';
+import type { TiledSurface } from '../core/tiles';
 import type { PublicProfile } from '../shared/profile';
 import type { ChatMsg, ClientMsg, LiveStroke, Member, RoomInfo, ServerMsg } from '../shared/protocol';
 
 export type RoomEvent =
   | { kind: 'ready'; doc: DrawDoc; first: boolean }
+  | { kind: 'progress'; done: number; total: number }
   | { kind: 'op'; op: Op; from: string }
   | { kind: 'members' }
   | { kind: 'chat'; msg: ChatMsg }
@@ -17,21 +19,19 @@ export type RoomEvent =
   | { kind: 'requests' }
   | { kind: 'error'; message: string };
 
-/**
- * Connection to a shared room. Incoming ops are applied in order (tile images are decoded first);
- * on reconnect the whole canvas is rebuilt from the server's op log.
- */
+const YIELD_MS = 24;
+
 export class RoomClient {
   info: RoomInfo | null = null;
   you = '';
   members: Member[] = [];
   chat: ChatMsg[] = [];
-  /** user id -> time their typing indicator expires */
   typing = new Map<string, number>();
   status: 'connecting' | 'waiting' | 'open' | 'reconnecting' | 'closed' | 'kicked' = 'connecting';
-  /** Hosts: people waiting to be let in. */
   requests: PublicProfile[] = [];
   doc: DrawDoc | null = null;
+  /** Pixels already drawn by a live preview of this op, so it isn't rendered twice. */
+  liveBuffer: (op: Op) => TiledSurface | undefined = () => undefined;
 
   private ws: WebSocket | null = null;
   private queue: Promise<void> = Promise.resolve();
@@ -39,7 +39,6 @@ export class RoomClient {
   private retry = 0;
   private everReady = false;
   private closedByUs = false;
-  private pinger = 0;
 
   constructor(public readonly id: string) { this.connect(); }
 
@@ -56,7 +55,6 @@ export class RoomClient {
     this.ws = ws;
     ws.onmessage = (ev) => this.receive(JSON.parse(String(ev.data)) as ServerMsg);
     ws.onclose = (ev) => {
-      clearInterval(this.pinger);
       if (this.ws !== ws) return;
       if (this.closedByUs || this.status === 'kicked' || ev.code === 4003) {
         if (this.status !== 'kicked') this.status = 'closed';
@@ -73,7 +71,6 @@ export class RoomClient {
       this.emit({ kind: 'status' });
       setTimeout(() => this.connect(), Math.min(10_000, 500 * 2 ** this.retry++));
     };
-    ws.onopen = () => { this.pinger = window.setInterval(() => this.send({ type: 'ping' }), 25_000); };
   }
 
   private receive(m: ServerMsg) {
@@ -87,7 +84,17 @@ export class RoomClient {
         this.retry = 0;
         const doc = new DrawDoc({ ...m.room.settings });
         this.queue = this.queue.then(async () => {
-          for (const op of m.ops) { await doc.prepare(op); doc.apply(op); }
+          let t = performance.now();
+          for (let i = 0; i < m.ops.length; i++) {
+            const op = m.ops[i];
+            await doc.prepare(op);
+            doc.apply(op, { record: false });
+            if (performance.now() - t > YIELD_MS) {
+              this.emit({ kind: 'progress', done: i + 1, total: m.ops.length });
+              await new Promise((r) => setTimeout(r));
+              t = performance.now();
+            }
+          }
           this.doc = doc;
           this.status = 'open';
           const first = !this.everReady;
@@ -101,7 +108,7 @@ export class RoomClient {
         this.queue = this.queue.then(async () => {
           if (!this.doc) return;
           await this.doc.prepare(m.op);
-          this.doc.apply(m.op);
+          this.doc.apply(m.op, { record: false, buffer: this.liveBuffer(m.op) });
           this.emit({ kind: 'op', op: m.op, from: m.from });
         });
         return;
@@ -154,12 +161,11 @@ export class RoomClient {
 
   send(m: ClientMsg) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m)); }
 
-  /** Hosts: let someone in, or not. */
   admit(user: string, allow: boolean) { this.send({ type: 'admit', user, allow }); }
 
   sendOp(op: Op) { this.send({ type: 'op', op: toWire(op) }); }
 
-  /** Rebuild from the server after our state diverged (e.g. an edit was refused). */
+  /** Our state diverged (an edit was refused): rebuild from the server. */
   resync() { this.ws?.close(); }
 
   close() { this.closedByUs = true; this.ws?.close(); }

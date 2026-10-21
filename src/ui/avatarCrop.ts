@@ -5,10 +5,9 @@ import { h } from './dom';
 const STAGE = 280;
 const MAX_ZOOM = 5;
 
-/** The part of the picture to keep, in image pixels (always a square). */
 export interface CropRect { x: number; y: number; size: number }
 
-/** Scale a picture down to a small square avatar (first frame only, so GIFs become static). */
+/** First frame only, so GIFs become stills. */
 export async function makeAvatar(file: Blob, crop?: CropRect): Promise<Blob> {
   const bmp = await createImageBitmap(file);
   const s = Math.min(bmp.width, bmp.height);
@@ -28,10 +27,7 @@ export async function makeAvatar(file: Blob, crop?: CropRect): Promise<Blob> {
   throw new Error('Couldn’t shrink that picture enough. Try a different one.');
 }
 
-/**
- * Let the person choose which part of a picture shows in the circle: drag to move, and zoom
- * with the slider, the mouse wheel or a pinch. Resolves with the crop, or null if cancelled.
- */
+/** Drag to move, zoom with the slider, wheel or pinch. Resolves with the crop, or null. */
 export async function cropAvatar(file: Blob): Promise<CropRect | null> {
   const bmp = await createImageBitmap(file);
   const { width: w, height: hgt } = bmp;
@@ -56,7 +52,6 @@ export async function cropAvatar(file: Blob): Promise<CropRect | null> {
     ctx.clearRect(0, 0, STAGE, STAGE);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(bmp, STAGE / 2 + ox - (w * scale) / 2, STAGE / 2 + oy - (hgt * scale) / 2, w * scale, hgt * scale);
-    // Dim everything outside the circle that other people will see.
     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.beginPath();
     ctx.rect(0, 0, STAGE, STAGE);
@@ -68,7 +63,6 @@ export async function cropAvatar(file: Blob): Promise<CropRect | null> {
     ctx.arc(STAGE / 2, STAGE / 2, STAGE / 2 - 1, 0, Math.PI * 2);
     ctx.stroke();
   };
-  /** Zoom while keeping the stage point (px, py) still. */
   const zoomTo = (z: number, px = STAGE / 2, py = STAGE / 2) => {
     const nz = Math.min(MAX_ZOOM, Math.max(1, z));
     const k = nz / zoom;
@@ -79,7 +73,6 @@ export async function cropAvatar(file: Blob): Promise<CropRect | null> {
     draw();
   };
 
-  // Drag with one pointer, pinch with two.
   const pts = new Map<number, { x: number; y: number }>();
   let pinch: { dist: number; zoom: number } | null = null;
   const local = (e: PointerEvent) => {

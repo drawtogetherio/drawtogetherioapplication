@@ -2,18 +2,12 @@ import type { Op } from './model';
 
 export interface HistoryEntry {
   label: string;
-  /** Ops that undo the change (apply in order). */
   undo: Op[];
-  /** Ops that redo it; filled in when the entry is undone. */
   redo: Op[];
-  /** Approximate memory cost in tiles, used to cap history size. */
   cost: number;
 }
 
-/**
- * Local undo/redo stack of op lists. Undoing applies ops like any other edit, so in a shared room
- * an undo reaches everyone. Each person has their own stack.
- */
+/** Per-person undo stack. Undoing applies ops like any edit, so it reaches the room. */
 export class History {
   private done: HistoryEntry[] = [];
   private undone: HistoryEntry[] = [];
