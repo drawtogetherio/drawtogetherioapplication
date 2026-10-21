@@ -235,12 +235,16 @@ export class App {
   }
 
   refreshRoom() {
-    const room = this.ed.room, d = this.dock;
+    const room = this.ed.room, local = this.session.local, d = this.dock;
     document.body.classList.toggle('spectating', !!room?.spectator);
     this.renderMenuDyn();
     clear(d);
-    d.hidden = !room;
-    if (!room) { this.membersPop.hidden = this.invitePop.hidden = true; return; }
+    d.hidden = !room && !local;
+    if (!room) {
+      this.membersPop.hidden = this.invitePop.hidden = true;
+      if (local) d.append(h('button.btn.share-btn', { html: icon('users', 16) + '<span>Share</span>', onclick: () => this.shareCanvas() }));
+      return;
+    }
     const ib = (name: string, title: string, fn: () => void) =>
       h('button.icon-btn', { title, 'aria-label': title, html: icon(name, 20), onclick: fn });
     if (room.status === 'connecting' || room.status === 'reconnecting') {
@@ -305,7 +309,12 @@ export class App {
   }
 
   async shareCanvas() {
-    const room = this.ed.room;
+    const room = this.ed.room, local = this.session.local;
+    if (!room && local) {
+      const share = await shareDialog(local.meta.share, false);
+      if (share) await this.session.shareLocal(share).catch((e) => this.toast((e as Error).message));
+      return;
+    }
     if (!room?.info) return;
     const wasPrivate = room.info.private;
     const share = await shareDialog(room.info.share, !wasPrivate);
@@ -319,7 +328,9 @@ export class App {
   private async makePrivate() {
     const room = this.ed.room;
     if (!room?.info) return;
-    if (room.members.length > 1 && !(await confirmDialog('Make this canvas private?', 'Everyone else will be disconnected.', 'Make private'))) return;
+    const live = room.info.ephemeral;
+    if (room.members.length > 1 && !(await confirmDialog(live ? 'Stop sharing?' : 'Make this canvas private?', 'Everyone else will be disconnected.', live ? 'Stop sharing' : 'Make private'))) return;
+    if (live) { this.session.unshare(); return; }
     try { await api.updateRoom(room.id, { share: { ...room.info.share, visibility: 'private' } }); } catch (e) { this.toast((e as Error).message); }
   }
 
@@ -518,15 +529,17 @@ export class App {
     } else if (s.server) {
       d.append(item('user', 'Log in to draw together…', () => { location.href = '/login?next=/app'; }), h('div.menu-sep'));
     }
-    if (ed.room) {
-      const info = ed.room.info, own = info?.ownerId === ed.room.you;
-      d.append(h('div.menu-label', {}, info?.name ?? 'Canvas'));
-      if (info?.private) {
+    if (ed.room || s.local) {
+      const info = ed.room?.info, own = info?.ownerId === ed.room?.you;
+      d.append(h('div.menu-label', {}, info?.name ?? s.local?.meta.name ?? 'Canvas'));
+      if (!ed.room) d.append(item('users', 'Share…', () => this.shareCanvas()));
+      else if (info?.private) {
         if (own) d.append(item('users', 'Share with friends…', () => this.shareCanvas()));
       } else if (own) {
-        d.append(item('users', 'Sharing…', () => this.shareCanvas()), item('lock', 'Make private', () => this.makePrivate()));
+        d.append(item('users', 'Sharing…', () => this.shareCanvas()), item('lock', info?.ephemeral ? 'Stop sharing' : 'Make private', () => this.makePrivate()));
       }
-      d.append(item('link', 'Share links…', () => this.shareLinks()), item('home', 'Back to home', () => s.leaveRoom()));
+      if (ed.room) d.append(item('link', 'Share links…', () => this.shareLinks()));
+      d.append(item('home', 'Back to home', () => s.leaveRoom()));
     } else if (me) {
       d.append(item('home', 'Home', () => s.showHome()));
       if (!this.ed.me?.guest) d.append(item('plus', 'Create new…', () => s.createNew()));

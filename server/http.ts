@@ -23,6 +23,7 @@ export async function body(req: Req, limit: number): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export async function jsonBody(req: Req): Promise<Record<string, unknown>> {
-  try { return JSON.parse((await body(req, 64 * 1024)).toString('utf8') || '{}'); } catch { throw new HttpError(400, 'Invalid request.'); }
+export async function jsonBody(req: Req, limit = 64 * 1024): Promise<Record<string, unknown>> {
+  const raw = await body(req, limit);
+  try { return JSON.parse(raw.toString('utf8') || '{}'); } catch { throw new HttpError(400, 'Invalid request.'); }
 }

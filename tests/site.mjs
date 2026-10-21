@@ -76,9 +76,9 @@ await ren.locator('.create-tile').click();
 await ren.locator('.home-card', { hasText: 'Draw alone' }).click();
 await ren.fill('#room-name', 'Dragon sketch');
 await ren.getByRole('button', { name: 'Create canvas' }).click();
-await ren.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
-check(await ren.evaluate(() => window.doodlehive.ed.room.info.private), 'Draw alone makes a private canvas');
-check(await ren.locator('.share-btn').isVisible(), 'private canvas shows a Share button');
+await ren.waitForFunction(() => window.doodlehive.session.local && !window.doodlehive.ed.room);
+check(true, 'Draw alone keeps the canvas on this device');
+check(await ren.locator('.share-btn').isVisible(), 'a device canvas shows a Share button');
 const box = await ren.locator('canvas.stage').boundingBox();
 await ren.mouse.move(box.x + 300, box.y + 300); await ren.mouse.down();
 for (let i = 0; i < 25; i++) await ren.mouse.move(box.x + 300 + i * 14, box.y + 300 + Math.sin(i / 3) * 60);
@@ -171,8 +171,7 @@ await ren.screenshot({ path: `${out}/05-home-ren.png` });
 
 // ---- Guests ----
 // Ren shares her canvas; Kai joins from the link without Discord and gets a random handle.
-const roomId0 = await ren.evaluate(async () => (await (await fetch('/api/projects')).json())[0].id);
-await ren.evaluate((id) => fetch('/api/rooms/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ private: false }) }), roomId0);
+const roomId0 = (await ren.evaluate(async () => (await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Dragon sketch', settings: { infinite: true }, share: { visibility: 'open' } }) })).json())).id;
 const kai = await newPage('kai');
 await kai.goto(`${base}/app?room=${roomId0}`);
 await kai.waitForURL(/\/login/);
@@ -194,7 +193,7 @@ await kai.screenshot({ path: `${out}/08-guest-home.png` });
 await ren.evaluate((id) => fetch('/api/rooms/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ private: true }) }), roomId0);
 
 // A private canvas can't be opened by someone else.
-const roomId = await ren.evaluate(async () => (await (await fetch('/api/projects')).json())[0].id);
+const roomId = roomId0;
 await bob.goto(`${base}/app?room=${roomId}`);
 await bob.waitForURL(/\/404/, { timeout: 6000 }).then(() => check(true, 'a private canvas shows the 404 page to someone else'), () => check(false, 'a private canvas shows the 404 page to someone else'));
 await bob.getByRole('heading', { name: 'Page not found' }).waitFor();

@@ -27,6 +27,8 @@ export interface RoomInfo {
   /** Same as share.visibility === 'private'. */
   private: boolean;
   share: ShareSettings;
+  /** Held on the server only while live (free hosts); everyone keeps a copy on their device. */
+  ephemeral: boolean;
   /** Secret in the watch-only link; hosts only. */
   watchKey?: string;
 }
@@ -41,6 +43,8 @@ export interface ProjectInfo {
   updatedAt: number;
   thumb: string | null;
   online: number;
+  /** Stored in this browser rather than on the server. */
+  local?: boolean;
 }
 
 export interface Member extends PublicProfile { role: Role }
@@ -88,7 +92,8 @@ export type ServerMsg =
   | { type: 'waiting' }
   | { type: 'join-request'; user: PublicProfile }
   | { type: 'join-request-gone'; user: string }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'closed'; message: string };
 
 export const CHAT_MAX = 500;
 export const ROOM_NAME_MAX = 48;

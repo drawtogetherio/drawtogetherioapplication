@@ -53,5 +53,7 @@ export const config = {
   /** Handles made admin at startup, comma separated. */
   adminHandles: (env.ADMIN_HANDLES || '').split(',').map((h) => h.trim()).filter(Boolean),
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
+  /** How long a free host's room waits for them to come back before it closes. */
+  ephemeralGraceMs: Number(env.EPHEMERAL_GRACE_MS) || 2 * 60_000,
   secureCookies: publicUrl.startsWith('https://'),
 };

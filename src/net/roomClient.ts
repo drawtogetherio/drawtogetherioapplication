@@ -58,7 +58,7 @@ export class RoomClient {
     ws.onmessage = (ev) => this.receive(JSON.parse(String(ev.data)) as ServerMsg);
     ws.onclose = (ev) => {
       if (this.ws !== ws) return;
-      if (this.closedByUs || this.status === 'kicked' || ev.code === 4003) {
+      if (this.closedByUs || this.status === 'kicked' || ev.code === 4003 || ev.code === 4004) {
         if (this.status !== 'kicked') this.status = 'closed';
         this.emit({ kind: 'status' });
         return;
@@ -157,6 +157,10 @@ export class RoomClient {
         this.emit({ kind: 'status' });
         return;
       case 'error':
+        this.emit({ kind: 'error', message: m.message });
+        return;
+      case 'closed':
+        this.status = 'closed';
         this.emit({ kind: 'error', message: m.message });
         return;
     }

@@ -8,7 +8,8 @@ import { config } from './config.ts';
 import {
   SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
-import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser, saveShare } from './rooms.ts';
+import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
+import { validOp } from './validate.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
@@ -394,7 +395,9 @@ async function route(req: Req, res: Res) {
   if (p === '/api/rooms' && m === 'POST') {
     const u = requireMember(req, 'make your own canvases');
     limit('rooms:' + u.id, 30, HOUR);
-    const b = await jsonBody(req);
+    const b = await jsonBody(req, 48 * 1024 * 1024);
+    const ops = Array.isArray(b.ops) ? b.ops : [];
+    if (ops.length > 200_000 || !ops.every(validOp)) throw new HttpError(400, 'That canvas can’t be uploaded.');
     const s = (b.settings ?? {}) as Record<string, unknown>;
     const infinite = !!s.infinite;
     const width = Math.round(Number(s.width)), height = Math.round(Number(s.height));
@@ -402,7 +405,8 @@ async function route(req: Req, res: Res) {
     const bg = s.background === null ? null : normalizeColor(String(s.background ?? '#ffffff'));
     const name = sanitizeDisplayName(String(b.name ?? '')).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
     const share = cleanShare(b.share ?? (b.private ? { visibility: 'private' } : undefined));
-    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, share);
+    // Free accounts keep canvases on their devices; the server only holds a room while it's live.
+    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, share, !isPremium(u), ops);
     return json(res, 200, info);
   }
   if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));
@@ -440,7 +444,9 @@ async function route(req: Req, res: Res) {
   if (mm && m === 'PATCH') {
     ownRoom(req, mm[1]);
     const b = await jsonBody(req);
-    const patch: { name?: string; share?: ShareSettings } = {};
+    const patch: { name?: string; share?: ShareSettings; ephemeral?: true } = {};
+    // One way: a free owner moves an old server canvas to their device.
+    if (b.ephemeral === true) { patch.ephemeral = true; db.prepare('UPDATE rooms SET ephemeral = 1 WHERE id = ?').run(mm[1]); }
     if (b.name !== undefined) {
       const name = sanitizeDisplayName(String(b.name)).slice(0, ROOM_NAME_MAX);
       if (!name) throw new HttpError(400, 'Give it a name.', 'name');
@@ -576,6 +582,7 @@ wss.on('connection', (ws) => { const w = ws as typeof ws & { alive?: boolean }; 
 
 sweep();
 setInterval(sweep, 10 * MINUTE).unref();
+resumeEphemeral(10 * MINUTE);
 
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {

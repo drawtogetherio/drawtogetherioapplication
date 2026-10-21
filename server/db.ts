@@ -72,6 +72,7 @@ addColumn('users', 'prefs', `TEXT NOT NULL DEFAULT '{}'`);
 addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
 addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
 addColumn('rooms', 'watch_key', 'TEXT');
+addColumn('rooms', 'ephemeral', 'INTEGER NOT NULL DEFAULT 0'); // free hosts' rooms: gone once the session ends
 addColumn('users', 'admin', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'banned', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'badges', `TEXT NOT NULL DEFAULT '[]'`);

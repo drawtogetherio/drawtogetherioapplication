@@ -44,6 +44,8 @@ export class Editor {
   me: MyProfile | null = null;
   targetFolder: string | null = null;
   room: RoomClient | null = null;
+  /** Every op this person commits, for the copy kept on the device. */
+  onOp: ((op: Op) => void) | null = null;
   prefs: Prefs = { ...DEFAULT_PREFS, keys: {} };
   settings: EditorSettings = {
     brush: { ...BRUSH_PRESETS[0].params }, brushPreset: 0,
@@ -174,6 +176,7 @@ export class Editor {
       const inv = this.doc.apply(op, i === 0 ? opts : {});
       if (!inv.length) return;
       this.room?.sendOp(op);
+      this.onOp?.(op);
       inverse.unshift(...inv);
     });
     if (inverse.length) this.doc.history.record({ label, undo: inverse, redo: [], cost: opsCost(inverse) });
@@ -187,6 +190,7 @@ export class Editor {
       const inv = this.doc.apply(op);
       if (!inv.length) continue;
       this.room?.sendOp(op);
+      this.onOp?.(op);
       inverse.unshift(...inv);
     }
     return inverse;

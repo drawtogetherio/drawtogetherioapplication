@@ -11,6 +11,7 @@ import { confirmDialog, modal, textDialog } from './dialogs';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
+import { LocalCanvas, deleteCanvas, listCanvases, patchCanvas } from '../io/localStore';
 
 // Fallback to the live event stream.
 const BANNER_KEY = 'doodlehive.support';
@@ -47,6 +48,7 @@ export class Home {
   private noticesPop = h('div.popover.notices-pop', { hidden: true });
   private notices: Notice[] = [];
   private banner = h('div.support-banner', { hidden: true });
+  private thumbUrls: string[] = [];
 
   constructor(private app: App) {
     this.accountBtn.addEventListener('click', () => { this.renderAccountMenu(); this.accountPop.hidden = !this.accountPop.hidden; });
@@ -367,9 +369,21 @@ export class Home {
 
   // ---- Projects ----
 
+  /** Server canvases and the ones kept in this browser, newest first. */
   async loadProjects() {
+    const me = this.app.ed.me!;
     let list: ProjectInfo[] = [];
     try { list = await api.projects(); } catch (e) { this.app.toast((e as Error).message); }
+    let local: LocalCanvas[] = [];
+    try { local = await listCanvases(me.id); } catch { /* storage blocked */ }
+    for (const u of this.thumbUrls) URL.revokeObjectURL(u);
+    this.thumbUrls = [];
+    for (const c of local) {
+      const thumb = c.thumb ? URL.createObjectURL(c.thumb) : null;
+      if (thumb) this.thumbUrls.push(thumb);
+      list.push({ id: c.id, name: c.name, private: !c.room, visibility: c.room ? c.share.visibility : 'private', createdAt: c.createdAt, updatedAt: c.updatedAt, thumb, online: 0, local: true });
+    }
+    list.sort((a, b) => b.updatedAt - a.updatedAt);
     clear(this.grid);
     const create = h('button.project-tile.create-tile', { type: 'button', onclick: () => this.app.session.createNew() },
       h('span.create-square', { html: icon('plus', 34) }), h('span.tile-name', {}, 'Create new'));
@@ -384,11 +398,15 @@ export class Home {
     else thumb.append(h('span.tile-blank', { html: icon('brush', 28) }));
     if (p.online) thumb.append(h('span.live-pill', {}, `${p.online} drawing`));
     const more = h('button.icon-btn.tile-more', { type: 'button', title: 'More', 'aria-label': `More options for ${p.name}`, html: icon('more', 18) });
+    const s = this.app.session, premium = !!this.app.ed.me?.premium;
+    // Free accounts keep canvases on this device; premium ones on the server. A tile on the other side moves when opened.
+    const open = () => p.local ? (premium ? s.moveLocalToServer(p.id) : s.openLocal(p.id)) : s.joinRoom(p.id, null, { takeLocal: !premium });
+    const where = p.local ? (p.private ? 'On this device' : VIS_LABEL[p.visibility]) : premium ? VIS_LABEL[p.visibility] : 'On the server';
     const tile = h('div.project-tile', {},
-      h('button.tile-open', { type: 'button', 'aria-label': `Open ${p.name}`, onclick: () => this.app.session.joinRoom(p.id) },
+      h('button.tile-open', { type: 'button', 'aria-label': `Open ${p.name}`, title: !!p.local !== premium ? '' : premium ? 'Moves to your account when opened' : 'Moves to this device when opened', onclick: open },
         thumb,
         h('span.tile-name', {}, p.name),
-        h('span.tile-meta', {}, h('span', { html: icon(VIS_ICON[p.visibility], 13) }), `${VIS_LABEL[p.visibility]} · ${timeAgo(p.updatedAt)}`),
+        h('span.tile-meta', {}, h('span', { html: icon(p.local && p.private ? 'file' : VIS_ICON[p.visibility], 13) }), `${where} · ${timeAgo(p.updatedAt)}`),
       ),
       more,
     );
@@ -401,7 +419,20 @@ export class Home {
     const close = () => pop.remove();
     const item = (ic: string, text: string, fn: () => void, cls = '') =>
       h(`button.menu-item${cls}` as 'button', { html: icon(ic, 17) + `<span>${text}</span>`, onclick: () => { close(); fn(); } });
-    pop.append(h('div.panel', {},
+    if (p.local) pop.append(h('div.panel', {},
+      item('rename', 'Rename', async () => {
+        const name = await textDialog('Rename canvas', p.name);
+        if (name == null) return;
+        await patchCanvas(p.id, { name }).catch(() => {});
+        this.loadProjects();
+      }),
+      item('trash', 'Delete', async () => {
+        if (!(await confirmDialog('Delete this canvas?', `“${p.name}” will be removed from this device.`, 'Delete'))) return;
+        await deleteCanvas(p.id).catch(() => {});
+        this.loadProjects();
+      }, '.danger'),
+    ));
+    else pop.append(h('div.panel', {},
       item('rename', 'Rename', async () => {
         const name = await textDialog('Rename canvas', p.name);
         if (name == null) return;

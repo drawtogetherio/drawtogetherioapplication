@@ -86,9 +86,21 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 **Home screen (v0.5)**
 - Friends on the left, online first (seen in the last ~75 s), with presence dots and status messages.
   Add by @handle, accept/decline requests. Premium friends show the star, their name gradient and GIF avatar.
-- Recent canvases in the middle with thumbnails; the first tile is always **Create new**, and the
-  **+** in the top-left does the same: choose **Draw alone** (a private canvas) or **Shared room**.
-- Every saved canvas is a room. Private ones only open for their owner; share one any time from the
+- Recent canvases in the middle with thumbnails; the first tile is always **Create new**: choose
+  **Draw alone** (a private canvas), **Shared room**, or paste a room link or code to join one.
+- **Where canvases live (v0.19).** Free accounts keep their canvases in the browser (IndexedDB), so
+  they only exist on that device and the server stores nothing for them. Premium accounts keep
+  canvases on the server, so every device sees them. A tile from the other side moves when opened:
+  a free account opening an old server canvas brings it to the device; a premium account opening a
+  device canvas uploads it to the account. Server canvases of free owners that go unused for 30 days
+  are deleted. Browsers may evict site data when the device is low on space (Safari after 7 days
+  without a visit), so a free account's canvases are only as safe as the device.
+- Sharing from a device canvas opens a **live-only room** seeded with the drawing. Everyone in it
+  keeps a copy on their own device as they draw. When the host leaves (or drops) the room stays up
+  for `EPHEMERAL_GRACE_MS` (2 minutes) so they can come back; then everyone is told the host left,
+  their copy stays, and the room is deleted from the server. **Stop sharing** in the canvas menu
+  ends it right away; the host keeps drawing on their copy.
+- Server canvases are rooms. Private ones only open for their owner; share one any time from the
   canvas or the tile's ⋯ menu (rename, share, make private, delete).
 - Sharing asks who can join: **Open link** (switches: logged-in users only, friends can join from
   their list, approve each join), **Friends only**, or **Unlisted** (friends just see you online).
@@ -161,6 +173,11 @@ server/        Node server: Discord OAuth, sessions, profiles, avatars, rooms (S
 inverse ops, so undo/redo are ops too and sync like anything else. Replaying the log reproduces
 the canvas pixel for pixel (`tests/replay.mjs`).
 
+**Device canvases.** `src/io/localStore.ts` keeps canvases and their op logs in IndexedDB per
+account; `LocalCopy` appends each op as it happens and makes thumbnails. A live-only room
+(`rooms.ephemeral`) is created with the device copy's ops as its seed, and every member's copy is
+rebuilt from the room's history on each (re)connect and then follows it op by op.
+
 **Rooms.** The server keeps each room's op log (in SQLite) and is the authority on who owns what:
 it stamps the author/owner on each op and rejects edits to someone else's layer unless the sender
 is a host. Clients apply their own changes immediately and the server relays them to everyone else;
@@ -206,6 +223,7 @@ node tests/smudge.mjs                         # smudge: drags paint, undo, selec
 DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
 DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
 DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete
+DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

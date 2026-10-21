@@ -37,6 +37,7 @@ log ever says `WARNING: no volume attached`, the volume is missing.
 | `DOWNLOAD_WINDOWS_URL` | optional, later: link to the Windows app download |
 | `PATREON_URL` | optional: where the home-screen support banner links (default `https://www.patreon.com/doodlehive`) |
 | `ADMIN_HANDLES` | your @handle (without the @; several separated by commas). Those accounts get the admin dashboard at `/admin` on their next login |
+| `EPHEMERAL_GRACE_MS` | optional: how long a free host's live-only room waits for them to come back before it closes (default 120000, 2 minutes) |
 
 Saving variables redeploys the service.
 

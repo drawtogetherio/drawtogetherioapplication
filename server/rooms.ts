@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { WebSocket } from 'ws';
+import { config } from './config.ts';
 import { db, getUser, keepGuest, newId, publicProfile, UserRow } from './db.ts';
 import { areFriends, notifyFriends, touch } from './social.ts';
 import { validLive, validOp } from './validate.ts';
@@ -34,6 +35,7 @@ export class Room {
   private allowed = new Set<string>();
   private seq = 0;
   private savedAt = 0;
+  private hostTimer: ReturnType<typeof setTimeout> | null = null;
   hosts: Set<string>;
 
   constructor(public info: RoomInfo, hosts: string[], private watchKey: string) {
@@ -129,6 +131,7 @@ export class Room {
     const c: Client = { ws, userId: user.id, spectator, lastChat: [], msgs: MSG_BURST, msgsAt: now, bytes: 0, bytesAt: now };
     const firstConnection = !this.connections(user.id);
     this.clients.add(c);
+    if (user.id === this.info.ownerId && this.hostTimer) { clearTimeout(this.hostTimer); this.hostTimer = null; }
 
     const fid = userFolderId(user.id);
     if (!spectator && !this.nodes.has(fid)) {
@@ -155,6 +158,7 @@ export class Room {
     ws.on('close', () => {
       this.clients.delete(c);
       if (!this.connections(c.userId)) {
+        if (this.info.ephemeral && c.userId === this.info.ownerId) this.hostGrace(config.ephemeralGraceMs);
         const u = getUser(c.userId);
         if (u) keepGuest(u);
         if (u && !this.kicked.has(c.userId)) {
@@ -360,8 +364,9 @@ export class Room {
 
   systemChat(text: string) { this.pushChat({ id: newId('m_'), from: 'system', text, at: Date.now(), system: true }); }
 
-  updateInfo(patch: { name?: string; share?: ShareSettings }) {
+  updateInfo(patch: { name?: string; share?: ShareSettings; ephemeral?: true }) {
     if (patch.name !== undefined) this.info.name = patch.name;
+    if (patch.ephemeral) this.info.ephemeral = true;
     if (patch.share) { this.info.share = patch.share; this.info.private = patch.share.visibility === 'private'; }
     if (this.info.private) {
       for (const c of this.clients) if (c.userId !== this.info.ownerId && !c.spectator) this.deny(c.ws, 'The owner made this canvas private.');
@@ -374,7 +379,18 @@ export class Room {
     for (const id of new Set([...this.clients].map((c) => c.userId))) notifyFriends(id);
   }
 
+  /** A free host's room closes for everyone once the host has been gone this long. */
+  hostGrace(ms: number) {
+    if (this.hostTimer) clearTimeout(this.hostTimer);
+    this.hostTimer = setTimeout(() => {
+      this.broadcast({ type: 'closed', message: 'The host left, so this room closed.' });
+      for (const c of this.clients) c.ws.close(4004, 'closed');
+      deleteRoom(this.info.id);
+    }, ms);
+  }
+
   close() {
+    if (this.hostTimer) clearTimeout(this.hostTimer);
     for (const c of this.clients) this.deny(c.ws, 'This canvas was deleted.');
     for (const w of this.waiting.values()) w.ws.close(4003, 'deleted');
     for (const t of this.leaving.values()) clearTimeout(t);
@@ -399,12 +415,24 @@ export function saveShare(id: string, s: ShareSettings) {
   db.prepare('UPDATE rooms SET visibility = ?, share = ?, private = ? WHERE id = ?').run(visibility, JSON.stringify(flags), visibility === 'private' ? 1 : 0, id);
 }
 
-export function createRoom(owner: UserRow, name: string, settings: DocSettings, share: ShareSettings): RoomInfo {
+/** `ops` seed the room with a canvas brought from a device; they become the owner's layers. */
+export function createRoom(owner: UserRow, name: string, settings: DocSettings, share: ShareSettings, ephemeral: boolean, ops: Op[] = []): RoomInfo {
   const id = randomId(8);
-  const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: share.visibility === 'private', share };
+  const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: share.visibility === 'private', share, ephemeral };
   const now = Date.now();
-  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, watch_key) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(id, name, owner.id, JSON.stringify(info.settings), now, now, randomId(16));
+  db.exec('BEGIN');
+  try {
+    db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, watch_key, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, name, owner.id, JSON.stringify(info.settings), now, now, randomId(16), ephemeral ? 1 : 0);
+    const ins = db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)');
+    ops.forEach((op, i) => {
+      op.author = owner.id;
+      if (op.t === 'layer.add') op.layer.owner = owner.id;
+      if (op.t === 'folder.add') { op.folder.owner = owner.id; delete op.folder.user; }
+      ins.run(id, i + 1, JSON.stringify(op));
+    });
+    db.exec('COMMIT');
+  } catch (e) { db.exec('ROLLBACK'); throw e; }
   saveShare(id, share);
   return info;
 }
@@ -412,13 +440,13 @@ export function createRoom(owner: UserRow, name: string, settings: DocSettings, 
 export function getRoom(id: string): Room | undefined {
   let r = rooms.get(id);
   if (r) return r;
-  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share, watch_key FROM rooms WHERE id = ?').get(id) as
-    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string; watch_key: string | null } | undefined;
+  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share, watch_key, ephemeral FROM rooms WHERE id = ?').get(id) as
+    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string; watch_key: string | null; ephemeral: number } | undefined;
   if (!row) return undefined;
   const share = cleanShare({ ...JSON.parse(row.share), visibility: row.visibility });
   let key = row.watch_key;
   if (!key) { key = randomId(16); db.prepare('UPDATE rooms SET watch_key = ? WHERE id = ?').run(key, id); }
-  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share }, JSON.parse(row.hosts), key);
+  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share, ephemeral: !!row.ephemeral }, JSON.parse(row.hosts), key);
   rooms.set(id, r);
   return r;
 }
@@ -436,13 +464,18 @@ export function roomsWithUser(userId: string): Room[] {
 
 export function projectsOf(userId: string, limit = 60): ProjectInfo[] {
   const rows = db.prepare(`SELECT id, name, visibility, created_at, updated_at, thumb_version, thumb IS NOT NULL AS has_thumb
-    FROM rooms WHERE owner_id = ? ORDER BY coalesce(updated_at, created_at) DESC LIMIT ?`).all(userId, limit) as
+    FROM rooms WHERE owner_id = ? AND ephemeral = 0 ORDER BY coalesce(updated_at, created_at) DESC LIMIT ?`).all(userId, limit) as
     { id: string; name: string; visibility: Visibility; created_at: number; updated_at: number | null; thumb_version: number; has_thumb: number }[];
   return rows.map((r) => ({
     id: r.id, name: r.name, private: r.visibility === 'private', visibility: r.visibility, createdAt: r.created_at, updatedAt: r.updated_at ?? r.created_at,
     thumb: r.has_thumb ? `/thumbs/${r.id}?v=${r.thumb_version}` : null,
     online: rooms.get(r.id)?.members().length ?? 0,
   }));
+}
+
+/** After a restart, free hosts get a while to come back before their rooms close. */
+export function resumeEphemeral(ms: number) {
+  for (const r of db.prepare('SELECT id FROM rooms WHERE ephemeral = 1').all() as { id: string }[]) getRoom(r.id)?.hostGrace(ms);
 }
 
 export function deleteRoom(id: string) {
