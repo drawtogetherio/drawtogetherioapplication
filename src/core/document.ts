@@ -3,6 +3,7 @@ import { History } from './history';
 import { DocSettings, FolderProps, LayerProps, Op, blendOp } from './model';
 import { TILE, TiledSurface, TileSnapshot } from './tiles';
 import { renderStroke } from '../engine/brush';
+import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
 import { floodFill } from '../engine/fill';
 import { renderRegion } from '../engine/compositor';
@@ -22,6 +23,8 @@ export interface ApplyOptions {
   buffer?: TiledSurface;
   /** False for other people's ops: no undo information is kept. */
   record?: boolean;
+  /** The edit is already on the layer; these are the tiles as they were before it. */
+  applied?: TileSnapshot;
 }
 
 type TilesOp = Extract<Op, { t: 'tiles' }>;
@@ -160,6 +163,13 @@ export class DrawDoc {
           }
           return dirty;
         });
+      }
+      case 'smudge': {
+        const layer = this.layer(op.layer);
+        if (!layer) return null;
+        const done = opts.applied;
+        const keys = done ? [...done.keys()] : smudgeKeys(layer.surface, op);
+        return this.pixelEdit(layer, keys, () => (done ? rectOfKeys(keys) : renderSmudge(layer.surface, op)), true, done);
       }
       case 'fill': {
         const layer = this.layer(op.layer);
@@ -315,8 +325,8 @@ export class DrawDoc {
   }
 
   /** Mutate a layer's pixels; returns the `tiles` op that restores them (none when not recording). */
-  private pixelEdit(layer: Layer, keys: string[], mutate: () => Rect | null, emit = true): Op[] {
-    const before: TileSnapshot | null = this.record ? layer.surface.snapshot(keys) : null;
+  private pixelEdit(layer: Layer, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot): Op[] {
+    const before: TileSnapshot | null = this.record ? taken ?? layer.surface.snapshot(keys) : null;
     const dirty = mutate();
     if (before) layer.surface.prune(layer.surface.snapshot(keys));
     if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), structure: true });

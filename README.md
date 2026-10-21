@@ -48,7 +48,7 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 ## Features
 
 **Drawing (v0.1)**
-- Fixed or **Unlimited** canvas; brush/eraser presets with pen pressure, smoothing, hardness, flow
+- Fixed or **Unlimited** canvas; brush/eraser presets with pen pressure, smoothing, hardness, flow; **Smudge** (S) drags and blends paint in place
 - Selection (rect/ellipse/lasso) with move/rotate/scale/flip; fill bucket; shapes; eyedropper
 - Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
 - R + drag rotates the view (Shift snaps 15°), Z + drag zooms
@@ -120,7 +120,7 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 src/core/      document model: ops, layers + folders, tiled surfaces, undo history
 src/engine/    brush dabs, flood fill, shapes, selection transforms, layer compositing
 src/view/      viewport (pan/zoom/rotate/flip), screen renderer, pointer + gesture input
-src/tools/     brush/eraser, fill, select/transform, shapes, eyedropper
+src/tools/     brush/eraser, smudge, fill, select/transform, shapes, eyedropper
 src/ui/        app shell, layers panel, dialogs, profile editor, room UI (members, chat, bubbles), session
 src/net/       HTTP API client, room WebSocket client
 src/shared/    code used by both client and server: profile rules, handle words, wire protocol
@@ -172,6 +172,7 @@ DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room
 DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, private canvases
 node tests/share.mjs                          # sharing, joining from friends, approval, invites, presence
 node tests/spectate.mjs                       # watch links: chat only, no edits or export, removable
+node tests/smudge.mjs                         # smudge: drags paint, undo, selection clip, room sync
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

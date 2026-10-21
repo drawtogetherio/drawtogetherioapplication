@@ -22,6 +22,9 @@ export const ERASER_PRESETS: BrushPreset[] = [
   { name: 'Soft Eraser', params: { ...base, size: 80, hardness: 0, flow: 0.25, spacing: 0.05, pressureSize: 0, pressureFlow: 1, smoothing: 0.2 } },
 ];
 
+/** Flow is the smudge strength. */
+export const SMUDGE_PARAMS: BrushParams = { ...base, size: 40, flow: 0.7, hardness: 0.5, spacing: 0.12, pressureSize: 0.5, pressureFlow: 0.5, minSize: 0.3, smoothing: 0.3 };
+
 const stampCache = new Map<string, HTMLCanvasElement>();
 
 function stampFor(color: string, hardness: number): HTMLCanvasElement {
@@ -54,18 +57,17 @@ export function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** Renders a stroke as dabs. Local drawing and remote replay use the same path, so pixels match. */
-export class StrokeRenderer {
+/** Walks a stroke's samples and places dabs at the brush spacing. Local drawing and replay share it, so pixels match. */
+export abstract class DabPath {
   private sx = 0; private sy = 0; private sp = 0; // smoothed input
   private lx = 0; private ly = 0; private lp = 0; // last dab position
   private rawX = 0; private rawY = 0; private rawP = 0;
   private started = false;
   private carry = 0; // distance travelled since the last dab
-  private stamp: HTMLCanvasElement | null;
 
-  constructor(private target: TiledSurface, private brush: BrushParams, private color: string) {
-    this.stamp = brush.hardness >= 0.98 ? null : stampFor(color, brush.hardness);
-  }
+  constructor(protected brush: BrushParams) {}
+
+  protected abstract dab(x: number, y: number, p: number): Rect | null;
 
   add(x: number, y: number, p: number): Rect | null {
     this.rawX = x; this.rawY = y; this.rawP = p;
@@ -105,15 +107,25 @@ export class StrokeRenderer {
     return dirty;
   }
 
-  private diameter(p: number) {
+  protected diameter(p: number) {
     const b = this.brush;
     return b.size * lerp(1, lerp(b.minSize, 1, p), b.pressureSize);
   }
 
-  private dab(x: number, y: number, p: number): Rect | null {
-    const b = this.brush;
+  protected strength(p: number) { return this.brush.flow * lerp(1, p, this.brush.pressureFlow); }
+}
+
+export class StrokeRenderer extends DabPath {
+  private stamp: HTMLCanvasElement | null;
+
+  constructor(private target: TiledSurface, brush: BrushParams, private color: string) {
+    super(brush);
+    this.stamp = brush.hardness >= 0.98 ? null : stampFor(color, brush.hardness);
+  }
+
+  protected dab(x: number, y: number, p: number): Rect | null {
     let d = this.diameter(p);
-    let a = b.flow * lerp(1, p, b.pressureFlow);
+    let a = this.strength(p);
     if (d < 1) { a *= d; d = 1; }
     if (a <= 0.001) return null;
     const r = d / 2;

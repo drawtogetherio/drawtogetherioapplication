@@ -53,6 +53,8 @@ export function validOp(op: unknown): op is Op {
   switch (op.t) {
     case 'stroke':
       return isId(op.layer) && isBool(op.erase) && isBrush(op.brush) && isColor(op.color) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
+    case 'smudge':
+      return isId(op.layer) && isBrush(op.brush) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
     case 'shape':
       return isId(op.layer) && ['line', 'rect', 'ellipse'].includes(op.shape as string) && nums([op.x0, op.y0, op.x1, op.y1], 4, 4)
         && inRange(op.width, 0, MAX_BRUSH) && isBool(op.fill) && isColor(op.color) && inRange(op.opacity, 0, 1) && isBool(op.erase) && isClip(op.clip);

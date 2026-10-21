@@ -70,6 +70,8 @@ export type Op =
       /** Raw samples, flat x, y, pressure; smoothing happens when rendering. */
       pts: number[]; clip?: Selection;
     })
+  /** Drags the layer's own pixels along the path; flow is the strength. */
+  | (OpBase & { t: 'smudge'; layer: string; brush: BrushParams; pts: number[]; clip?: Selection })
   | (OpBase & {
       t: 'shape'; layer: string; shape: ShapeKind; x0: number; y0: number; x1: number; y1: number;
       width: number; fill: boolean; color: string; opacity: number; erase: boolean; clip?: Selection;

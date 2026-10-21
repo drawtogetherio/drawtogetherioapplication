@@ -2,6 +2,7 @@ import { DrawDoc } from '../core/document';
 import { Editor, ToolId } from '../editor';
 import { BRUSH_PRESETS, ERASER_PRESETS } from '../engine/brush';
 import { BrushTool } from '../tools/brushTool';
+import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
 import { FillTool } from '../tools/fillTool';
 import { SelectTool } from '../tools/selectTool';
@@ -31,6 +32,7 @@ const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'select', 'shape'];
 const TOOLS: { id: ToolId; label: string; key: string }[] = [
   { id: 'brush', label: 'Brush', key: 'B' },
   { id: 'eraser', label: 'Eraser', key: 'E' },
+  { id: 'smudge', label: 'Smudge', key: 'S' },
   { id: 'fill', label: 'Fill', key: 'G' },
   { id: 'select', label: 'Selection', key: 'M' },
   { id: 'shape', label: 'Shapes', key: 'U' },
@@ -68,7 +70,7 @@ export class App {
     const ed = this.ed;
     this.select = new SelectTool(ed);
     ed.tools = {
-      brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), fill: new FillTool(ed),
+      brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), smudge: new SmudgeTool(ed), fill: new FillTool(ed),
       select: this.select, shape: new ShapeTool(ed), eyedropper: new EyedropperTool(ed),
     };
     this.input = new InputController(ed, ed.view.canvas);
@@ -287,6 +289,7 @@ export class App {
       if (this.toolPopFor && this.toolPopFor !== ed.toolId) this.closePicker();
       this.renderOptions();
       this.syncSliders();
+      this.opacitySlider.el.hidden = ed.toolId === 'smudge';
     } else if (w === 'color') {
       this.colorBtn.style.background = ed.color;
     } else if (w === 'history') {
@@ -405,6 +408,16 @@ export class App {
         toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? 1 : 0; }),
         toggle('Opacity', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? 1 : 0; }),
       );
+    } else if (ed.toolId === 'smudge') {
+      const params = st.smudge;
+      o.append(
+        range('Strength', params.flow, 0.05, 1, (v) => { params.flow = v; }),
+        range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
+        range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
+        label('Pressure:'),
+        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? 0.5 : 0; }),
+        toggle('Strength', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? 0.5 : 0; }),
+      );
     } else if (ed.toolId === 'fill') {
       o.append(
         range('Tolerance', st.fillTolerance, 0, 1, (v) => { st.fillTolerance = v; }),
@@ -522,7 +535,7 @@ export class App {
     this.select.overlay(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
     const hv = ed.hover;
-    if (hv && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser') && !this.input.altPick && !this.input.viewKey) {
+    if (hv && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser' || ed.toolId === 'smudge') && !this.input.altPick && !this.input.viewKey) {
       const p = M.transformPoint(hv);
       const r = Math.max(1, (ed.sizeParams.size * ed.view.viewport.zoom) / 2);
       ctx.lineWidth = 1;
@@ -613,7 +626,7 @@ export class App {
 
 const SHORTCUTS = `
 <strong>Shortcuts</strong>
-<div><kbd>B</kbd> Brush <kbd>E</kbd> Eraser <kbd>G</kbd> Fill <kbd>M</kbd> Select <kbd>U</kbd> Shapes <kbd>I</kbd> Eyedropper</div>
+<div><kbd>B</kbd> Brush <kbd>E</kbd> Eraser <kbd>S</kbd> Smudge <kbd>G</kbd> Fill <kbd>M</kbd> Select <kbd>U</kbd> Shapes <kbd>I</kbd> Eyedropper</div>
 <div><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo <kbd>[</kbd> <kbd>]</kbd> Brush size</div>
 <div><kbd>R</kbd> + drag rotate (Shift snaps) · <kbd>Z</kbd> + drag zoom · tap a selected tool for its options</div>
 <div><kbd>Space</kbd> drag to pan · <kbd>Ctrl</kbd>+scroll / pinch to zoom · <kbd>Alt</kbd>+scroll zoom</div>

@@ -1,7 +1,7 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost } from './core/document';
 import { Point, Rect, polyPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
-import { BRUSH_PRESETS, ERASER_PRESETS } from './engine/brush';
+import { BRUSH_PRESETS, ERASER_PRESETS, SMUDGE_PARAMS } from './engine/brush';
 import { CanvasView } from './view/canvasView';
 import type { Tool } from './tools/tool';
 import type { RoomClient } from './net/roomClient';
@@ -9,7 +9,7 @@ import type { MyProfile } from './shared/profile';
 import { userFolderId } from './shared/protocol';
 import type { ApplyOptions } from './core/document';
 
-export type ToolId = 'brush' | 'eraser' | 'fill' | 'select' | 'shape' | 'eyedropper';
+export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
 export type SelectMode = 'rect' | 'ellipse' | 'lasso';
 
 export interface EditorSettings {
@@ -17,6 +17,7 @@ export interface EditorSettings {
   brushPreset: number;
   eraser: BrushParams;
   eraserPreset: number;
+  smudge: BrushParams;
   fillTolerance: number; // 0..1
   fillSampleAll: boolean;
   fillExpand: number;
@@ -48,6 +49,7 @@ export class Editor {
   settings: EditorSettings = {
     brush: { ...BRUSH_PRESETS[0].params }, brushPreset: 0,
     eraser: { ...ERASER_PRESETS[0].params }, eraserPreset: 0,
+    smudge: { ...SMUDGE_PARAMS },
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
     pressureGamma: 1, fingerDraws: true, showBubbles: true, hideOthersFolders: false,
@@ -106,7 +108,10 @@ export class Editor {
     this.view.requestRender();
   }
 
-  get sizeParams(): BrushParams { return this.toolId === 'eraser' ? this.settings.eraser : this.settings.brush; }
+  get sizeParams(): BrushParams {
+    const s = this.settings;
+    return this.toolId === 'eraser' ? s.eraser : this.toolId === 'smudge' ? s.smudge : s.brush;
+  }
 
   setColor(c: string, commitRecent = false) {
     this.color = c;

@@ -264,7 +264,7 @@ export class Room {
     if (!validOp(op)) return 'Unknown edit';
     const host = this.isHost(userId);
     switch (op.t) {
-      case 'stroke': case 'shape': case 'fill': case 'transform': case 'tiles': case 'layer.clear': case 'layer.props': case 'layer.remove': case 'layer.merge':
+      case 'stroke': case 'smudge': case 'shape': case 'fill': case 'transform': case 'tiles': case 'layer.clear': case 'layer.props': case 'layer.remove': case 'layer.merge':
         return this.can(userId, op.layer) ? null : 'That layer belongs to someone else';
       case 'layer.add':
       case 'folder.add': {
