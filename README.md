@@ -31,7 +31,7 @@ npm start              # run the server; it also serves dist/ on PUBLIC_URL (see
 npm run typecheck      # client + server
 npm run build:preview  # one self-contained offline HTML file in preview/
 npm run admin -- users                          # list accounts
-npm run admin -- premium BurntoutPasta 30       # premium for 30 days (or "forever" / "off")
+npm run admin -- premium SomeHandle 30           # premium for 30 days (or "forever" / "off")
 ```
 
 ### Discord login
@@ -66,11 +66,11 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 **Accounts (v0.2)**
 - Discord login creates the account; no passwords stored
 - First login opens profile setup: picture, display name, handle, profile colour, socials
-- Handles: people with an account pick any free handle (2–24 letters, numbers, `_` and `.`, unique
+- Handles: people with an account pick any free handle (2–32 letters, numbers, `_`, `.` and `-`, unique
   ignoring case), with a live availability check. New Discord accounts start with their Discord username
   (plus a number if it's taken).
 - Guests: someone opening an invite link can **Join as guest** without Discord. They get a random
-  `<ArtWord><Food>` handle (e.g. `@BurntoutPasta`), can draw in rooms they're invited to, and can't make
+  `<ArtWord><Food>-<4 digits>` handle (e.g. `@BurntoutPasta-4821`, checked for clashes), can draw in rooms they're invited to, and can't make
   canvases, add friends or choose a handle. Guests are temporary: the cookie ends with the browser, the
   session lasts 3 hours past their last activity, and the account is removed at the next sweep after
   that (`server/sweep.ts`, every 10 minutes; admins can also sweep from the dashboard).

@@ -18,26 +18,26 @@ export const HANDLE_FOODS = [
   'Hotdog', 'Pizza', 'Scone', 'Crumpet', 'Kimchi', 'Tamale', 'Empanada', 'Flan', 'Risotto', 'Dango',
 ] as const;
 
-const RANDOM_HANDLE_RE = new RegExp(`^(${HANDLE_WORDS.join('|')})(${HANDLE_FOODS.join('|')})(\\d{0,4})$`);
+const RANDOM_HANDLE_RE = new RegExp(`^(${HANDLE_WORDS.join('|')})(${HANDLE_FOODS.join('|')})-\\d{4}$`);
 
 export function isRandomHandle(h: string) { return RANDOM_HANDLE_RE.test(h); }
 
 export const HANDLE_MIN = 2;
-export const HANDLE_MAX = 24;
+export const HANDLE_MAX = 32;
 
-/** 2–24 letters, numbers, underscores and periods, like Discord usernames. Returns the problem, or null. */
+/** 2–32 letters, numbers, underscores, periods and hyphens. Returns the problem, or null. */
 export function handleError(h: string): string | null {
   if (h.length < HANDLE_MIN) return `Use at least ${HANDLE_MIN} characters.`;
   if (h.length > HANDLE_MAX) return `Keep it to ${HANDLE_MAX} characters or fewer.`;
-  if (!/^[A-Za-z0-9_.]+$/.test(h)) return 'Use letters, numbers, underscores and periods only.';
-  if (/^\.|\.$|\.\./.test(h)) return 'Periods can’t start or end a handle, or sit next to each other.';
+  if (!/^[A-Za-z0-9_.-]+$/.test(h)) return 'Use letters, numbers, underscores, periods and hyphens only.';
+  if (/^[.-]|[.-]$|[.-]{2}/.test(h)) return 'Periods and hyphens can’t start or end a handle, or sit next to each other.';
   return null;
 }
 
 export function isValidHandle(h: string) { return handleError(h) === null; }
 
 export function suggestHandle(name: string): string {
-  const h = name.normalize('NFKD').replace(/[^A-Za-z0-9_.]/g, '').replace(/\.{2,}/g, '.').replace(/^\.+|\.+$/g, '').slice(0, HANDLE_MAX).replace(/\.+$/, '');
+  const h = name.normalize('NFKD').replace(/[^A-Za-z0-9_.-]/g, '').replace(/[.-]{2,}/g, '.').replace(/^[.-]+|[.-]+$/g, '').slice(0, HANDLE_MAX).replace(/[.-]+$/, '');
   return h.length >= HANDLE_MIN ? h : '';
 }
 

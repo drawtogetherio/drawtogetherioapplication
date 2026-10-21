@@ -147,13 +147,10 @@ export function handleTaken(handle: string, exceptUser?: string) {
   return !!row && row.id !== exceptUser;
 }
 
+/** Word + food + four digits, e.g. BurntoutMuffin-1592: 22 million combinations, each checked before use. */
 export function freeHandle(): string {
-  for (let i = 0; i < 40; i++) {
-    const h = HANDLE_WORDS[crypto.randomInt(HANDLE_WORDS.length)] + HANDLE_FOODS[crypto.randomInt(HANDLE_FOODS.length)];
-    if (!handleTaken(h)) return h;
-  }
   for (;;) {
-    const h = HANDLE_WORDS[crypto.randomInt(HANDLE_WORDS.length)] + HANDLE_FOODS[crypto.randomInt(HANDLE_FOODS.length)] + crypto.randomInt(10, 9999);
+    const h = `${HANDLE_WORDS[crypto.randomInt(HANDLE_WORDS.length)]}${HANDLE_FOODS[crypto.randomInt(HANDLE_FOODS.length)]}-${crypto.randomInt(1000, 10000)}`;
     if (!handleTaken(h)) return h;
   }
 }
@@ -163,7 +160,7 @@ export function freeHandleLike(base: string): string {
   if (!handleTaken(b)) return b;
   for (let n = 2; ; n++) {
     const tail = String(n);
-    const h = (b.slice(0, HANDLE_MAX - tail.length).replace(/\.+$/, '') || 'artist') + tail;
+    const h = (b.slice(0, HANDLE_MAX - tail.length).replace(/[.-]+$/, '') || 'artist') + tail;
     if (isValidHandle(h) && !handleTaken(h)) return h;
   }
 }

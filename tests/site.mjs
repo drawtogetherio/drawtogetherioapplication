@@ -182,7 +182,7 @@ await kai.getByRole('button', { name: 'Join as guest' }).click();
 await kai.waitForURL(/\/app/);
 await kai.waitForFunction(() => window.doodlehive?.ed.room?.status === 'open');
 const kaiMe = await kai.evaluate(() => window.doodlehive.ed.me);
-check(kaiMe.guest && /^[A-Z][a-z]+[A-Z][a-z]+\d*$/.test(kaiMe.handle), 'guest joins the room with a random handle: @' + kaiMe.handle);
+check(kaiMe.guest && /^[A-Z][a-z]+[A-Z][a-z]+-\d{4}$/.test(kaiMe.handle), 'guest joins the room with a random four-digit handle: @' + kaiMe.handle);
 const guestCreate = await kai.evaluate(async () => (await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'x', settings: { infinite: true } }) })).status);
 check(guestCreate === 403, 'guests can’t make canvases');
 const guestHandle = await kai.evaluate(async () => (await fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handle: 'kai_custom' }) })).status);
