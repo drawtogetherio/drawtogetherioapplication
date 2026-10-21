@@ -697,7 +697,7 @@ export class App {
     const x0 = Math.min(...xs) - 2, y0 = Math.min(...ys) - 2, x1 = Math.max(...xs) + 2, y1 = Math.max(...ys) + 2;
     ed.apply({
       t: 'shape', id: uid(), layer: ed.activeLayer, shape: 'rect', x0, y0, x1, y1,
-      width: 0, fill: true, color: '#000000', opacity: 1, erase: true, clip: sel,
+      width: 0, fill: true, color: '#000000', opacity: 1, erase: true, clip: sel, mask: ed.onMask,
     });
   }
 }

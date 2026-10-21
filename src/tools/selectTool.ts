@@ -10,6 +10,7 @@ interface Xform {
   sel: Selection; // original selection, before transforming
   float: Floating;
   b: Rect; // local bounds of the selection
+  mask?: true;
   T: Point; rot: number; sx: number; sy: number; // M = translate(T) rotate(rot) scale(sx,sy) translate(-centre)
 }
 
@@ -84,7 +85,7 @@ export class SelectTool implements Tool {
     if (!layer) return null;
     const b = rectFromPoints(sel.pts)!;
     this.xf = {
-      layerId: layer.props.id, sel, float: liftSelection(layer.surface, sel), b,
+      layerId: layer.props.id, sel, float: liftSelection(this.ed.editSurface(layer), sel), b, mask: this.ed.onMask,
       T: { x: b.x + b.w / 2, y: b.y + b.h / 2 }, rot: 0, sx: 1, sy: 1,
     };
     this.updateLive();
@@ -95,7 +96,7 @@ export class SelectTool implements Tool {
   private updateLive() {
     const x = this.xf!;
     this.ed.view.live = {
-      layerId: x.layerId, hole: polyPath(x.sel.pts),
+      layerId: x.layerId, hole: polyPath(x.sel.pts), mask: x.mask,
       floating: { canvas: x.float.canvas, x: x.float.x, y: x.float.y, m: this.matrix() },
     };
     this.ed.view.invalidate(null);
@@ -226,7 +227,7 @@ export class SelectTool implements Tool {
     this.ed.view.live = null;
     const m = this.matrix(x);
     if (!m.isIdentity && !isNearIdentity(m)) {
-      this.ed.apply({ t: 'transform', id: uid(), layer: x.layerId, sel: x.sel, m: [m.a, m.b, m.c, m.d, m.e, m.f] });
+      this.ed.apply({ t: 'transform', id: uid(), layer: x.layerId, sel: x.sel, m: [m.a, m.b, m.c, m.d, m.e, m.f], mask: x.mask });
       this.ed.selection = { pts: transformPoly(x.sel.pts, m) };
     }
     this.ed.view.invalidate(null);

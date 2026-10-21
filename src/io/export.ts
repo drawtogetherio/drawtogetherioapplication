@@ -1,3 +1,4 @@
+import type { TiledSurface } from '../core/tiles';
 import type { BlendMode as PsdBlend, Layer as PsdLayer } from 'ag-psd';
 import { DrawDoc } from '../core/document';
 import { Rect, ctx2d, makeCanvas, rectIntersect } from '../core/geom';
@@ -48,6 +49,19 @@ export async function exportDoc(doc: DrawDoc, o: ExportOptions) {
   return saveFile(blob, `${o.name}.${o.format}`);
 }
 
+/** The mask as PSD expects it: white shows, black hides. */
+function maskCanvas(mask: TiledSurface, r: Rect): HTMLCanvasElement {
+  const c = makeCanvas(r.w, r.h), ctx = ctx2d(c);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, r.w, r.h);
+  const m = mask.extract(r), mc = ctx2d(m);
+  mc.globalCompositeOperation = 'source-in';
+  mc.fillStyle = '#000';
+  mc.fillRect(0, 0, r.w, r.h);
+  ctx.drawImage(m, 0, 0);
+  return c;
+}
+
 async function buildPsd(doc: DrawDoc, r: Rect, paper: boolean, folderName?: (f: FolderProps) => string): Promise<ArrayBuffer> {
   const { writePsd } = await import('ag-psd'); // loaded only when exporting PSD
   const children: PsdLayer[] = [];
@@ -67,6 +81,7 @@ async function buildPsd(doc: DrawDoc, r: Rect, paper: boolean, folderName?: (f: 
     return {
       name: p.name, canvas: renderRegion(doc, r, { paper: false, only: p.id, raw: true }), left: 0, top: 0,
       opacity: p.opacity, blendMode: PSD_BLEND[p.blend], hidden: !p.visible, transparencyProtected: p.alphaLock,
+      clipping: !!p.clip, mask: n.mask ? { canvas: maskCanvas(n.mask, r), left: 0, top: 0 } : undefined,
     };
   });
   children.push(...build(null));

@@ -29,8 +29,8 @@ export class BrushTool implements Tool {
     this.pts = [];
     this.ed.view.live = {
       layerId: layer.props.id, buffer: this.buffer, bufferAlpha: params.opacity,
-      bufferOp: this.erase ? 'destination-out' : layer.props.alphaLock ? 'source-atop' : 'source-over',
-      clip: this.ed.clipPath(),
+      bufferOp: this.erase ? 'destination-out' : layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over',
+      clip: this.ed.clipPath(), mask: this.ed.onMask,
     };
     this.add(p);
   }
@@ -53,7 +53,7 @@ export class BrushTool implements Tool {
     if (!room || this.sent >= this.pts.length) return;
     room.send({ type: 'live', live: {
       stroke: this.id, layer: this.ed.activeLayer, erase: this.erase, brush: this.params, color: this.erase ? '#000000' : this.ed.color,
-      clip: this.ed.selection ?? undefined, pts: this.pts.slice(this.sent),
+      clip: this.ed.selection ?? undefined, mask: this.ed.onMask, pts: this.pts.slice(this.sent),
     } });
     this.sent = this.pts.length;
   }
@@ -70,7 +70,7 @@ export class BrushTool implements Tool {
     if (!this.erase) this.ed.pushRecent(this.ed.color);
     this.ed.apply({
       t: 'stroke', id: this.id, layer: this.ed.activeLayer, erase: this.erase, brush,
-      color: this.erase ? '#000000' : this.ed.color, pts: this.pts, clip: this.ed.selection ?? undefined,
+      color: this.erase ? '#000000' : this.ed.color, pts: this.pts, clip: this.ed.selection ?? undefined, mask: this.ed.onMask,
     }, { buffer });
   }
 

@@ -106,8 +106,8 @@ export class RoomUI {
           const layer = ed.doc.layer(l.layer);
           ed.view.remoteLive.set(l.stroke, {
             layerId: l.layer, buffer, bufferAlpha: l.brush.opacity,
-            bufferOp: l.erase ? 'destination-out' : layer?.props.alphaLock ? 'source-atop' : 'source-over',
-            clip: l.clip ? polyPath(l.clip.pts) : undefined,
+            bufferOp: l.erase ? 'destination-out' : layer?.props.alphaLock && !l.mask ? 'source-atop' : 'source-over',
+            clip: l.clip ? polyPath(l.clip.pts) : undefined, mask: l.mask,
           });
         }
         s.touched = Date.now();

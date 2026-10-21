@@ -24,6 +24,10 @@ export interface LayerProps {
   opacity: number; // 0..1
   blend: BlendMode;
   alphaLock: boolean; // paint only where the layer already has pixels
+  /** Shows only where the first unclipped layer below it in the same folder has pixels. */
+  clip?: boolean;
+  /** Has a mask: painted mask pixels hide the layer there, erasing them shows it again. */
+  mask?: boolean;
   /** Creator in a room; only they or a host may edit it. */
   owner?: string;
 }
@@ -71,7 +75,8 @@ export interface Selection { pts: number[] }
 
 export type ShapeKind = 'line' | 'rect' | 'ellipse';
 
-interface OpBase { id: string; author?: string }
+/** `mask: true` on a pixel edit aims it at the layer's mask instead of its pixels. */
+interface OpBase { id: string; author?: string; mask?: boolean }
 
 export type Op =
   | (OpBase & {
@@ -100,6 +105,8 @@ export type Op =
   | (OpBase & { t: 'layer.props'; layer: string; props: Partial<Omit<LayerProps, 'id' | 'owner'>> })
   | (OpBase & { t: 'layer.merge'; layer: string /* merged down into the layer below */ })
   | (OpBase & { t: 'layer.clear'; layer: string })
+  /** Bakes the mask into the pixels and drops it. */
+  | (OpBase & { t: 'layer.mask.apply'; layer: string })
   | (OpBase & { t: 'folder.add'; folder: FolderProps; parent: string | null; index: number })
   | (OpBase & { t: 'folder.remove'; folder: string })
   | (OpBase & { t: 'folder.props'; folder: string; props: Partial<Pick<FolderProps, 'name' | 'visible' | 'color'>> })

@@ -8,6 +8,7 @@ import type { RoomClient } from './net/roomClient';
 import type { MyProfile } from './shared/profile';
 import { userFolderId } from './shared/protocol';
 import type { ApplyOptions } from './core/document';
+import type { TiledSurface } from './core/tiles';
 import { DEFAULT_PREFS, Prefs } from './shared/prefs';
 
 export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
@@ -41,6 +42,8 @@ export class Editor {
   color = '#1b1b1f';
   recentColors: string[] = [];
   selection: Selection | null = null;
+  /** Edits go to the active layer's mask instead of its pixels. */
+  maskEdit = false;
   hover: (Point & { pointer: string }) | null = null;
   me: MyProfile | null = null;
   targetFolder: string | null = null;
@@ -127,11 +130,43 @@ export class Editor {
 
   get layer(): Layer | undefined { return this.doc.layer(this.activeLayer); }
 
-  setActiveLayer(id: string) {
+  setActiveLayer(id: string, mask = false) {
     this.commitPending();
     this.activeLayer = id;
+    this.maskEdit = mask;
     this.targetFolder = null;
     this.emit('layers');
+  }
+
+  /** True while the active layer's mask is being edited; the flag pixel ops carry. */
+  get onMask(): true | undefined { return this.maskEdit && !!this.layer?.mask ? true : undefined; }
+
+  /** The pixels the current edit lands on. */
+  editSurface(layer: Layer): TiledSurface { return this.maskEdit && layer.mask ? layer.mask : layer.surface; }
+
+  setMask(on: boolean) {
+    this.commitPending();
+    const l = this.layer;
+    if (!l || !this.canEdit(l.props.id) || !!l.mask === on) return;
+    this.run([{ t: 'layer.props', id: uid(), layer: l.props.id, props: { mask: on } }], on ? 'Add mask' : 'Delete mask');
+    this.maskEdit = on;
+    this.emit('layers');
+  }
+
+  applyMask() {
+    this.commitPending();
+    const l = this.layer;
+    if (!l?.mask || !this.canEdit(l.props.id)) return;
+    this.run([{ t: 'layer.mask.apply', id: uid(), layer: l.props.id }], 'Apply mask');
+    this.maskEdit = false;
+    this.emit('layers');
+  }
+
+  toggleClip() {
+    this.commitPending();
+    const l = this.layer;
+    if (!l || !this.canEdit(l.props.id)) return;
+    this.run([{ t: 'layer.props', id: uid(), layer: l.props.id, props: { clip: !l.props.clip } }], 'Clipping mask');
   }
 
   get readOnly() { return !!this.room?.spectator; }

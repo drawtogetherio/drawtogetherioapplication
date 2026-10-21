@@ -10,6 +10,7 @@ export class SmudgeTool implements Tool {
   private before: TileSnapshot | null = null;
   private pts: number[] = [];
   private layer = '';
+  private mask: true | undefined;
 
   constructor(private ed: Editor) {}
 
@@ -20,7 +21,8 @@ export class SmudgeTool implements Tool {
     if (!layer) return;
     this.layer = layer.props.id;
     this.before = new Map();
-    this.renderer = new SmudgeRenderer(layer.surface, { ...this.ed.settings.smudge }, this.ed.selection?.pts, this.before);
+    this.mask = this.ed.onMask;
+    this.renderer = new SmudgeRenderer(this.ed.editSurface(layer), { ...this.ed.settings.smudge }, this.ed.selection?.pts, this.before);
     this.pts = [];
     this.add(p);
   }
@@ -41,12 +43,13 @@ export class SmudgeTool implements Tool {
     const before = this.before!;
     this.renderer = null;
     this.before = null;
-    this.ed.apply({ t: 'smudge', id: uid(), layer: this.layer, brush: { ...this.ed.settings.smudge }, pts: this.pts, clip: this.ed.selection ?? undefined }, { applied: before });
+    this.ed.apply({ t: 'smudge', id: uid(), layer: this.layer, brush: { ...this.ed.settings.smudge }, pts: this.pts, clip: this.ed.selection ?? undefined, mask: this.mask }, { applied: before });
   }
 
   cancel() {
     if (!this.renderer) return;
-    this.ed.doc.layer(this.layer)?.surface.restore(this.before!);
+    const l = this.ed.doc.layer(this.layer);
+    (this.mask ? l?.mask : l?.surface)?.restore(this.before!);
     this.renderer = null;
     this.before = null;
     this.ed.view.invalidate(null);

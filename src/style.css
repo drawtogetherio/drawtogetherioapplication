@@ -184,6 +184,11 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .layer-row.active { border-color: var(--accent); background: var(--accent-tint); }
 .layer-row.hidden-layer .layer-thumb, .layer-row.hidden-layer .layer-name { opacity: 0.45; }
 .layer-row.dragging { z-index: 2; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); opacity: 0.95; }
+.layer-row.clipped { margin-left: 14px; }
+.clip-ic { color: var(--muted); display: inline-flex; margin-right: -4px; }
+.mask-thumb { background: #fff; margin-left: -6px; }
+.layer-thumb.editing { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mask-hint { color: var(--muted); font-size: 12px; }
 .layer-thumb {
   width: 56px; height: 56px; border-radius: 6px; flex: none; overflow: hidden;
   background: repeating-conic-gradient(#ddd 0 25%, #fff 0 50%) 0 0 / 12px 12px;

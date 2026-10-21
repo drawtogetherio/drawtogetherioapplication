@@ -10,7 +10,7 @@ import { floodFill } from '../engine/fill';
 import { renderRegion } from '../engine/compositor';
 import { clearSelection, floatingBounds, liftSelection, placeFloating, selectionBounds } from '../engine/transform';
 
-export interface Layer { kind: 'layer'; props: LayerProps; surface: TiledSurface; parent: string | null; shown: boolean }
+export interface Layer { kind: 'layer'; props: LayerProps; surface: TiledSurface; mask: TiledSurface | null; parent: string | null; shown: boolean }
 export interface Folder { kind: 'folder'; props: FolderProps; parent: string | null; shown: boolean }
 export type DocNode = Layer | Folder;
 
@@ -136,8 +136,8 @@ export class DrawDoc {
     switch (op.t) {
       case 'stroke':
       case 'shape': {
-        const layer = this.layer(op.layer);
-        if (!layer) return null;
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface) return null;
         let buf = opts.buffer;
         if (!buf) {
           buf = new TiledSurface();
@@ -145,15 +145,15 @@ export class DrawDoc {
           else renderShape(buf, op);
         }
         const alpha = op.t === 'stroke' ? op.brush.opacity : op.opacity;
-        const gco: GlobalCompositeOperation = op.erase ? 'destination-out' : layer.props.alphaLock ? 'source-atop' : 'source-over';
-        const keys = [...buf.tiles.keys()].filter((k) => !op.erase || layer.surface.tiles.has(k));
+        const gco: GlobalCompositeOperation = op.erase ? 'destination-out' : layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
+        const keys = [...buf.tiles.keys()].filter((k) => !op.erase || surface.tiles.has(k));
         const src = buf;
-        return this.pixelEdit(layer, keys, () => {
+        return this.pixelEdit(layer, surface, keys, () => {
           const clip = op.clip ? polyPath(op.clip.pts) : null;
           let dirty: Rect | null = null;
           for (const k of keys) {
             const [tx, ty] = TiledSurface.parse(k);
-            const c = ctx2d(layer.surface.ensure(tx, ty));
+            const c = ctx2d(surface.ensure(tx, ty));
             c.save();
             if (clip) { c.translate(-tx * TILE, -ty * TILE); c.clip(clip); c.setTransform(1, 0, 0, 1, 0, 0); }
             c.globalAlpha = alpha;
@@ -166,27 +166,27 @@ export class DrawDoc {
         });
       }
       case 'smudge': {
-        const layer = this.layer(op.layer);
-        if (!layer) return null;
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface) return null;
         const done = opts.applied;
-        const keys = done ? [...done.keys()] : smudgeKeys(layer.surface, op);
-        return this.pixelEdit(layer, keys, () => (done ? rectOfKeys(keys) : renderSmudge(layer.surface, op)), true, done);
+        const keys = done ? [...done.keys()] : smudgeKeys(surface, op);
+        return this.pixelEdit(layer, surface, keys, () => (done ? rectOfKeys(keys) : renderSmudge(surface, op)), true, done);
       }
       case 'effect': {
-        const layer = this.layer(op.layer);
-        if (!layer) return null;
-        let region = layer.surface.contentBounds();
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface) return null;
+        let region = surface.contentBounds();
         if (op.clip) region = region && rectIntersect(region, rectFromPoints(op.clip.pts)!);
         if (!region) return null;
         region = rectRoundOut(region, effectReach(op));
-        const src = layer.surface.extract(region);
+        const src = surface.extract(region);
         const img = ctx2d(src, true).getImageData(0, 0, region.w, region.h);
         applyEffect(img, op, region.x, region.y);
         ctx2d(src).putImageData(img, 0, 0);
         const r = region;
-        return this.pixelEdit(layer, layer.surface.keysIn(r), () => {
+        return this.pixelEdit(layer, surface, surface.keysIn(r), () => {
           const clip = op.clip ? polyPath(op.clip.pts) : null;
-          layer.surface.draw(r, (c) => {
+          surface.draw(r, (c) => {
             if (clip) c.clip(clip);
             c.clearRect(r.x, r.y, r.w, r.h);
             c.drawImage(src, r.x, r.y);
@@ -195,16 +195,16 @@ export class DrawDoc {
         });
       }
       case 'fill': {
-        const layer = this.layer(op.layer);
-        if (!layer) return null;
-        const sample = renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface) return null;
+        const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
         const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
         const fill = floodFill(data, op.region, op.x, op.y, op.color, op.tolerance, op.expand);
         if (!fill) return null;
-        const gco: GlobalCompositeOperation = layer.props.alphaLock ? 'source-atop' : 'source-over';
-        return this.pixelEdit(layer, layer.surface.keysIn(op.region), () => {
+        const gco: GlobalCompositeOperation = layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
+        return this.pixelEdit(layer, surface, surface.keysIn(op.region), () => {
           const clip = op.clip ? polyPath(op.clip.pts) : null;
-          layer.surface.draw(op.region, (c) => {
+          surface.draw(op.region, (c) => {
             if (clip) c.clip(clip);
             c.globalCompositeOperation = gco;
             c.drawImage(fill, op.region.x, op.region.y);
@@ -213,36 +213,54 @@ export class DrawDoc {
         });
       }
       case 'transform': {
-        const layer = this.layer(op.layer);
-        if (!layer) return null;
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface) return null;
         const m = new DOMMatrix(op.m);
-        const f = liftSelection(layer.surface, op.sel);
+        const f = liftSelection(surface, op.sel);
         const src = selectionBounds(op.sel);
         const dst = floatingBounds(f, m);
-        const keys = [...new Set([...layer.surface.keysIn(src), ...layer.surface.keysIn(dst)])];
-        return this.pixelEdit(layer, keys, () => {
-          clearSelection(layer.surface, op.sel);
-          placeFloating(layer.surface, f, m);
+        const keys = [...new Set([...surface.keysIn(src), ...surface.keysIn(dst)])];
+        return this.pixelEdit(layer, surface, keys, () => {
+          clearSelection(surface, op.sel);
+          placeFloating(surface, f, m);
           return rectUnion(src, dst);
         });
       }
       case 'tiles': {
-        const layer = this.layer(op.layer);
-        if (!layer || !op.img) return null;
-        return this.pixelEdit(layer, Object.keys(op.img), () => {
-          layer.surface.restore(new Map(Object.entries(op.img!)));
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface || !op.img) return null;
+        return this.pixelEdit(layer, surface, Object.keys(op.img), () => {
+          surface.restore(new Map(Object.entries(op.img!)));
           return rectOfKeys(Object.keys(op.img!));
         });
       }
       case 'layer.clear': {
+        const layer = this.layer(op.layer), surface = this.target(layer, op);
+        if (!layer || !surface) return null;
+        return this.pixelEdit(layer, surface, [...surface.tiles.keys()], () => { surface.clear(); return null; });
+      }
+      case 'layer.mask.apply': {
         const layer = this.layer(op.layer);
-        if (!layer) return null;
-        return this.pixelEdit(layer, [...layer.surface.tiles.keys()], () => { layer.surface.clear(); return null; });
+        if (!layer?.mask) return null;
+        const mask = layer.mask;
+        const keys = [...layer.surface.tiles.keys()].filter((k) => mask.tiles.has(k));
+        const inv = this.pixelEdit(layer, layer.surface, keys, () => {
+          for (const k of keys) {
+            const c = ctx2d(layer.surface.tiles.get(k)!);
+            c.save();
+            c.globalCompositeOperation = 'destination-out';
+            c.drawImage(mask.tiles.get(k)!, 0, 0);
+            c.restore();
+          }
+          return rectOfKeys(keys);
+        }, false);
+        return [...this.dropMask(layer), ...inv];
       }
       case 'layer.add': {
         if (this.nodes.has(op.layer.id) || (op.parent && !this.folder(op.parent))) return null;
         const src = op.copyOf ? this.layer(op.copyOf) : undefined;
-        const layer: Layer = { kind: 'layer', props: { ...op.layer }, surface: src ? src.surface.clone() : new TiledSurface(), parent: null, shown: true };
+        const mask = src?.mask ? src.mask.clone() : op.layer.mask ? new TiledSurface() : null;
+        const layer: Layer = { kind: 'layer', props: { ...op.layer, mask: !!mask }, surface: src ? src.surface.clone() : new TiledSurface(), mask, parent: null, shown: true };
         this.nodes.set(layer.props.id, layer);
         this.insert(layer.props.id, op.parent, op.index);
         this.structural(layer.surface.size ? null : undefined);
@@ -260,11 +278,15 @@ export class DrawDoc {
       case 'layer.props': {
         const layer = this.layer(op.layer);
         if (!layer) return null;
+        const { mask, ...rest } = op.props;
         const before: Record<string, unknown> = {};
-        for (const k of Object.keys(op.props)) before[k] = (layer.props as unknown as Record<string, unknown>)[k];
-        Object.assign(layer.props, op.props);
+        for (const k of Object.keys(rest)) before[k] = (layer.props as unknown as Record<string, unknown>)[k];
+        Object.assign(layer.props, rest);
+        const inv: Op[] = Object.keys(rest).length ? [{ t: 'layer.props', id: uid(), layer: op.layer, props: before }] : [];
+        if (mask === false && layer.mask) inv.push(...this.dropMask(layer));
+        else if (mask === true && !layer.mask) { layer.mask = new TiledSurface(); layer.props.mask = true; inv.push({ t: 'layer.props', id: uid(), layer: op.layer, props: { mask: false } }); }
         this.structural(null);
-        return [{ t: 'layer.props', id: uid(), layer: op.layer, props: before }];
+        return inv;
       }
       case 'layer.merge': {
         const upper = this.layer(op.layer);
@@ -272,14 +294,15 @@ export class DrawDoc {
         if (!upper || !lower) return null;
         const inv = this.record ? this.recreate(upper) : [];
         const keys = [...upper.surface.tiles.keys()];
-        const lowerInv = this.pixelEdit(lower, keys, () => {
+        const lowerInv = this.pixelEdit(lower, lower.surface, keys, () => {
           for (const k of keys) {
             const [tx, ty] = TiledSurface.parse(k);
             const c = ctx2d(lower.surface.ensure(tx, ty));
             c.save();
             c.globalAlpha = upper.props.opacity;
-            c.globalCompositeOperation = lower.props.alphaLock ? 'source-atop' : blendOp(upper.props.blend);
-            c.drawImage(upper.surface.tiles.get(k)!, 0, 0);
+            // A clipped layer only ever showed where the lower one has pixels, so it lands the same way.
+            c.globalCompositeOperation = lower.props.alphaLock || upper.props.clip ? 'source-atop' : blendOp(upper.props.blend);
+            c.drawImage(maskedTile(upper, k), 0, 0);
             c.restore();
           }
           return null;
@@ -340,6 +363,7 @@ export class DrawDoc {
       if (n.surface.size) {
         ops.push({ t: 'tiles', id: uid(), layer: n.props.id, tiles: {}, img: Object.fromEntries(n.surface.snapshot(n.surface.tiles.keys())) });
       }
+      if (n.mask?.size) ops.push({ t: 'tiles', id: uid(), layer: n.props.id, mask: true, tiles: {}, img: Object.fromEntries(n.mask.snapshot(n.mask.tiles.keys())) });
       return ops;
     }
     const ops: Op[] = [{ t: 'folder.add', id: uid(), folder: { ...n.props }, parent, index }];
@@ -347,14 +371,34 @@ export class DrawDoc {
     return ops;
   }
 
-  /** Mutate a layer's pixels; returns the `tiles` op that restores them (none when not recording). */
-  private pixelEdit(layer: Layer, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot): Op[] {
-    const before: TileSnapshot | null = this.record ? taken ?? layer.surface.snapshot(keys) : null;
+  /** The pixels an op edits: the layer's own, or its mask. */
+  private target(layer: Layer | undefined, op: Op): TiledSurface | null {
+    if (!layer) return null;
+    return op.mask ? layer.mask : layer.surface;
+  }
+
+  /** Removes the mask; returns the ops that bring it back (none when not recording). */
+  private dropMask(layer: Layer): Op[] {
+    const mask = layer.mask!;
+    const inv: Op[] = [];
+    if (this.record) {
+      inv.push({ t: 'layer.props', id: uid(), layer: layer.props.id, props: { mask: true } });
+      if (mask.size) inv.push({ t: 'tiles', id: uid(), layer: layer.props.id, mask: true, tiles: {}, img: Object.fromEntries(mask.snapshot(mask.tiles.keys())) });
+    }
+    layer.mask = null;
+    layer.props.mask = false;
+    return inv;
+  }
+
+  /** Mutate a layer's pixels (or its mask); returns the `tiles` op that restores them (none when not recording). */
+  private pixelEdit(layer: Layer, surface: TiledSurface, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot): Op[] {
+    const before: TileSnapshot | null = this.record ? taken ?? surface.snapshot(keys) : null;
     const dirty = mutate();
-    if (before) layer.surface.prune(layer.surface.snapshot(keys));
+    if (before) surface.prune(surface.snapshot(keys));
     if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), structure: true });
     if (!before) return [];
     const inv: TilesOp = { t: 'tiles', id: uid(), layer: layer.props.id, tiles: {}, img: Object.fromEntries(before) };
+    if (surface === layer.mask) inv.mask = true;
     return [inv];
   }
 
@@ -363,6 +407,17 @@ export class DrawDoc {
     this.rebuild();
     this.emit({ rect: dirty === undefined ? { x: 0, y: 0, w: 0, h: 0 } : null, structure: true });
   }
+}
+
+/** A layer tile with its mask applied, as the layer shows on screen. */
+function maskedTile(layer: Layer, k: string): HTMLCanvasElement {
+  const t = layer.surface.tiles.get(k)!, m = layer.mask?.tiles.get(k);
+  if (!m) return t;
+  const c = makeCanvas(TILE, TILE), ctx = ctx2d(c);
+  ctx.drawImage(t, 0, 0);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.drawImage(m, 0, 0);
+  return c;
 }
 
 function rectOfKeys(keys: string[]): Rect | null {

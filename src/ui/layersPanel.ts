@@ -20,10 +20,15 @@ export class LayersPanel {
   private blend: HTMLSelectElement;
   private opacity: Slider;
   private lockBtn: HTMLButtonElement;
+  private clipBtn: HTMLButtonElement;
+  private maskBtn: HTMLButtonElement;
+  private applyMaskBtn: HTMLButtonElement;
+  private maskHint = h('div.mask-hint', { hidden: true }, 'Editing the mask: paint hides, erase shows.');
   private footer: HTMLElement;
   private folderFooter: HTMLElement;
   private dropLine = h('div.drop-line', { hidden: true });
   private thumbs = new Map<string, HTMLCanvasElement>();
+  private maskThumbs = new Map<string, HTMLCanvasElement>();
   private thumbTimer = 0;
   private collapsed = new Set<string>();
   selectedFolder: string | null = null;
@@ -45,6 +50,9 @@ export class LayersPanel {
     });
 
     const act = (name: string, title: string, fn: () => void) => h('button.icon-btn', { title, 'aria-label': title, html: icon(name, 18), onclick: fn });
+    this.clipBtn = act('clipMask', 'Clip to the layer below', () => this.ed.toggleClip());
+    this.maskBtn = act('maskIc', 'Add mask', () => this.ed.setMask(!this.ed.layer?.mask));
+    this.applyMaskBtn = act('check', 'Apply mask to pixels', () => this.ed.applyMask());
     this.footer = h('div.layer-props', {},
       h('div.row', {}, this.blend),
       this.opacity.el,
@@ -53,10 +61,11 @@ export class LayersPanel {
         act('copy', 'Duplicate layer', () => this.ed.duplicateLayer()),
         act('merge', 'Merge down', () => this.merge()),
         act('sparkle', 'Layer effects', () => effectsBar(this.ed)),
-        this.lockBtn,
-        act('clear', 'Clear layer', () => { this.ed.commitPending(); if (this.ed.layer) this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer }); }),
+        this.lockBtn, this.clipBtn, this.maskBtn, this.applyMaskBtn,
+        act('clear', 'Clear layer', () => { this.ed.commitPending(); if (this.ed.layer) this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer, mask: this.ed.onMask }); }),
         act('trash', 'Delete layer', () => this.removeLayer()),
       ),
+      this.maskHint,
     );
     this.folderFooter = h('div.layer-props', { hidden: true },
       h('div.row.layer-actions', {},
@@ -190,6 +199,11 @@ export class LayersPanel {
       this.blend.value = l.props.blend;
       if (!this.pendingOpacity) this.opacity.set(l.props.opacity);
       this.lockBtn.classList.toggle('on', l.props.alphaLock);
+      this.clipBtn.classList.toggle('on', !!l.props.clip);
+      this.maskBtn.classList.toggle('on', !!l.mask);
+      this.maskBtn.title = this.maskBtn.ariaLabel = l.mask ? 'Delete mask' : 'Add mask';
+      this.applyMaskBtn.hidden = !l.mask;
+      this.maskHint.hidden = !ed.onMask;
     }
   }
 
@@ -224,10 +238,13 @@ export class LayersPanel {
     const p = l.props;
     const mine = ed.canEdit(p.id);
     const vis = this.visButton(p.visible, mine, () => ed.apply({ t: 'layer.props', id: uid(), layer: p.id, props: { visible: !p.visible } }));
-    const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : ''].filter(Boolean).join(' · ');
+    const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : '', p.clip ? 'Clipped' : ''].filter(Boolean).join(' · ');
     const active = p.id === ed.activeLayer && !this.selectedFolder;
-    const row = h(`div.layer-row${active ? '.active' : ''}${l.shown ? '' : '.hidden-layer'}` as 'div', { 'data-id': p.id, style: this.indent(depth) },
-      h('div.layer-thumb', {}, this.thumb(l)),
+    const onMask = active && ed.onMask;
+    const row = h(`div.layer-row${active ? '.active' : ''}${l.shown ? '' : '.hidden-layer'}${p.clip ? '.clipped' : ''}` as 'div', { 'data-id': p.id, style: this.indent(depth) },
+      p.clip ? h('span.clip-ic', { html: icon('clipMask', 14) }) : null,
+      h(`div.layer-thumb${active && !onMask ? '.editing' : ''}` as 'div', { title: l.mask ? 'Edit pixels' : null }, this.thumb(l)),
+      l.mask ? h(`div.layer-thumb.mask-thumb${onMask ? '.editing' : ''}` as 'div', { title: 'Edit mask', 'data-mask': '1' }, this.maskThumb(l)) : null,
       h('div.layer-name', {}, h('div', {}, p.name), meta ? h('small', {}, meta) : null),
       mine ? null : h('span.lock-ic', { title: `Belongs to ${ed.ownerName(p.owner)}`, html: icon('lock', 14) }),
       vis,
@@ -246,13 +263,14 @@ export class LayersPanel {
     return b;
   }
 
-  private select(n: DocNode) {
+  private select(n: DocNode, mask = false) {
     if (n.kind === 'folder') { this.selectedFolder = n.props.id; this.ed.targetFolder = n.props.id; this.render(); }
-    else { this.selectedFolder = null; this.ed.setActiveLayer(n.props.id); }
+    else { this.selectedFolder = null; this.ed.setActiveLayer(n.props.id, mask); }
   }
 
   private dragStart(e: PointerEvent, row: HTMLElement, node: DocNode) {
     if ((e.target as HTMLElement).closest('.vis, .chev')) return;
+    const mask = !!(e.target as HTMLElement).closest('[data-mask]');
     const y0 = e.clientY;
     let dragging = false;
     let target: { parent: string | null; index: number } | null = null;
@@ -271,7 +289,7 @@ export class LayersPanel {
       row.removeEventListener('pointercancel', up);
       this.dropLine.hidden = true;
       this.list.querySelector('.drop-into')?.classList.remove('drop-into');
-      if (!dragging) { this.select(node); return; }
+      if (!dragging) { this.select(node, mask); return; }
       row.style.transform = '';
       row.classList.remove('dragging');
       if (target) this.ed.apply({ t: 'node.move', id: uid(), node: node.props.id, parent: target.parent, index: target.index });
@@ -330,6 +348,16 @@ export class LayersPanel {
     return c;
   }
 
+  private maskThumb(l: Layer): HTMLCanvasElement {
+    let c = this.maskThumbs.get(l.props.id);
+    if (!c) {
+      c = h('canvas', { width: THUMB, height: THUMB });
+      this.maskThumbs.set(l.props.id, c);
+      this.drawThumb(l, c, true);
+    }
+    return c;
+  }
+
   private scheduleThumbs() {
     clearTimeout(this.thumbTimer);
     this.thumbTimer = window.setTimeout(() => {
@@ -337,21 +365,33 @@ export class LayersPanel {
         const l = this.ed.doc.layer(id);
         if (l) this.drawThumb(l, c); else this.thumbs.delete(id);
       }
+      for (const [id, c] of this.maskThumbs) {
+        const l = this.ed.doc.layer(id);
+        if (l?.mask) this.drawThumb(l, c, true); else this.maskThumbs.delete(id);
+      }
     }, 300);
   }
 
-  private drawThumb(l: Layer, c: HTMLCanvasElement) {
+  /** The layer's pixels, or its mask as black on white (black hides, like other apps show it). */
+  private drawThumb(l: Layer, c: HTMLCanvasElement, mask = false) {
     const s = this.ed.doc.settings;
     const area: Rect | null = s.infinite ? this.ed.doc.bounds() : { x: 0, y: 0, w: s.width, h: s.height };
     const ctx = ctx2d(c);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, THUMB, THUMB);
+    if (mask) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, THUMB, THUMB); }
     if (!area) return;
     const k = Math.min(THUMB / area.w, THUMB / area.h);
     ctx.translate((THUMB - area.w * k) / 2, (THUMB - area.h * k) / 2);
     ctx.scale(k, k);
     ctx.translate(-area.x, -area.y);
     ctx.imageSmoothingQuality = 'high';
-    l.surface.drawTo(ctx, area);
+    if (!mask) { l.surface.drawTo(ctx, area); return; }
+    const m = l.mask!.extract(area);
+    const mc = ctx2d(m);
+    mc.globalCompositeOperation = 'source-in';
+    mc.fillStyle = '#000';
+    mc.fillRect(0, 0, area.w, area.h);
+    ctx.drawImage(m, area.x, area.y);
   }
 }

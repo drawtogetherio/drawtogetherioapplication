@@ -26,7 +26,7 @@ export class FillTool implements Tool {
     ed.apply({
       t: 'fill', id: uid(), layer: ed.activeLayer, x: Math.floor(p.x), y: Math.floor(p.y), color: ed.color,
       tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, expand: st.fillExpand, region,
-      clip: ed.selection ?? undefined,
+      clip: ed.selection ?? undefined, mask: ed.onMask,
     });
   }
 }

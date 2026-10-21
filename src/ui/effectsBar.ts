@@ -14,25 +14,26 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
   ed.commitPending();
   const layer = ed.layer;
   if (!layer || !ed.canEdit(layer.props.id)) { ed.toast('Pick a layer of yours first'); return; }
+  const surface = ed.editSurface(layer), mask = ed.onMask;
   const view = ed.view, vp = view.viewport, stage = view.canvas.parentElement!;
   const sel = ed.selection;
   const clip = sel ? polyPath(sel.pts) : null;
   const selBox = sel ? rectFromPoints(sel.pts) : null;
   const state = { effect: initial, amount: 0.3, angle: 0 };
-  const op = (): EffectOp => ({ t: 'effect', id: uid(), layer: layer.props.id, effect: state.effect, amount: state.amount, angle: state.effect === 'motion' ? state.angle : undefined, clip: sel ?? undefined });
+  const op = (): EffectOp => ({ t: 'effect', id: uid(), layer: layer.props.id, effect: state.effect, amount: state.amount, angle: state.effect === 'motion' ? state.angle : undefined, clip: sel ?? undefined, mask });
 
   let timer = 0;
   const render = () => {
     clearTimeout(timer);
     timer = window.setTimeout(() => {
       const o = op(), reach = effectReach(o);
-      let region = layer.surface.contentBounds();
+      let region = surface.contentBounds();
       if (region && selBox) region = rectIntersect(region, selBox);
       // Only what is on screen gets processed, so the slider stays quick on big layers.
       if (region) region = rectIntersect(region, rectRoundOut(transformRect(vp.matrix().inverse(), { x: 0, y: 0, w: vp.w, h: vp.h }), reach));
       if (!region) { view.live = null; view.invalidate(null); return; }
       const r = rectRoundOut(region, reach);
-      const src = layer.surface.extract(r);
+      const src = surface.extract(r);
       const img = ctx2d(src, true).getImageData(0, 0, r.w, r.h);
       applyEffect(img, { ...o, id: 'preview' }, r.x, r.y);
       const c = ctx2d(src);
@@ -41,7 +42,7 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
       const hole = new Path2D();
       hole.rect(r.x, r.y, r.w, r.h);
       // The processed pixels replace the layer's there, so the original never shows through.
-      view.live = { layerId: layer.props.id, hole: clip ?? hole, floating: { canvas: src, x: r.x, y: r.y, m: new DOMMatrix() } };
+      view.live = { layerId: layer.props.id, hole: clip ?? hole, floating: { canvas: src, x: r.x, y: r.y, m: new DOMMatrix() }, mask };
       view.invalidate(null);
     }, 40);
   };

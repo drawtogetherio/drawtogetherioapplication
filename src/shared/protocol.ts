@@ -59,6 +59,7 @@ export interface LiveStroke {
   brush: BrushParams;
   color: string;
   clip?: Selection;
+  mask?: boolean;
   pts: number[]; // new samples, flat x,y,pressure
 }
 

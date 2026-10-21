@@ -26,6 +26,7 @@ function nums(v: unknown, max: number, stride: number, min = stride): v is numbe
 }
 
 const isClip = (v: unknown) => v === undefined || (obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6));
+const isMask = (v: unknown) => v === undefined || v === true;
 
 function isBrush(b: unknown): b is BrushParams {
   return obj(b) && inRange(b.size, 0.1, MAX_BRUSH) && inRange(b.opacity, 0, 1) && inRange(b.flow, 0, 1) && inRange(b.hardness, 0, 1)
@@ -34,23 +35,23 @@ function isBrush(b: unknown): b is BrushParams {
 }
 
 const LAYER_PROPS: Record<string, (v: unknown) => boolean> = {
-  name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool,
+  name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool, clip: isBool, mask: isBool,
 };
 const FOLDER_PROPS: Record<string, (v: unknown) => boolean> = { name: isName, visible: isBool, color: (v) => v === null || isColor(v) };
 
 function propsOk(props: unknown, rules: Record<string, (v: unknown) => boolean>, all: boolean) {
   if (!obj(props)) return false;
   const keys = Object.keys(props);
-  if (all && Object.keys(rules).some((k) => !(k in props))) return false;
+  if (all && ['name', 'visible', 'opacity', 'blend', 'alphaLock'].some((k) => !(k in props))) return false;
   return keys.every((k) => rules[k]?.(props[k]));
 }
 
 export function validLive(l: unknown): l is LiveStroke {
-  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && isBrush(l.brush) && isColor(l.color) && isClip(l.clip) && nums(l.pts, MAX_LIVE_PTS, 3, 0);
+  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && isBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && nums(l.pts, MAX_LIVE_PTS, 3, 0);
 }
 
 export function validOp(op: unknown): op is Op {
-  if (!obj(op) || !isId(op.id)) return false;
+  if (!obj(op) || !isId(op.id) || !isMask(op.mask)) return false;
   switch (op.t) {
     case 'stroke':
       return isId(op.layer) && isBool(op.erase) && isBrush(op.brush) && isColor(op.color) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
@@ -79,7 +80,7 @@ export function validOp(op: unknown): op is Op {
       const { id, owner: _owner, ...props } = op.layer;
       return isId(id) && propsOk(props, LAYER_PROPS, true) && isParent(op.parent) && isIndex(op.index) && (op.copyOf === undefined || isId(op.copyOf));
     }
-    case 'layer.remove': case 'layer.clear': case 'layer.merge':
+    case 'layer.remove': case 'layer.clear': case 'layer.merge': case 'layer.mask.apply':
       return isId(op.layer);
     case 'layer.props':
       return isId(op.layer) && propsOk(op.props, LAYER_PROPS, false);

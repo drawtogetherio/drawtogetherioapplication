@@ -43,7 +43,7 @@ export class ShapeTool implements Tool {
     const layer = this.ed.layer!;
     this.ed.view.live = {
       layerId: layer.props.id, buffer, bufferAlpha: b.opacity,
-      bufferOp: layer.props.alphaLock ? 'source-atop' : 'source-over', clip: this.ed.clipPath(),
+      bufferOp: layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over', clip: this.ed.clipPath(), mask: this.ed.onMask,
     };
     this.ed.view.invalidate(rectUnion(old, r));
   }
@@ -57,7 +57,7 @@ export class ShapeTool implements Tool {
     this.ed.pushRecent(spec.color);
     this.ed.apply({
       t: 'shape', id: uid(), layer: this.ed.activeLayer, ...spec, opacity: this.ed.settings.brush.opacity,
-      erase: false, clip: this.ed.selection ?? undefined,
+      erase: false, clip: this.ed.selection ?? undefined, mask: this.ed.onMask,
     }, { buffer });
   }
 
