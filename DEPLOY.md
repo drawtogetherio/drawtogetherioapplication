@@ -70,26 +70,6 @@ Keep the `http://localhost:8787/auth/discord/callback` redirect too, so login ke
   inside it `npm run admin -- premium SomeHandle 30` (or `forever` / `off`), or `npm run admin -- admin SomeHandle on`.
 - Deploys restart the server for a few seconds; people in a room reconnect on their own.
 
-## When Railway can't build: run the prebuilt image
-
-The **Server image** workflow builds the production image (`Dockerfile`) on every push to `main` and
-pushes it to GitHub's private registry as `ghcr.io/drawtogetherio/doodlehive:latest`. Railway then
-only has to run it, so a stuck Railway builder no longer blocks updates. One-time switch:
-
-1. GitHub → Settings → Developer settings → Personal access tokens → **Tokens (classic)** → new token
-   with only `read:packages`. This is the pull credential; it never goes in the repo or in chat.
-2. Railway → the service → Settings → **Source** → disconnect the GitHub repo and choose **Docker
-   image**: `ghcr.io/drawtogetherio/doodlehive:latest`, registry username `drawtogetherio`, password
-   the token from step 1. The volume, variables and domains stay as they are; remove the build and
-   start commands if Railway still shows them (the image has its own).
-3. So every push also redeploys: Railway → the service → Settings → **Tokens** → create a project
-   token, and add it to the GitHub repo secrets as `RAILWAY_TOKEN`, plus `RAILWAY_SERVICE` with the
-   service's name. Without these two the image is still pushed, and you redeploy by hand
-   (Railway → Deployments → Redeploy), which pulls the latest image.
-
-The same image runs anywhere Docker does (Fly.io, a VPS): mount a volume and set `DB_PATH` to a file
-on it, `PORT`, `PUBLIC_URL` and the Discord variables from `server/.env.example`.
-
 ## Limits to know about
 - One server instance holds all live rooms. That covers a lot of people drawing at once; going past
   one instance later means moving rooms to Redis and the database to Postgres.
