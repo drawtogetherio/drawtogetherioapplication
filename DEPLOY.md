@@ -77,22 +77,26 @@ Keep the `http://localhost:8787/auth/discord/callback` redirect too, so login ke
 
 ## Desktop app (Windows and Mac)
 
-The app is built by the **Desktop app** workflow (GitHub → Actions → Desktop app → Run workflow). It
-builds on GitHub's Windows and Mac runners and leaves the installers as workflow **artifacts**, which
-only people with access to the repo can see. Nothing is published as a GitHub Release.
+The app is built by the **Desktop app** workflow (GitHub → Actions → Desktop app → Run workflow) on
+GitHub's Windows and Mac runners, and uploaded straight to the Cloudflare R2 bucket behind
+`https://downloads.doodlehive.net`. Nothing is published as a GitHub Release, so users never see the
+repo. The files are also kept as workflow artifacts in case you want them by hand.
 
-1. Run the workflow with `update_url` set to where you will host the files (default
-   `https://downloads.doodlehive.net`). The installers check that address for updates.
-2. Download the two artifacts and upload everything in them to that host, keeping the names:
-   `Doodlehive-Setup-<version>.exe` + `latest.yml` (Windows), `Doodlehive-<version>-universal.dmg`,
-   `Doodlehive-<version>-universal.zip` + `latest-mac.yml` and the `.blockmap` files (Mac).
-   Any static host works; a Cloudflare R2 bucket with the custom domain `downloads.doodlehive.net`
-   is the simple one. Users never see the repo.
-3. Set `DOWNLOAD_WINDOWS_URL` and `DOWNLOAD_MAC_URL` on Railway to the installer links so the
-   landing page shows the download buttons.
-4. To ship an update: bump `version` in `desktop/package.json`, run the workflow again, upload the
-   new files (the `latest*.yml` files are what installed apps read). Running apps update on launch
-   and every six hours.
+One-time setup:
+1. Cloudflare → R2: bucket `doodlehive-downloads`, custom domain `downloads.doodlehive.net`, and a
+   cache rule that bypasses cache for `*.yml` (the update feed must never be stale).
+2. An R2 API token with **Object Read & Write** on that bucket only.
+3. GitHub → repo → Settings → Secrets and variables → Actions: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+   `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` (= `doodlehive-downloads`). Without them the workflow
+   still builds and only leaves artifacts.
+4. Railway: `DOWNLOAD_WINDOWS_URL=https://downloads.doodlehive.net/Doodlehive-Setup-<version>.exe`
+   and `DOWNLOAD_MAC_URL=https://downloads.doodlehive.net/Doodlehive-<version>-universal.dmg` so the
+   landing page shows the download buttons (update them when the version changes).
+
+To ship a version: bump `version` in `desktop/package.json`, commit, run the workflow (leave
+`update_url` as the downloads host). It uploads the installers and `.blockmap` files first and the
+`latest.yml` / `latest-mac.yml` feed last, so an app checking for updates never sees a feed that
+points at a missing file. Installed apps check on launch and every six hours.
 
 Signing is optional but recommended. Mac: add repo secrets `MAC_CERT_P12` (a Developer ID
 Application certificate exported as .p12, base64-encoded), `MAC_CERT_PASSWORD`, `APPLE_ID`,

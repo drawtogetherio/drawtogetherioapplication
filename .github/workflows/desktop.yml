@@ -1,5 +1,6 @@
-# Builds the desktop app on demand. Installers land as workflow artifacts (private to the repo),
-# never as GitHub Releases: download them and upload to the downloads host (see DEPLOY.md).
+# Builds the desktop app on demand and uploads it to the Cloudflare R2 bucket behind the downloads
+# host (installers first, then the latest*.yml update files). Nothing is published as a GitHub
+# Release. The files are also kept as workflow artifacts. See DEPLOY.md.
 name: Desktop app
 on:
   workflow_dispatch:
@@ -38,6 +39,28 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Upload to R2
+        if: env.R2_ACCESS_KEY_ID != ''
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -e
+          cd dist
+          # Installers and blockmaps first, so the feed never points at a file that isn't there yet.
+          for f in *.exe *.dmg *.zip *.blockmap; do
+            [ -e "$f" ] || continue
+            aws s3 cp "$f" "s3://$R2_BUCKET/$f" --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          done
+          for f in *.yml; do
+            [ -e "$f" ] || continue
+            aws s3 cp "$f" "s3://$R2_BUCKET/$f" --endpoint-url "$R2_ENDPOINT" --only-show-errors --content-type text/yaml --cache-control no-cache
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: doodlehive-${{ matrix.os }}
