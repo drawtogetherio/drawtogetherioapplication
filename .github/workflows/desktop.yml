@@ -28,17 +28,29 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: desktop/package-lock.json }
       - run: npm ci
+      # Optional Mac signing: a Developer ID .p12 as base64 and its password, plus Apple ID details for
+      # notarization. An empty CSC_LINK makes electron-builder look for a certificate file, so the
+      # variables are only set when the secrets exist; otherwise signing is switched off.
+      - name: Signing secrets, when set
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          P12: ${{ secrets.MAC_CERT_P12 }}
+          PW: ${{ secrets.MAC_CERT_PASSWORD }}
+          AID: ${{ secrets.APPLE_ID }}
+          APW: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$P12" ]; then
+            { echo "CSC_LINK<<EOF"; echo "$P12"; echo "EOF"; echo "CSC_KEY_PASSWORD=$PW"; } >> "$GITHUB_ENV"
+            if [ -n "$AID" ]; then { echo "APPLE_ID=$AID"; echo "APPLE_APP_SPECIFIC_PASSWORD=$APW"; echo "APPLE_TEAM_ID=$TEAM"; echo "NOTARIZE=1"; } >> "$GITHUB_ENV"; fi
+          else
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
       - name: Point the updater at the downloads host
-        run: node -e "const f='package.json',p=require('./'+f);p.build.publish[0].url=process.env.URL;require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+        run: node -e "const f='package.json',p=require('./'+f);p.build.publish[0].url=process.env.URL;p.build.mac.notarize=!!process.env.NOTARIZE;require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
         env: { URL: "${{ github.event.inputs.update_url }}" }
       - run: npm run ${{ matrix.cmd }}
-        env:
-          # Optional signing. Mac: a Developer ID .p12 as base64 and its password. Windows: unsigned unless you add a certificate.
-          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - name: Upload to R2
         if: env.R2_ACCESS_KEY_ID != ''
         shell: bash
