@@ -47,8 +47,12 @@ function say(msg: string, bad = false) {
 const failing = (e: unknown) => say((e as Error).message, true);
 
 // ---- Overview ----
+// A section switch while a fetch is in flight must not let the old page draw over the new one.
+const stale = (s: Section) => page.dataset.section !== s;
+
 async function overview() {
   const s = await call<Stats>('GET', '/api/admin/stats');
+  if (stale('Overview')) return;
   const c = s.counters;
   const tile = (v: number, label: string, cls = '') => `<div class="stat-tile ${cls}"><b>${n(v)}</b><span>${label}</span></div>`;
   page.innerHTML = `
@@ -58,10 +62,13 @@ async function overview() {
     <div class="stat-grid">${tile(s.users.total, 'Accounts')}${tile(s.users.premium, 'Premium')}${tile(s.users.today, 'New today')}${tile(s.users.guests, 'Guests')}${tile(s.users.banned, 'Banned')}${tile(s.ipBans, 'IP bans')}${tile(s.rooms, 'Canvases')}</div>
     <h2>Drawn in rooms</h2>
     <div class="stat-grid">${tile(c.strokes, 'Strokes')}${tile(c.smudges, 'Smudges')}${tile(c.fills, 'Fills')}${tile(c.shapes, 'Shapes')}${tile(c.undos, 'Undos')}${tile(c.redos, 'Redos')}${tile(c.messages, 'Chat messages')}${tile(c.ops, 'All edits')}</div>
-    <p class="fine">Server up ${hours(c.uptime)}. Counts cover shared rooms, not offline drawing.</p>
+    <p class="fine">Server up ${hours(c.uptime)}. Counts cover shared rooms, not offline drawing. Guests are removed a few hours after they leave. <button class="link" id="sweep">Sweep now</button></p>
     <h2>Live rooms</h2>
     ${s.liveRooms.length ? `<table class="admin-table"><tr><th>Room</th><th>Owner</th><th>People</th></tr>
       ${s.liveRooms.map((r) => `<tr><td><a href="/app?room=${esc(r.id)}">${esc(r.name)}</a></td><td>@${esc(r.owner)}</td><td>${r.people}</td></tr>`).join('')}</table>` : '<p class="fine">Nobody is drawing together right now.</p>'}`;
+  page.querySelector('#sweep')!.addEventListener('click', async () => {
+    try { const r = await call<{ guests: number }>('POST', '/api/admin/sweep'); say(`Removed ${r.guests} guest${r.guests === 1 ? '' : 's'}`); } catch (e) { failing(e); }
+  });
   timer = window.setTimeout(() => { if (page.dataset.section === 'Overview') overview().catch(failing); }, 5000);
 }
 
@@ -86,7 +93,8 @@ async function usersPage() {
 
 async function loadUsers() {
   users = await call<AdminUser[]>('GET', `/api/admin/users?q=${encodeURIComponent(query)}&filter=${filter}`);
-  const list = page.querySelector('#user-list')!;
+  const list = page.querySelector('#user-list');
+  if (!list) return;
   if (!users.length) { list.innerHTML = '<p class="fine">Nobody matches.</p>'; return; }
   const flags = (u: AdminUser) => [u.admin && '<i class="flag admin">admin</i>', u.banned && '<i class="flag banned">banned</i>', u.online && '<i class="flag online">online</i>'].filter(Boolean).join('');
   const premium = (u: AdminUser) => (!u.hasPremium ? '—' : u.premiumUntil ? (u.premium ? 'until ' + day(u.premiumUntil) : 'expired') : 'forever');
@@ -101,7 +109,8 @@ async function loadUsers() {
 
 function drawer(id: string) {
   const u = users.find((x) => x.id === id);
-  const el = page.querySelector('#drawer') as HTMLElement;
+  const el = page.querySelector('#drawer') as HTMLElement | null;
+  if (!el) return;
   if (!u) { el.hidden = true; return; }
   const patch = async (body: Record<string, unknown>, done = 'Saved') => {
     try {
@@ -155,6 +164,7 @@ function drawer(id: string) {
 // ---- IP bans ----
 async function ipBans() {
   const list = await call<IpBan[]>('GET', '/api/admin/ip-bans');
+  if (stale('IP bans')) return;
   page.innerHTML = `
     <form class="admin-tools" id="ban-form"><input name="ip" placeholder="IP address" required autocomplete="off"><input name="reason" placeholder="Reason (optional)" maxlength="120"><button class="btn small danger" type="submit">Ban</button></form>
     ${list.length ? `<table class="admin-table"><tr><th>Address</th><th>Reason</th><th>Since</th><th></th></tr>
@@ -172,6 +182,7 @@ async function ipBans() {
 // ---- Log ----
 async function logPage() {
   const rows = await call<LogRow[]>('GET', '/api/admin/log');
+  if (stale('Log')) return;
   page.innerHTML = rows.length ? `<table class="admin-table"><tr><th>When</th><th>Admin</th><th>Action</th><th>Who</th></tr>
     ${rows.map((r) => `<tr><td>${when(r.at)}</td><td>@${esc(r.admin ?? '?')}</td><td>${esc(r.action)}</td><td>${esc(r.target)}</td></tr>`).join('')}</table>` : '<p class="fine">Nothing yet.</p>';
 }

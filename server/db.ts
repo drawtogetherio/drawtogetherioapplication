@@ -191,10 +191,24 @@ export function createGuest(displayName: string): UserRow {
   return getUser(id)!;
 }
 
-export function createSession(userId: string): string {
+/** Guests are temporary: their session lasts a few hours past their last activity, then the account goes. */
+export const GUEST_MS = 3 * 3600_000;
+export const SESSION_MS = 30 * 864e5;
+
+export function createSession(u: UserRow): string {
   const token = crypto.randomBytes(32).toString('base64url');
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, userId, Date.now() + 30 * 864e5);
+  db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(token, u.id, Date.now() + (u.provider === 'guest' ? GUEST_MS : SESSION_MS));
   return token;
+}
+
+const kept = new Map<string, number>();
+/** Pushes a guest's session out again while they're around; at most one write every few minutes. */
+export function keepGuest(u: UserRow) {
+  if (u.provider !== 'guest') return;
+  const now = Date.now();
+  if ((kept.get(u.id) ?? 0) > now - 5 * 60_000) return;
+  kept.set(u.id, now);
+  db.prepare('UPDATE sessions SET expires_at = ? WHERE user_id = ?').run(now + GUEST_MS, u.id);
 }
 
 export function sessionUser(token: string | undefined): UserRow | undefined {

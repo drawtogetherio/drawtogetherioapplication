@@ -6,12 +6,13 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, myProfile, publicProfile, sessionUser, UserRow,
+  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
 import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser, saveShare } from './rooms.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
-import { clearNotices, listNotices, notify, premiumWarning, premiumWarnings, readNotices } from './notify.ts';
+import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
+import { sweep } from './sweep.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import { HttpError, Req, Res, body, json, jsonBody } from './http.ts';
 import { adminRoute, bannedIp, lastIp } from './admin-api.ts';
@@ -25,7 +26,6 @@ import { canUseTheme, isTheme } from '../src/shared/themes.ts';
 
 
 const COOKIE = 'dw_session';
-const SESSION_MS = 30 * 864e5;
 const MINUTE = 60_000, HOUR = 3600_000;
 
 function cookies(req: Req): Record<string, string> {
@@ -37,8 +37,9 @@ function cookies(req: Req): Record<string, string> {
   return out;
 }
 
-function setCookie(res: Res, name: string, value: string, maxAgeSec: number) {
-  const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSec}`];
+/** No max age makes a browser-session cookie, gone when the browser closes. */
+function setCookie(res: Res, name: string, value: string, maxAgeSec?: number) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', ...(maxAgeSec === undefined ? [] : [`Max-Age=${maxAgeSec}`])];
   if (config.secureCookies) parts.push('Secure');
   const prev = res.getHeader('Set-Cookie');
   res.setHeader('Set-Cookie', [...(Array.isArray(prev) ? prev : prev ? [String(prev)] : []), parts.join('; ')]);
@@ -56,6 +57,7 @@ function requireUser(req: Req): UserRow {
   if (!u) throw new HttpError(401, 'Please log in.');
   if (u.banned) throw new HttpError(403, 'This account is banned.');
   touch(u.id);
+  keepGuest(u);
   lastIp(u.id, clientIp(req));
   return u;
 }
@@ -111,7 +113,7 @@ function ownRoom(req: Req, id: string) {
 }
 
 function login(res: Res, user: UserRow) {
-  setCookie(res, COOKIE, createSession(user.id), SESSION_MS / 1000);
+  setCookie(res, COOKIE, createSession(user), user.provider === 'guest' ? undefined : SESSION_MS / 1000);
 }
 
 function profileChanged(userId: string) {
@@ -550,6 +552,7 @@ server.on('upgrade', (req, socket, head) => {
     && allow('ws:' + ip, 60, MINUTE) && room.connections(user.id) < 6;
   if (!ok) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
   lastIp(user.id, ip);
+  keepGuest(user);
   wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); room.join(ws, user, watch); });
 });
 
@@ -563,15 +566,8 @@ setInterval(() => {
 }, 30_000);
 wss.on('connection', (ws) => { const w = ws as typeof ws & { alive?: boolean }; w.alive = true; ws.on('pong', () => { w.alive = true; }); });
 
-function sweep() {
-  const now = Date.now();
-  db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
-  db.prepare(`DELETE FROM users WHERE provider = 'guest' AND created_at < ? AND id NOT IN (SELECT user_id FROM sessions)`).run(now - 30 * 864e5);
-  db.prepare('DELETE FROM notices WHERE user_id NOT IN (SELECT id FROM users)').run();
-  premiumWarnings();
-}
 sweep();
-setInterval(sweep, HOUR).unref();
+setInterval(sweep, 10 * MINUTE).unref();
 
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {

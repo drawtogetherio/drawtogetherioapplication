@@ -3,6 +3,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 
 const base = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '');
 const out = 'test-results/admin';
@@ -125,6 +126,25 @@ await ada.locator('[data-delete]').click();
 await ada.waitForSelector('.admin-page .fine', { hasText: 'Nobody' });
 check(true, 'an account can be deleted');
 check((await ada.evaluate(async () => (await fetch('/api/admin/users/u_nope', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: '{"admin":true}' })).status)) === 404, 'unknown ids are 404');
+
+// ---- Guests are temporary ----
+const g = await fetch(base + '/auth/guest', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body: JSON.stringify({ name: 'Ghost' }) });
+const ghost = await g.json();
+check(!/Max-Age|Expires/i.test(g.headers.get('set-cookie') ?? ''), 'a guest cookie ends with the browser');
+const db = new DatabaseSync(process.env.DB_PATH);
+const exp = db.prepare('SELECT expires_at FROM sessions WHERE user_id = ?').get(ghost.id).expires_at - Date.now();
+check(exp > 2.9 * 36e5 && exp < 3.1 * 36e5, 'their session lasts three hours');
+const sweep = () => ada.evaluate(async () => (await fetch('/api/admin/sweep', { method: 'POST' })).json());
+await sweep();
+check(db.prepare('SELECT count(*) AS n FROM users WHERE id = ?').get(ghost.id).n === 1, 'a sweep keeps a guest whose session is live');
+db.prepare('UPDATE sessions SET expires_at = 0 WHERE user_id = ?').run(ghost.id);
+await section(ada, 'Overview');
+await ada.waitForSelector('#sweep');
+await ada.locator('#sweep').click();
+await ada.locator('.admin-toast.show', { hasText: 'Removed' }).waitFor();
+const toastText = await ada.locator('.admin-toast').innerText(), left = db.prepare('SELECT count(*) AS n FROM users WHERE id = ?').get(ghost.id).n;
+check(toastText.includes('Removed 1 guest') && left === 0, `and removes one whose session ran out (${toastText}, left ${left})`);
+db.close();
 
 await browser.close();
 if (errors.length) { console.log('page errors:', errors); failed++; }

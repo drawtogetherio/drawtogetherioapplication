@@ -5,6 +5,7 @@ import { deleteRoom, disconnectUser, liveRooms } from './rooms.ts';
 import { closeStreams } from './live.ts';
 import { forget, onlineIds } from './social.ts';
 import { readStats } from './stats.ts';
+import { sweep } from './sweep.ts';
 import { cleanBadges, sanitizeDisplayName, validateDisplayName } from '../src/shared/profile.ts';
 
 // Admin-only API under /api/admin. Addresses are kept in memory per signed-in person so an admin can
@@ -144,6 +145,8 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
     log(me, 'ban ip');
     return json(res, 200, { ok: true });
   }
+
+  if (p === '/api/admin/sweep' && m === 'POST') { const r = sweep(); log(me, `sweep: ${r.guests} guests`); return json(res, 200, r); }
 
   if (p === '/api/admin/log' && m === 'GET') {
     return json(res, 200, db.prepare(`SELECT l.action, l.target, l.at, u.handle AS admin FROM admin_log l LEFT JOIN users u ON u.id = l.admin_id

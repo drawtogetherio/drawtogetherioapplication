@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { WebSocket } from 'ws';
-import { db, getUser, newId, publicProfile, UserRow } from './db.ts';
+import { db, getUser, keepGuest, newId, publicProfile, UserRow } from './db.ts';
 import { areFriends, notifyFriends, touch } from './social.ts';
 import { validLive, validOp } from './validate.ts';
 import { bump } from './stats.ts';
@@ -153,6 +153,7 @@ export class Room {
       this.clients.delete(c);
       if (!this.connections(c.userId)) {
         const u = getUser(c.userId);
+        if (u) keepGuest(u);
         if (u && !this.kicked.has(c.userId)) {
           // A reload or a network blip shouldn't post "left" + "joined".
           this.leaving.set(c.userId, setTimeout(() => {

@@ -71,7 +71,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   (plus a number if it's taken).
 - Guests: someone opening an invite link can **Join as guest** without Discord. They get a random
   `<ArtWord><Food>` handle (e.g. `@BurntoutPasta`), can draw in rooms they're invited to, and can't make
-  canvases, add friends or choose a handle.
+  canvases, add friends or choose a handle. Guests are temporary: the cookie ends with the browser, the
+  session lasts 3 hours past their last activity, and the account is removed at the next sweep after
+  that (`server/sweep.ts`, every 10 minutes; admins can also sweep from the dashboard).
 - Display names: anything up to 32 characters. Zalgo/stacked accents, invisible and control
   characters, and fancy-Unicode tricks are cleaned out (checked on the server too).
 - Uploading a picture opens a cropper (drag to move; slider, scroll or pinch to zoom), then it's cut to a 128×128 square and compressed (WebP, ~1–10 KB) in the browser before
@@ -174,7 +176,7 @@ apart from the admin ban list. Every room message is checked
 for shape and size before it is saved or relayed (`server/validate.ts`); cross-site requests and
 sockets are refused; pages carry a content security policy and anti-framing headers; cookies are
 HttpOnly, SameSite and Secure; uploads are checked by their bytes; sessions expire after 30 days and
-old guest accounts are swept.
+guests a few hours after they leave.
 
 **Platforms.** The same web app is meant to be wrapped with Tauri (Windows/Mac) and Capacitor (iPad).
 
