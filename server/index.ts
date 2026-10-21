@@ -471,7 +471,13 @@ async function route(req: Req, res: Res) {
   if (p === '/admin' || p.startsWith('/admin/')) {
     const u = sessionUser(cookies(req)[COOKIE]);
     if (!u) return redirect(res, '/login?next=/admin');
-    if (!isAdmin(u)) throw new HttpError(404, 'Not found.');
+    if (!isAdmin(u)) return serveStatic(req, res, '/404', m);
+  }
+  if (p === '/app' && url.searchParams.has('room')) {
+    const room = getRoom(url.searchParams.get('room') ?? '');
+    const u = sessionUser(cookies(req)[COOKIE]);
+    // Logged-out visitors go on to the login page; a private room reads as missing to anyone not let in.
+    if (!room || (u && !room.visibleTo(u))) return serveStatic(req, res, '/404', m);
   }
   if ((m === 'GET' || m === 'HEAD') && !api && fs.existsSync(config.staticDir)) return serveStatic(req, res, p, m);
   json(res, 404, { error: 'Not found.' });
@@ -504,7 +510,8 @@ function serveStatic(req: Req, res: Res, p: string, m: string) {
   const dir = config.staticDir;
   const file = path.join(dir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
   // Pages sit at the top of dist/: / is the landing page, /login the login page, /app (and sub-paths) the app.
-  const page = p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html' : p === '/admin' || p.startsWith('/admin/') ? 'admin.html' : 'index.html';
+  const page = p === '/' || p === '/index.html' ? 'index.html' : p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html'
+    : p === '/admin' || p.startsWith('/admin/') ? 'admin.html' : '404.html';
   const target = file.startsWith(dir + path.sep) && !p.endsWith('/') ? file : '';
   const c = (target && loadFile(target)) || loadFile(path.join(dir, page));
   if (!c) {
@@ -513,17 +520,18 @@ function serveStatic(req: Req, res: Res, p: string, m: string) {
     return res.end('Doodlehive is updating. Please try again in a minute.');
   }
   const served = target && c === fileCache.get(target) ? target : page;
+  const status = served === '404.html' ? 404 : 200;
   const headers: Record<string, string | number> = {
     'Content-Type': TYPES[path.extname(served)] ?? 'application/octet-stream',
     'Cache-Control': served.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
     ETag: c.etag,
     Vary: 'Accept-Encoding',
   };
-  if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, headers); return res.end(); }
+  if (status === 200 && req.headers['if-none-match'] === c.etag) { res.writeHead(304, headers); return res.end(); }
   const gz = c.gz && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? '')) ? c.gz : null;
   if (gz) headers['Content-Encoding'] = 'gzip';
   headers['Content-Length'] = (gz ?? c.raw).length;
-  res.writeHead(200, headers);
+  res.writeHead(status, headers);
   res.end(m === 'HEAD' ? undefined : gz ?? c.raw);
 }
 
@@ -587,7 +595,7 @@ server.listen(config.port, () => {
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Database: ${config.dbPath}`);
-  const pages = ['index.html', 'login.html', 'app.html', 'admin.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
+  const pages = ['index.html', 'login.html', 'app.html', 'admin.html', '404.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
   console.log(`  Pages in ${config.staticDir}: ${pages.join(', ')}`);
   if (path.resolve(config.dbPath).startsWith(path.resolve(config.staticDir) + path.sep)) {
     console.warn('  WARNING: the database is inside the web build folder. Mount the volume at /data instead.');

@@ -42,9 +42,9 @@ const bo = await signUp('Bo');
 // ---- Gated ----
 check((await status(bo, '/api/admin/stats')) === 404, 'the admin API is hidden from everyone else');
 await bo.goto(base + '/admin');
-await bo.waitForSelector('.admin-wrap');
-check((await bo.locator('.admin-wrap').innerText()).includes('Not found'), 'so is the page');
-check((await bo.locator('.account-btn').count()) === 0, 'no app chrome leaks onto it');
+await bo.waitForURL(/\/404/);
+await bo.getByRole('heading', { name: 'Nothing to draw here' }).waitFor();
+check(true, 'so is the page: it shows the 404 page');
 
 execSync(`npx tsx server/admin.ts admin Ada${suffix} on`, { env: process.env, stdio: 'ignore' });
 await ada.reload();

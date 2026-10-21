@@ -116,7 +116,8 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Status message (80 characters) on your card. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
 
 **Admin dashboard**
-- `/admin` is only served to admins (everyone else gets a 404). The first admins come from the
+- `/admin` is only served to admins; everyone else gets the 404 page (`404.html`), as does any
+  unknown path, an unknown room, or a private room you weren't let into. The first admins come from the
   `ADMIN_HANDLES` variable or `npm run admin -- admin <handle> on`; admins can promote others there.
 - Overview: online now, people in rooms, live rooms, accounts, premium, new today, guests, bans, plus
   running totals of strokes, smudges, fills, shapes, undos, redos and chat messages drawn in rooms

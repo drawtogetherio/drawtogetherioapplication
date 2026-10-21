@@ -6,7 +6,7 @@ import { validLive, validOp } from './validate.ts';
 import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import {
-  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, Member, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
+  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
 } from '../src/shared/protocol.ts';
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
@@ -72,6 +72,8 @@ export class Room {
   private toHosts(m: ServerMsg) { for (const c of this.clients) if (this.isHost(c.userId)) this.send(c, m); }
 
   invite(userId: string) { this.allowed.add(userId); }
+  /** A private room is invisible to everyone but its hosts and invitees. */
+  visibleTo(u: UserRow | undefined) { return !this.info.private || (!!u && (this.isHost(u.id) || this.allowed.has(u.id))); }
 
   private access(user: UserRow): 'yes' | 'ask' | string {
     const until = this.kicked.get(user.id);
@@ -79,7 +81,7 @@ export class Room {
     if (this.isHost(user.id) || this.allowed.has(user.id)) return 'yes';
     const s = this.info.share;
     switch (s.visibility) {
-      case 'private': return 'This canvas is private.';
+      case 'private': return PRIVATE_ROOM_MSG;
       case 'friends':
         return areFriends(user.id, this.info.ownerId) ? 'yes' : `Only ${getUser(this.info.ownerId)?.display_name ?? 'the owner'}’s friends can join this room.`;
       case 'unlisted': return 'yes';

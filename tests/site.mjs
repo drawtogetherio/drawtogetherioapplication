@@ -196,7 +196,9 @@ await ren.evaluate((id) => fetch('/api/rooms/' + id, { method: 'PATCH', headers:
 // A private canvas can't be opened by someone else.
 const roomId = await ren.evaluate(async () => (await (await fetch('/api/projects')).json())[0].id);
 await bob.goto(`${base}/app?room=${roomId}`);
-await bob.waitForSelector('.home:not([hidden])', { timeout: 6000 }).then(() => check(true, 'private canvas stays private'), () => check(false, 'private canvas stays private'));
+await bob.waitForURL(/\/404/, { timeout: 6000 }).then(() => check(true, 'a private canvas shows the 404 page to someone else'), () => check(false, 'a private canvas shows the 404 page to someone else'));
+await bob.getByRole('heading', { name: 'Nothing to draw here' }).waitFor();
+await bob.screenshot({ path: `${out}/08-not-found.png` });
 
 console.log(errors.length ? 'Errors:\n' + errors.join('\n') : 'No page errors');
 await browser.close();

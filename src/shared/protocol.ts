@@ -58,6 +58,9 @@ export interface LiveStroke {
   pts: number[]; // new samples, flat x,y,pressure
 }
 
+/** The deny message for private rooms; the client turns it into the 404 page. */
+export const PRIVATE_ROOM_MSG = 'This canvas is private.';
+
 export type ClientMsg =
   | { type: 'op'; op: Op }
   | { type: 'live'; live: LiveStroke }

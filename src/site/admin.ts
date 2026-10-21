@@ -200,7 +200,7 @@ function show(s: Section) {
 async function main() {
   const me = await api.me().catch(() => null);
   if (!me) { location.replace('/login?next=/admin'); return; }
-  if (!me.admin) { root.innerHTML = '<main class="admin-wrap"><p class="fine">Not found.</p></main>'; return; }
+  if (!me.admin) { location.replace('/404'); return; }
   root.innerHTML = `
     <header class="site-header"><div class="header-left">${brandHtml('/app')}<span class="admin-tag">Admin</span></div><a class="btn small" href="/app">Back to the app</a></header>
     <main class="admin-wrap">

@@ -26,7 +26,22 @@ check(r.headers.get('content-security-policy') !== null && r.headers.get('referr
 r = await fetch(base + '/%2e%2e/package.json');
 check(!(await r.text()).includes('"scripts"'), 'no path traversal');
 r = await fetch(base + '/assets/');
-check(r.status === 200 && (r.headers.get('content-type') ?? '').includes('html'), 'directories fall back to a page');
+check(r.status === 404 && (await r.text()).includes('Not found · Doodlehive'), 'directories and unknown paths get the 404 page');
+r = await fetch(base + '/app/anything');
+check(r.status === 200, 'app sub-paths still load the app');
+
+// ---- Private rooms read as missing ----
+const login = async (name) => ((await post('/auth/dev', { name: name + suffix }, { Origin: base })).headers.get('set-cookie') ?? '').split(';')[0];
+const owner = await login('Owner'), other = await login('Other');
+const secret = await (await fetch(base + '/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: owner, Origin: base }, body: JSON.stringify({ name: 'Secret', settings: { infinite: true }, share: { visibility: 'private' } }) })).json();
+r = await fetch(base + `/app?room=${secret.id}`, { headers: { Cookie: other } });
+check(r.status === 404 && (await r.text()).includes('Not found · Doodlehive'), 'a private room is a 404 page for others');
+r = await fetch(base + `/app?room=${secret.id}`, { headers: { Cookie: owner } });
+check(r.status === 200, 'and the app for its owner');
+r = await fetch(base + '/app?room=nope');
+check(r.status === 404, 'an unknown room is a 404 page');
+r = await fetch(base + '/admin', { headers: { Cookie: other } });
+check(r.status === 404 && (await r.text()).includes('Not found · Doodlehive'), 'so is /admin for anyone who isn’t one');
 
 // ---- Log in ----
 r = await post('/auth/dev', { name: 'Sec' + suffix });

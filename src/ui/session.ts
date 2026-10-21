@@ -9,7 +9,7 @@ import { icon } from './icons';
 import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import type { LiveEvent } from '../net/api';
-import { WATCH_KEY_RE } from '../shared/protocol';
+import { PRIVATE_ROOM_MSG, WATCH_KEY_RE } from '../shared/protocol';
 import { cleanPrefs } from '../shared/prefs';
 
 export const PREFS_KEY = 'doodlehive.prefs';
@@ -174,6 +174,7 @@ export class Session {
       } else if (e.kind === 'op') {
         this.scheduleThumb();
       } else if (e.kind === 'error') {
+        if (e.message === PRIVATE_ROOM_MSG) { location.replace('/404'); return; }
         this.app.toast(e.message);
         if (room.status === 'closed') this.leaveRoom();
       } else if (e.kind === 'status' || e.kind === 'members' || e.kind === 'room') {
