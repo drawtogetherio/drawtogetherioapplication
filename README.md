@@ -196,7 +196,15 @@ sockets are refused; pages carry a content security policy and anti-framing head
 HttpOnly, SameSite and Secure; uploads are checked by their bytes; sessions expire after 30 days and
 guests a few hours after they leave.
 
-**Platforms.** The same web app is meant to be wrapped with Tauri (Windows/Mac) and Capacitor (iPad).
+**Platforms (v0.20).** `desktop/` is the Windows and Mac app: an Electron window on doodlehive.net
+whose preload script exposes `window.doodlehiveNative`, a canvas store backed by plain files in the
+app's data folder (`canvases/<id>/meta.json`, `ops.jsonl`, `thumb`). `ipad/` is the Capacitor
+project for the same site; there the page uses the Filesystem plugin (`src/io/capacitorStore.ts`).
+`src/io/native.ts` picks the bridge, and `localStore.ts` routes to it instead of IndexedDB, so a
+device canvas in the apps is as permanent as any file. The apps update from the downloads host, not
+from GitHub (see DEPLOY.md). Every canvas shows where it lives at the top right: a cloud for the
+server, a yellow **In Cache** warning in a browser (hover: the browser may clear it, get the app), and
+a device icon in the apps. Home tiles carry the same mark.
 
 ### Known limits (fine for now, worth revisiting)
 - Two hosts restructuring the same folder at the exact same moment can see different orders until reload.

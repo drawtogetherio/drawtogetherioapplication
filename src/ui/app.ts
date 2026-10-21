@@ -17,6 +17,7 @@ import { Slider } from './slider';
 import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
+import { isNativeApp } from '../io/native';
 import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
@@ -36,6 +37,12 @@ const TOOLS: { id: ToolId; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
   { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
 ];
+
+export const SAVE_BADGE = {
+  cloud: { icon: 'cloud', short: '', label: 'Saved to your account', hint: 'Saved on the server. It’s on every device you log in from.' },
+  device: { icon: 'device', short: '', label: 'Saved on this device', hint: 'Saved in the app on this device.' },
+  cache: { icon: 'warning', short: 'In Cache', label: 'In cache: not permanent', hint: 'This isn’t permanent storage: your browser may clear it. Download the Doodlehive app to keep your drawings safe.' },
+};
 
 export class App {
   ed: Editor;
@@ -60,6 +67,7 @@ export class App {
   private invitePanel = new InvitePanel();
   private invitePop = h('div.popover.invite-pop', { hidden: true });
   private toolPop = h('div.popover.tool-pop', { hidden: true });
+  private saveBadge = h('div.save-badge', { hidden: true });
   private toolPopFor: ToolId | null = null;
   private layersBtn: HTMLButtonElement;
   private prefsTimer = 0;
@@ -130,7 +138,9 @@ export class App {
     this.colorBtn = h('button.color-btn.edit-only', { title: 'Colour', 'aria-label': 'Colour' });
     this.colorBtn.addEventListener('click', () => { colorPop.hidden = !colorPop.hidden; if (!colorPop.hidden) picker.opened(); });
     dismissOnOutside(colorPop, [this.colorBtn], () => { colorPop.hidden = true; });
-    right.append(layersBtn, this.colorBtn);
+    right.append(layersBtn, this.colorBtn, h('span.sep'), this.saveBadge);
+    this.saveBadge.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a')) return; this.saveBadge.classList.toggle('open'); });
+    dismissOnOutside(this.saveBadge, [], () => this.saveBadge.classList.remove('open'));
 
     const topbar = h('header.topbar', {}, left, right);
 
@@ -238,6 +248,7 @@ export class App {
     const room = this.ed.room, local = this.session.local, d = this.dock;
     document.body.classList.toggle('spectating', !!room?.spectator);
     this.renderMenuDyn();
+    this.renderSaveBadge();
     clear(d);
     d.hidden = !room && !local;
     if (!room) {
@@ -276,6 +287,21 @@ export class App {
         if (!this.invitePop.hidden) this.invitePanel.render(room);
       }));
     }
+  }
+
+  /** Where the open drawing lives: a cloud for the server, a warning for browser storage. */
+  private renderSaveBadge() {
+    const room = this.ed.room, me = this.ed.me, b = this.saveBadge;
+    const kind = !me || me.guest || room?.spectator ? null : room && !room.info?.ephemeral ? 'cloud' : room || this.session.local ? (isNativeApp ? 'device' : 'cache') : null;
+    b.hidden = !kind;
+    b.className = 'save-badge' + (kind ? ' ' + kind : '');
+    clear(b);
+    if (!kind) return;
+    const text = SAVE_BADGE[kind];
+    b.append(
+      h('button.save-pill', { type: 'button', 'aria-label': text.label, html: icon(text.icon, 16) + (text.short ? `<span>${text.short}</span>` : '') }),
+      h('div.hint', { role: 'tooltip' }, text.hint, kind === 'cache' ? h('a', { href: '/' }, 'Get the app') : null),
+    );
   }
 
   async copyText(text: string, done: string) {

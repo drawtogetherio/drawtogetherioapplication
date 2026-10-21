@@ -74,3 +74,42 @@ Keep the `http://localhost:8787/auth/discord/callback` redirect too, so login ke
 - One server instance holds all live rooms. That covers a lot of people drawing at once; going past
   one instance later means moving rooms to Redis and the database to Postgres.
 - The database is a single SQLite file on the volume; Railway's volume backups are the safety net.
+
+## Desktop app (Windows and Mac)
+
+The app is built by the **Desktop app** workflow (GitHub → Actions → Desktop app → Run workflow). It
+builds on GitHub's Windows and Mac runners and leaves the installers as workflow **artifacts**, which
+only people with access to the repo can see. Nothing is published as a GitHub Release.
+
+1. Run the workflow with `update_url` set to where you will host the files (default
+   `https://downloads.doodlehive.net`). The installers check that address for updates.
+2. Download the two artifacts and upload everything in them to that host, keeping the names:
+   `Doodlehive-Setup-<version>.exe` + `latest.yml` (Windows), `Doodlehive-<version>-universal.dmg`,
+   `Doodlehive-<version>-universal.zip` + `latest-mac.yml` and the `.blockmap` files (Mac).
+   Any static host works; a Cloudflare R2 bucket with the custom domain `downloads.doodlehive.net`
+   is the simple one. Users never see the repo.
+3. Set `DOWNLOAD_WINDOWS_URL` and `DOWNLOAD_MAC_URL` on Railway to the installer links so the
+   landing page shows the download buttons.
+4. To ship an update: bump `version` in `desktop/package.json`, run the workflow again, upload the
+   new files (the `latest*.yml` files are what installed apps read). Running apps update on launch
+   and every six hours.
+
+Signing is optional but recommended. Mac: add repo secrets `MAC_CERT_P12` (a Developer ID
+Application certificate exported as .p12, base64-encoded), `MAC_CERT_PASSWORD`, `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`; the workflow then signs and notarizes. Without
+them, Mac users have to right-click → Open the first time. Windows builds are unsigned unless you
+add a certificate (SmartScreen warns on the first runs of a new unsigned app).
+
+## iPad app
+
+`ipad/` is a Capacitor project that shows doodlehive.net inside a native shell and keeps canvases in
+the app's own storage. It needs a Mac with Xcode and an Apple Developer account:
+
+```bash
+cd ipad && npm install && npx cap add ios && npx cap open ios
+```
+
+Set your team in Xcode, run on an iPad, and archive for TestFlight / the App Store from there.
+App Review can push back on apps that are "just a website"; features that only the app has (Pencil
+double-tap, sharing to Photos, the permanent storage) are the answer, and are the next step here.
+

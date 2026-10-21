@@ -1,0 +1,50 @@
+# Builds the desktop app on demand. Installers land as workflow artifacts (private to the repo),
+# never as GitHub Releases: download them and upload to the downloads host (see DEPLOY.md).
+name: Desktop app
+on:
+  workflow_dispatch:
+    inputs:
+      update_url:
+        description: Where installers and latest*.yml will be hosted
+        default: https://downloads.doodlehive.net
+        required: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            cmd: build:win
+          - os: macos-latest
+            cmd: build:mac
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run: { working-directory: desktop }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: desktop/package-lock.json }
+      - run: npm ci
+      - name: Point the updater at the downloads host
+        run: node -e "const f='package.json',p=require('./'+f);p.build.publish[0].url=process.env.URL;require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+        env: { URL: "${{ github.event.inputs.update_url }}" }
+      - run: npm run ${{ matrix.cmd }}
+        env:
+          # Optional signing. Mac: a Developer ID .p12 as base64 and its password. Windows: unsigned unless you add a certificate.
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: doodlehive-${{ matrix.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.yml
+            desktop/dist/*.blockmap
+          if-no-files-found: error

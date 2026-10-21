@@ -55,6 +55,23 @@ input, select { font: inherit; }
 .brand .brand-word span { color: var(--accent); }
 .sep { width: 1px; height: 24px; background: var(--line); margin: 0 6px; }
 
+/* Where the drawing lives: cloud (server), device (app) or cache (browser storage) */
+.save-badge { position: relative; flex: none; }
+.save-pill {
+  display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--muted); cursor: default; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+}
+.save-badge.cache .save-pill { color: #8a6100; background: #ffd84d; }
+.save-badge .hint {
+  display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 240px; padding: 10px 12px; border-radius: 10px; z-index: 30;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0,0,0,.25); font-size: 13px; line-height: 1.4; font-weight: 400;
+}
+.save-badge .hint a { display: block; margin-top: 6px; color: var(--accent); font-weight: 600; }
+.save-badge:hover .hint, .save-badge:focus-within .hint, .save-badge.open .hint { display: block; }
+.save-mark { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; }
+.save-mark.cache { color: #a87600; font-weight: 600; }
+.save-mark.cache svg { color: #d99a00; }
+
 .icon-btn {
   width: 40px; height: 40px; display: inline-grid; place-items: center; border: 0; border-radius: 10px;
   background: transparent; cursor: pointer; color: var(--text); flex: none;

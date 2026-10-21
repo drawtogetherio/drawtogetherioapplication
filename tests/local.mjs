@@ -51,6 +51,11 @@ await ren.getByRole('button', { name: 'Create canvas' }).click();
 await ren.waitForFunction(() => window.doodlehive.session.local && !window.doodlehive.ed.room);
 check(/\?canvas=c[a-z0-9]+/.test(ren.url()), 'a device canvas has its own link');
 check(await ren.locator('.share-btn').isVisible(), 'the dock offers Share');
+check((await ren.locator('.save-badge.cache .save-pill').textContent()).trim() === 'In Cache', 'the bar warns the drawing is only in cache');
+await ren.locator('.save-badge').hover();
+check(await ren.locator('.save-badge .hint', { hasText: 'your browser may clear it' }).isVisible(), 'hovering explains and offers the app');
+await ren.screenshot({ path: `${out}/00-cache-hint.png` });
+await ren.mouse.move(400, 400);
 await stroke(ren, 300);
 await stroke(ren, 360);
 check(await projects(ren) === 0, 'nothing stored on the server');
@@ -60,6 +65,7 @@ check(await strokes(ren) === 2, 'reload reopens the canvas with both strokes');
 await ren.locator('button.brand').click();
 await ren.waitForSelector('.home:not([hidden]) .project-tile img');
 check(await ren.locator('.tile-meta', { hasText: 'On this device' }).count() === 1, 'home shows it as on this device, with a thumbnail');
+check(await ren.locator('.tile-meta .save-mark.cache').count() === 1, 'the tile carries the cache warning too');
 await ren.screenshot({ path: `${out}/01-home-local.png` });
 
 // ---- Share it: a live-only room seeded with the drawing ----
@@ -117,6 +123,9 @@ await pia.fill('#room-name', 'Cloud piece');
 await pia.getByRole('button', { name: 'Create canvas' }).click();
 await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
 check(!(await dh(pia, (dh) => dh.ed.room.info.ephemeral)) && !(await dh(pia, (dh) => dh.session.local)), 'premium canvases stay on the server');
+check(await pia.locator('.save-badge.cloud').isVisible() && (await pia.locator('.save-badge.cache').count()) === 0, 'a cloud icon shows the drawing is safe');
+await pia.locator('.save-badge').hover();
+await pia.screenshot({ path: `${out}/05-cloud.png` });
 await stroke(pia, 300);
 check(await projects(pia) === 1, 'listed as a server canvas');
 

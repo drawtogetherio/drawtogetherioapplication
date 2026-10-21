@@ -12,6 +12,8 @@ import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 import { LocalCanvas, deleteCanvas, listCanvases, patchCanvas } from '../io/localStore';
+import { isNativeApp } from '../io/native';
+import { SAVE_BADGE } from './app';
 
 // Fallback to the live event stream.
 const BANNER_KEY = 'doodlehive.support';
@@ -28,6 +30,13 @@ export function timeAgo(t: number) {
   if (hh < 24) return `${Math.floor(hh)} h ago`;
   if (d < 7) return `${Math.floor(d)} d ago`;
   return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d > 300 ? 'numeric' : undefined });
+}
+
+/** Cloud for server canvases; a warning on device ones in a browser. */
+function saveMark(p: ProjectInfo): HTMLElement {
+  const kind = p.local ? (isNativeApp ? 'device' : 'cache') : 'cloud';
+  const t = SAVE_BADGE[kind];
+  return h(`span.save-mark.${kind}` as 'span', { title: t.hint, 'aria-label': t.label, html: icon(t.icon, 13) + (t.short ? `<span>${t.short}</span>` : '') });
 }
 
 export class Home {
@@ -406,7 +415,7 @@ export class Home {
       h('button.tile-open', { type: 'button', 'aria-label': `Open ${p.name}`, title: !!p.local !== premium ? '' : premium ? 'Moves to your account when opened' : 'Moves to this device when opened', onclick: open },
         thumb,
         h('span.tile-name', {}, p.name),
-        h('span.tile-meta', {}, h('span', { html: icon(p.local && p.private ? 'file' : VIS_ICON[p.visibility], 13) }), `${where} · ${timeAgo(p.updatedAt)}`),
+        h('span.tile-meta', {}, h('span', { html: icon(p.local && p.private ? 'file' : VIS_ICON[p.visibility], 13) }), `${where} · ${timeAgo(p.updatedAt)}`, saveMark(p)),
       ),
       more,
     );

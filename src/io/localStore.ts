@@ -1,7 +1,9 @@
 import type { Op } from '../core/model';
 import type { ShareSettings } from '../shared/protocol';
+import { NativeCanvas, native } from './native';
 
-// Canvases kept in this browser (IndexedDB): free accounts draw here; shared rooms leave a copy here too.
+// Canvases kept on this device: free accounts draw here; shared rooms leave a copy here too.
+// In the browser that is IndexedDB; the desktop app keeps files instead (see desktop/).
 
 export interface LocalCanvas {
   id: string;
@@ -38,18 +40,28 @@ const finished = (tx: IDBTransaction) => new Promise<void>((res, rej) => { tx.on
 
 export const newLocalId = () => 'c' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
+const fromNative = (c: NativeCanvas): LocalCanvas => ({ ...c, thumb: c.thumb ? new Blob([c.thumb.bytes as BlobPart], { type: c.thumb.type }) : null });
+const toNative = async (c: LocalCanvas): Promise<NativeCanvas> =>
+  ({ ...c, thumb: c.thumb ? { type: c.thumb.type, bytes: new Uint8Array(await c.thumb.arrayBuffer()) } : null });
+
 export async function listCanvases(user: string): Promise<LocalCanvas[]> {
-  const d = await open();
-  const all = await done(d.transaction('canvases').objectStore('canvases').index('user').getAll(user) as IDBRequest<LocalCanvas[]>);
+  let all: LocalCanvas[];
+  if (native) all = (await native.canvases.list(user)).map(fromNative);
+  else {
+    const d = await open();
+    all = await done(d.transaction('canvases').objectStore('canvases').index('user').getAll(user) as IDBRequest<LocalCanvas[]>);
+  }
   return all.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getCanvas(id: string): Promise<LocalCanvas | undefined> {
+  if (native) return (await native.canvases.get(id).then((c) => c && fromNative(c))) ?? undefined;
   const d = await open();
   return done(d.transaction('canvases').objectStore('canvases').get(id) as IDBRequest<LocalCanvas | undefined>);
 }
 
 export async function putCanvas(c: LocalCanvas) {
+  if (native) return native.canvases.put(await toNative(c));
   const d = await open();
   const tx = d.transaction('canvases', 'readwrite');
   tx.objectStore('canvases').put(c);
@@ -62,6 +74,7 @@ export async function patchCanvas(id: string, patch: Partial<LocalCanvas>) {
 }
 
 export async function loadOps(id: string): Promise<Op[]> {
+  if (native) return native.canvases.loadOps(id);
   const d = await open();
   const rows = await done(d.transaction('ops').objectStore('ops').getAll(IDBKeyRange.bound([id, 0], [id, Infinity])) as IDBRequest<{ op: Op }[]>);
   return rows.map((r) => r.op);
@@ -70,6 +83,7 @@ export async function loadOps(id: string): Promise<Op[]> {
 /** Appends in order; `seq` keeps growing across sessions. */
 export async function appendOps(id: string, ops: Op[], from: number) {
   if (!ops.length) return;
+  if (native) { await native.canvases.appendOps(id, ops); return patchCanvas(id, { updatedAt: Date.now() }); }
   const d = await open();
   const tx = d.transaction(['ops', 'canvases'], 'readwrite');
   const store = tx.objectStore('ops');
@@ -80,6 +94,7 @@ export async function appendOps(id: string, ops: Op[], from: number) {
 }
 
 export async function replaceOps(id: string, ops: Op[]) {
+  if (native) return native.canvases.replaceOps(id, ops);
   const d = await open();
   const tx = d.transaction('ops', 'readwrite');
   const store = tx.objectStore('ops');
@@ -89,6 +104,7 @@ export async function replaceOps(id: string, ops: Op[]) {
 }
 
 export async function deleteCanvas(id: string) {
+  if (native) return native.canvases.delete(id);
   const d = await open();
   const tx = d.transaction(['ops', 'canvases'], 'readwrite');
   tx.objectStore('ops').delete(IDBKeyRange.bound([id, 0], [id, Infinity]));
