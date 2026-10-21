@@ -419,6 +419,12 @@ async function route(req: Req, res: Res) {
     // Pages: / is the landing page, /login the login page, and /app (with any sub-path) the app itself.
     const page = p === '/app' || p.startsWith('/app/') ? 'app/index.html' : p === '/login' || p === '/login/' ? 'login/index.html' : 'index.html';
     const target = isFile ? file : path.join(config.staticDir, page);
+    if (!isFile && !fs.existsSync(target)) {
+      // A missing page must never take the whole server down; say what's wrong instead.
+      console.error(`Missing page ${target}. Was "npm run build" run, and is nothing mounted over ${config.staticDir}?`);
+      res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end('Doodlehive is updating. Please try again in a minute.');
+    }
     const ext = path.extname(target);
     const types: Record<string, string> = {
       '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png',
@@ -431,6 +437,7 @@ async function route(req: Req, res: Res) {
     };
     if (m === 'HEAD') { res.writeHead(200, headers); return res.end(); }
     const stream = fs.createReadStream(target);
+    stream.on('error', (e) => { console.error('Static file error:', e.message); res.destroy(); });
     if (/\.(html|js|css|svg|json)$/.test(target) && /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''))) {
       res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' });
       return stream.pipe(zlib.createGzip()).pipe(res);
@@ -485,4 +492,10 @@ server.listen(config.port, () => {
   if (!config.persistent) console.warn('  WARNING: no volume attached; accounts and rooms will be lost on the next deploy.');
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
+  console.log(`  Database: ${config.dbPath}`);
+  const pages = ['index.html', 'login/index.html', 'app/index.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
+  console.log(`  Pages in ${config.staticDir}: ${pages.join(', ')}`);
+  if (path.resolve(config.dbPath).startsWith(path.resolve(config.staticDir) + path.sep)) {
+    console.warn('  WARNING: the database is inside the web build folder. Mount the volume at /data instead.');
+  }
 });

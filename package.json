@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node scripts/check-build.mjs",
     "build:single": "tsc && vite build --mode single",
     "preview": "vite preview --host",
     "typecheck": "tsc && tsc -p server",
