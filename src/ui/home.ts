@@ -12,7 +12,7 @@ import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 import { LocalCanvas, deleteCanvas, listCanvases, patchCanvas } from '../io/localStore';
-import { isNativeApp } from '../io/native';
+import { isNativeApp, native } from '../io/native';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
 
@@ -80,9 +80,13 @@ export class Home {
       } catch (ex) { addErr.textContent = (ex as ApiError).message; }
     });
 
-    // Popovers anchor to the header, so the banner above can come and go.
-    this.el.append(this.banner, h('div.home-main', {},
+    // Popovers anchor to the header, so the banner above can come and go. In the frameless app the
+    // header is the window's top strip, so the banner goes under it, clear of the resize border.
+    const under = !!native?.frameless;
+    if (!under) this.el.append(this.banner);
+    this.el.append(h('div.home-main', {},
       frameBar(h('header.home-top', {}, h('div.home-brand', { html: brandHtml('/') }), h('span.grow'))),
+      under ? this.banner : null,
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
           this.meCard,
