@@ -49,7 +49,7 @@ check(await banner.isHidden(), 'it stays closed after a reload');
 // ---- Groups ----
 await openPrefs();
 const groups = await page.locator('.pref-group').evaluateAll((els) => els.map((e) => e.textContent));
-check(groups.join() === 'Appearance,Canvas,Pressure,Shortcuts', 'groups down the left: appearance, canvas, pressure, shortcuts');
+check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Shortcuts', 'groups down the left: appearance, layout, canvas, pressure, shortcuts');
 check((await page.locator('.pref-page h3').textContent()) === 'Appearance', 'opens on appearance');
 
 // ---- Appearance ----
@@ -60,6 +60,15 @@ check((await page.locator('.theme-swatch.custom.locked').count()) === 1, 'the cu
 await page.locator('.segmented button', { hasText: 'Light' }).click();
 check(await page.evaluate(() => document.documentElement.dataset.mode === 'light'), 'light mode applies at once');
 await page.screenshot({ path: `${out}/01-appearance.png` });
+
+// ---- Layout ----
+await group('Layout');
+check((await page.locator('.pref-page .switch-row:visible').count()) === 0, 'panel toggles only show for studio');
+await page.locator('.segmented button', { hasText: 'Studio' }).click();
+check((await page.locator('.pref-page .switch-row:visible').allTextContents()).join() === 'Tools,Brush properties,Colour wheel,Swatches,Layers', 'studio lists its five panels');
+await page.locator('.switch-row', { hasText: 'Swatches' }).locator('input').click();
+await page.locator('.segmented button', { hasText: 'Classic' }).click();
+await page.evaluate(() => { const p = window.doodlehive.ed.prefs; p.customBrushes.push({ id: 'cmine', name: 'Mine', cat: 'Pen', params: { ...window.doodlehive.ed.settings.brush, hardness: 0.25 } }); p.brushCategories.push('Inks'); });
 
 // ---- Canvas ----
 await group('Canvas');
@@ -105,6 +114,8 @@ await page.waitForTimeout(700);
 let m = await me();
 check(m.prefs.mode === 'light' && m.prefs.keys.fill === 'q' && m.prefs.hoverPreview === false && m.prefs.fingerDraws === false
   && m.prefs.pressureMode === 'advanced' && m.prefs.pressureCurve.length === 6 && m.prefs.supportBanner === false, 'preferences are stored on the account');
+check(m.prefs.layout === 'classic' && m.prefs.panels.swatches.show === false && m.prefs.panels.layers.dock === 'right'
+  && m.prefs.customBrushes[0]?.name === 'Mine' && m.prefs.customBrushes[0].params.hardness === 0.25 && m.prefs.brushCategories.join() === 'Inks', 'layout, panels, custom brushes and categories too');
 
 await page.reload();
 await page.waitForSelector('.home:not([hidden])');

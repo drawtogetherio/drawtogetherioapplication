@@ -22,8 +22,9 @@ export function clear(el: Element) { while (el.firstChild) el.removeChild(el.fir
 export function dismissOnOutside(pop: HTMLElement, toggles: HTMLElement[], close: () => void) {
   document.addEventListener('pointerdown', (e) => {
     if (pop.hidden) return;
-    const t = e.target as Node;
-    if (pop.contains(t) || toggles.some((b) => b.contains(t))) return;
+    const t = e.target as Element;
+    // A dialog opened from the popover sits above it and shouldn't close it.
+    if (pop.contains(t) || toggles.some((b) => b.contains(t)) || t.closest?.('.modal-overlay')) return;
     close();
   }, true);
 }

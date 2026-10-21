@@ -38,7 +38,6 @@ export const BRUSH_LIBRARY: BrushCategory[] = [
 
 export const BRUSH_PRESETS: BrushPreset[] = BRUSH_LIBRARY.flatMap((c) => c.brushes);
 export const brushById = (id: string) => BRUSH_PRESETS.find((b) => b.id === id) ?? BRUSH_PRESETS[0];
-export const categoryOf = (id: string) => Math.max(0, BRUSH_LIBRARY.findIndex((c) => c.brushes.some((b) => b.id === id)));
 
 /** What each tool starts with; the smudge tool reads flow as its strength. */
 export const DEFAULT_BRUSH = 'ink', DEFAULT_ERASER = 'hard-eraser', DEFAULT_SMUDGE = 'round';

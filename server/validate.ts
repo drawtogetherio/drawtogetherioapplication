@@ -1,5 +1,6 @@
-import { BLEND_MODES, EFFECTS, type BrushParams, type Op } from '../src/core/model.ts';
+import { BLEND_MODES, EFFECTS, type Op } from '../src/core/model.ts';
 import type { LiveStroke } from '../src/shared/protocol.ts';
+import { validBrush } from '../src/shared/brush.ts';
 
 // Shape and size checks for everything clients send into a room. Anything that fails is dropped
 // before it reaches the op log or other people's browsers.
@@ -28,11 +29,6 @@ function nums(v: unknown, max: number, stride: number, min = stride): v is numbe
 const isClip = (v: unknown) => v === undefined || (obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6));
 const isMask = (v: unknown) => v === undefined || v === true;
 
-function isBrush(b: unknown): b is BrushParams {
-  return obj(b) && inRange(b.size, 0.1, MAX_BRUSH) && inRange(b.opacity, 0, 1) && inRange(b.flow, 0, 1) && inRange(b.hardness, 0, 1)
-    && inRange(b.spacing, 0.01, 4) && inRange(b.pressureSize, 0, 1) && inRange(b.pressureFlow, 0, 1) && inRange(b.minSize, 0, 1) && inRange(b.smoothing, 0, 1)
-    && (b.shape === undefined || b.shape === 'round' || b.shape === 'square') && (b.grain === undefined || inRange(b.grain, 0, 1)) && (b.grainScale === undefined || inRange(b.grainScale, 0.25, 8));
-}
 
 const LAYER_PROPS: Record<string, (v: unknown) => boolean> = {
   name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool, clip: isBool, mask: isBool,
@@ -47,16 +43,16 @@ function propsOk(props: unknown, rules: Record<string, (v: unknown) => boolean>,
 }
 
 export function validLive(l: unknown): l is LiveStroke {
-  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && isBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && nums(l.pts, MAX_LIVE_PTS, 3, 0);
+  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && validBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && nums(l.pts, MAX_LIVE_PTS, 3, 0);
 }
 
 export function validOp(op: unknown): op is Op {
   if (!obj(op) || !isId(op.id) || !isMask(op.mask)) return false;
   switch (op.t) {
     case 'stroke':
-      return isId(op.layer) && isBool(op.erase) && isBrush(op.brush) && isColor(op.color) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
+      return isId(op.layer) && isBool(op.erase) && validBrush(op.brush) && isColor(op.color) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
     case 'smudge':
-      return isId(op.layer) && isBrush(op.brush) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
+      return isId(op.layer) && validBrush(op.brush) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
     case 'effect':
       return isId(op.layer) && EFFECTS.includes(op.effect as never) && inRange(op.amount, 0, 1) && (op.angle === undefined || inRange(op.angle, -7, 7)) && isClip(op.clip);
     case 'shape':

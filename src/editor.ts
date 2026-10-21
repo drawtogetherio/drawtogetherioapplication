@@ -1,7 +1,7 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost } from './core/document';
 import { Point, Rect, polyPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
-import { DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
+import { BrushPreset, DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
 import { CanvasView } from './view/canvasView';
 import type { Tool } from './tools/tool';
 import type { RoomClient } from './net/roomClient';
@@ -9,7 +9,7 @@ import type { MyProfile } from './shared/profile';
 import { userFolderId } from './shared/protocol';
 import type { ApplyOptions } from './core/document';
 import type { TiledSurface } from './core/tiles';
-import { DEFAULT_PREFS, Prefs } from './shared/prefs';
+import { Prefs, cleanPrefs } from './shared/prefs';
 
 export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
 export type SelectMode = 'rect' | 'ellipse' | 'lasso';
@@ -50,7 +50,7 @@ export class Editor {
   room: RoomClient | null = null;
   /** Every op this person commits, for the copy kept on the device. */
   onOp: ((op: Op) => void) | null = null;
-  prefs: Prefs = { ...DEFAULT_PREFS, keys: {} };
+  prefs: Prefs = cleanPrefs({});
   settings: EditorSettings = {
     brush: { ...brushById(DEFAULT_BRUSH).params }, brushPreset: DEFAULT_BRUSH,
     eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
@@ -103,6 +103,9 @@ export class Editor {
   }
 
   get currentTool() { return this.tools[this.toolId]; }
+
+  /** One of your brushes or a library one; unknown ids fall back to the first library brush. */
+  preset(id: string): BrushPreset { return this.prefs.customBrushes.find((b) => b.id === id) ?? brushById(id); }
 
   setTool(id: ToolId) {
     if (id === this.toolId) return;

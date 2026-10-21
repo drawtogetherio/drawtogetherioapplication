@@ -1,5 +1,7 @@
 // Per-account preferences, saved with the profile so they follow the person across devices.
 import { DEFAULT_CURVE, curveAt, validCurve } from './curve';
+import { cleanBrush } from './brush';
+import type { BrushParams } from '../core/model';
 
 export type KeyAction = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper' | 'layers'
   | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag';
@@ -19,6 +21,25 @@ export const DEFAULT_KEYS: Record<KeyAction, string> = {
 export type Mode = 'dark' | 'light' | 'system';
 export const MODES: Mode[] = ['dark', 'light', 'system'];
 
+/** A brush someone made; `cat` is a library category or one of their own. */
+export interface CustomBrush { id: string; name: string; cat: string; params: BrushParams }
+export const BUILTIN_CATEGORIES = ['General', 'Pencil', 'Pen', 'Eraser'];
+export const MAX_CUSTOM_BRUSHES = 80, MAX_CATEGORIES = 12;
+
+export type PanelId = 'tools' | 'brush' | 'color' | 'swatches' | 'layers';
+export type Dock = 'left' | 'right' | 'top' | 'bottom' | 'float';
+export interface PanelState { dock: Dock; x: number; y: number; w: number; h: number; show: boolean; order: number }
+export const PANELS: { id: PanelId; label: string }[] = [
+  { id: 'tools', label: 'Tools' }, { id: 'brush', label: 'Brush properties' }, { id: 'color', label: 'Colour wheel' }, { id: 'swatches', label: 'Swatches' }, { id: 'layers', label: 'Layers' },
+];
+export const DEFAULT_PANELS: Record<PanelId, PanelState> = {
+  tools: { dock: 'left', x: 0, y: 0, w: 56, h: 440, show: true, order: 0 },
+  brush: { dock: 'left', x: 0, y: 0, w: 230, h: 480, show: true, order: 1 },
+  color: { dock: 'right', x: 0, y: 0, w: 260, h: 340, show: true, order: 0 },
+  swatches: { dock: 'right', x: 0, y: 0, w: 260, h: 160, show: true, order: 1 },
+  layers: { dock: 'right', x: 0, y: 0, w: 300, h: 420, show: true, order: 2 },
+};
+
 export interface Prefs {
   /** Only the bindings that differ from the defaults; '' unbinds. */
   keys: Partial<Record<KeyAction, string>>;
@@ -35,14 +56,37 @@ export interface Prefs {
   supportBanner: boolean;
   /** Brush ids starred in the library. */
   favoriteBrushes: string[];
+  customBrushes: CustomBrush[];
+  /** Categories the person added to the brush library. */
+  brushCategories: string[];
+  layout: 'classic' | 'studio';
+  /** Where each studio panel sits. */
+  panels: Record<PanelId, PanelState>;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, supportBanner: true, favoriteBrushes: [],
+  fingerDraws: true, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
+const isBrushId = (v: unknown): v is string => typeof v === 'string' && /^[a-z0-9-]{1,24}$/.test(v);
+export const cleanName = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '');
+const list = (v: unknown) => (Array.isArray(v) ? v : []);
+
+function cleanPanels(raw: unknown): Record<PanelId, PanelState> {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, Record<string, unknown>>;
+  const n = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(hi, Math.max(lo, v))) : d);
+  const out = {} as Record<PanelId, PanelState>;
+  for (const { id } of PANELS) {
+    const d = DEFAULT_PANELS[id], p = r[id] ?? {};
+    out[id] = {
+      dock: ['left', 'right', 'top', 'bottom', 'float'].includes(p.dock as string) ? p.dock as Dock : d.dock,
+      x: n(p.x, 0, 8000, d.x), y: n(p.y, 0, 8000, d.y), w: n(p.w, 48, 1600, d.w), h: n(p.h, 48, 2400, d.h), show: p.show !== false, order: n(p.order, 0, 9, d.order),
+    };
+  }
+  return out;
+}
 
 export function cleanPrefs(raw: unknown): Prefs {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -53,6 +97,18 @@ export function cleanPrefs(raw: unknown): Prefs {
     if (isKey(v) && v !== DEFAULT_KEYS[a.id]) keys[a.id] = (v as string).toLowerCase();
   }
   const gamma = Number(r.pressureGamma);
+  const cats: string[] = [];
+  for (const c of list(r.brushCategories)) {
+    const name = cleanName(c, 20);
+    if (name && !BUILTIN_CATEGORIES.includes(name) && !cats.includes(name) && cats.length < MAX_CATEGORIES) cats.push(name);
+  }
+  const brushes: CustomBrush[] = [];
+  for (const b of list(r.customBrushes) as Record<string, unknown>[]) {
+    const params = b && cleanBrush(b.params), name = cleanName(b?.name, 30);
+    if (!params || !name || !isBrushId(b.id) || brushes.some((x) => x.id === b.id) || brushes.length >= MAX_CUSTOM_BRUSHES) continue;
+    const cat = cleanName(b.cat, 20);
+    brushes.push({ id: b.id, name, cat: BUILTIN_CATEGORIES.includes(cat) || cats.includes(cat) ? cat : 'General', params });
+  }
   return {
     keys,
     mode: MODES.includes(r.mode as Mode) ? r.mode as Mode : DEFAULT_PREFS.mode,
@@ -63,7 +119,11 @@ export function cleanPrefs(raw: unknown): Prefs {
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
     fingerDraws: r.fingerDraws !== false,
     supportBanner: r.supportBanner !== false,
-    favoriteBrushes: Array.isArray(r.favoriteBrushes) ? r.favoriteBrushes.filter((b): b is string => typeof b === 'string' && /^[a-z-]{1,24}$/.test(b)).slice(0, 40) : [],
+    favoriteBrushes: list(r.favoriteBrushes).filter(isBrushId).slice(0, 40),
+    customBrushes: brushes,
+    brushCategories: cats,
+    layout: r.layout === 'studio' ? 'studio' : 'classic',
+    panels: cleanPanels(r.panels),
   };
 }
 

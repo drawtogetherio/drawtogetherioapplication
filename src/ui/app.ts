@@ -1,6 +1,5 @@
 import { DrawDoc } from '../core/document';
 import { Editor, ToolId } from '../editor';
-import { brushById } from '../engine/brush';
 import { BrushTool } from '../tools/brushTool';
 import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
@@ -27,6 +26,7 @@ import { api } from '../net/api';
 import { applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
 import { KeyAction, actionFor, keyOf } from '../shared/prefs';
+import { Studio } from './panels';
 import { PREFS_KEY } from './session';
 import { Home } from './home';
 import { InvitePanel } from './invitePanel';
@@ -54,8 +54,16 @@ export class App {
   private select: SelectTool;
   private toolButtons = new Map<ToolId, HTMLElement>();
   private options = h('div.optionsbar');
-  private sizeSlider: Slider;
-  private opacitySlider: Slider;
+  private sliders: Slider[] = []; // size and opacity, vertical for the classic sidebar and flat for the studio panel
+  private sidebar: HTMLElement;
+  private studio: Studio;
+  private studioSliders: HTMLElement;
+  private layers: LayersPanel;
+  private layersPop: HTMLElement;
+  private picker: ColorPicker;
+  private colorPop: HTMLElement;
+  private toolsSlot: HTMLElement;
+  private topbar: HTMLElement;
   private undoBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
   private colorBtn: HTMLButtonElement;
@@ -126,6 +134,7 @@ export class App {
     this.zoomLabel.addEventListener('click', () => ed.fitView());
 
     const right = h('div.bar-group');
+    this.toolsSlot = h('span.sep.edit-only');
     for (const t of TOOLS) {
       const picker = PICKER_TOOLS.includes(t.id);
       const b = btn(t.id, t.label, () => {
@@ -135,40 +144,49 @@ export class App {
       this.toolButtons.set(t.id, b);
       right.append(b);
     }
-    right.append(h('span.sep.edit-only'));
+    right.append(this.toolsSlot);
 
-    const layers = new LayersPanel(ed);
-    const layersPop = h('div.popover.layers-pop', { hidden: true }, layers.el);
+    const layers = this.layers = new LayersPanel(ed);
+    const layersPop = this.layersPop = h('div.popover.layers-pop', { hidden: true }, layers.el);
     const layersBtn = this.layersBtn = btn('layers', 'Layers', () => {
+      if (this.studioOn) { this.studio.show('layers', !ed.prefs.panels.layers.show); return; }
       layersPop.hidden = !layersPop.hidden; layers.open = !layersPop.hidden; if (layers.open) layers.render();
     }, '.edit-only');
     dismissOnOutside(layersPop, [layersBtn], () => { layersPop.hidden = true; layers.open = false; });
 
-    const picker = new ColorPicker(ed);
-    const colorPop = h('div.popover.color-pop', { hidden: true }, h('div.panel', {}, picker.el));
+    const picker = this.picker = new ColorPicker(ed);
+    const colorPop = this.colorPop = h('div.popover.color-pop', { hidden: true }, h('div.panel', {}, picker.el));
     this.colorBtn = h('button.color-btn.edit-only', { title: 'Colour', 'aria-label': 'Colour' });
-    this.colorBtn.addEventListener('click', () => { colorPop.hidden = !colorPop.hidden; if (!colorPop.hidden) picker.opened(); });
+    this.colorBtn.addEventListener('click', () => {
+      if (this.studioOn) { this.studio.show('color', !ed.prefs.panels.color.show); return; }
+      colorPop.hidden = !colorPop.hidden; if (!colorPop.hidden) picker.opened();
+    });
     dismissOnOutside(colorPop, [this.colorBtn], () => { colorPop.hidden = true; });
     right.append(layersBtn, this.colorBtn, h('span.sep'), this.saveBadge);
     this.saveBadge.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a')) return; this.saveBadge.classList.toggle('open'); });
     dismissOnOutside(this.saveBadge, [], () => this.saveBadge.classList.remove('open'));
-    const topbar = h('header.topbar', {}, left, right);
+    const topbar = this.topbar = h('header.topbar', {}, left, right);
     frameBar(topbar, right);
 
     const peek = { onStart: () => this.showSliderPreview(), onEnd: () => this.hideSliderPreview() };
-    this.sizeSlider = new Slider({
-      min: 1, max: 500, value: ed.sizeParams.size, vertical: true, curve: 2.4, label: 'Size', ...peek,
-      format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); this.showSliderPreview(); },
-    });
-    this.opacitySlider = new Slider({
-      min: 0.01, max: 1, value: ed.sizeParams.opacity, vertical: true, label: 'Opacity', ...peek,
-      format: (v) => Math.round(v * 100) + '%', onInput: (v) => { ed.sizeParams.opacity = v; ed.emit('brush'); this.showSliderPreview(); },
-    });
+    const sliders = (vertical: boolean) => [
+      new Slider({
+        min: 1, max: 500, value: ed.sizeParams.size, vertical, curve: 2.4, label: 'Size', ...peek,
+        format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); this.showSliderPreview(); },
+      }),
+      new Slider({
+        min: 0.01, max: 1, value: ed.sizeParams.opacity, vertical, label: 'Opacity', ...peek,
+        format: (v) => Math.round(v * 100) + '%', onInput: (v) => { ed.sizeParams.opacity = v; ed.emit('brush'); this.showSliderPreview(); },
+      }),
+    ];
+    this.sliders = [...sliders(true), ...sliders(false)];
+    this.studioSliders = h('div.sp-sliders', {}, this.sliders[2].el, this.sliders[3].el);
     this.undoBtn = btn('undo', 'Undo (Ctrl+Z, two-finger tap)', () => ed.undo());
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
-    const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
+    const sidebar = this.sidebar = h('aside.sidebar', {}, this.sliders[0].el, this.sliders[1].el, this.undoBtn, this.redoBtn);
+    this.studio = new Studio(ed, stage);
 
-    root.append(topbar, this.options, stage, sidebar, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -203,7 +221,43 @@ export class App {
     }
     this.layersBtn.title = 'Layers' + key('layers');
     this.layersBtn.setAttribute('aria-label', this.layersBtn.title);
+    this.applyLayout();
     this.ed.view.requestRender();
+  }
+
+  get studioOn() { return this.ed.prefs.layout === 'studio'; }
+
+  resetLayout() { this.studio.reset(); }
+
+  /** Moves the tools, options, sliders, colour picker and layers between the classic bars and the studio panels. */
+  applyLayout() {
+    const studio = this.studioOn, ed = this.ed;
+    document.body.classList.toggle('studio', studio);
+    this.studio.el.hidden = !studio;
+    this.closePicker();
+    this.layersPop.hidden = this.colorPop.hidden = true;
+    this.picker.setWheel(studio);
+    const tools = [...this.toolButtons.values()];
+    if (studio) {
+      this.studio.frame('tools', ...tools, h('span.sp-gap'), this.undoBtn, this.redoBtn);
+      this.studio.frame('brush', this.studioSliders, this.options);
+      this.studio.frame('color', this.picker.pickerEl);
+      this.studio.frame('swatches', this.picker.swatchesEl);
+      this.studio.frame('layers', this.layers.el);
+      this.studio.apply();
+      this.picker.opened();
+      this.layers.open = true;
+      this.layers.render();
+    } else {
+      for (const b of tools) this.toolsSlot.before(b);
+      this.topbar.after(this.options);
+      this.sidebar.before(ed.view.canvas.parentElement!);
+      this.sidebar.append(this.undoBtn, this.redoBtn);
+      this.picker.el.append(this.picker.pickerEl, this.picker.swatchesEl);
+      this.layersPop.append(this.layers.el);
+      this.layers.open = false;
+    }
+    ed.view.resize();
   }
 
   /** Saved with the account, or on this device when drawing without one. */
@@ -380,7 +434,7 @@ export class App {
       if (this.toolPopFor && this.toolPopFor !== ed.toolId) this.closePicker();
       this.renderOptions();
       this.syncSliders();
-      this.opacitySlider.el.hidden = ed.toolId === 'smudge';
+      this.sliders[1].el.hidden = this.sliders[3].el.hidden = ed.toolId === 'smudge';
     } else if (w === 'color') {
       this.colorBtn.style.background = ed.color;
     } else if (w === 'history') {
@@ -405,7 +459,7 @@ export class App {
     const ed = this.ed, p = ed.sizeParams, el = this.sliderPreview;
     if (!isBrushTool(ed.toolId)) return;
     clearTimeout(this.sliderPreviewTimer);
-    const name = brushById(currentPreset(ed, ed.toolId)).name;
+    const name = ed.preset(currentPreset(ed, ed.toolId)).name;
     const info = `${Math.round(p.size)} px${ed.toolId === 'smudge' ? '' : ` · ${Math.round(p.opacity * 100)}%`}${p.size > 120 ? ' · shown smaller' : ''}`;
     el.replaceChildren(sizePreview(p, ed.toolId === 'brush' ? ed.color : '#8a8a96'), h('span.slider-preview-text', {}, h('strong', {}, name), info));
     el.hidden = false;
@@ -435,7 +489,7 @@ export class App {
     const ed = this.ed, st = ed.settings;
     const done = () => { this.closePicker(); this.updateToolIcons(); this.renderOptions(); this.syncSliders(); };
     let content: HTMLElement;
-    if (isBrushTool(id)) content = brushLibrary(ed, id, done);
+    if (isBrushTool(id)) content = brushLibrary(this, id, done);
     else if (id === 'select') content = iconChoices(SELECT_MODES, st.selectMode, (v) => { st.selectMode = v; ed.setTool('select'); done(); });
     else content = iconChoices(SHAPE_KINDS, st.shape, (v) => { st.shape = v; ed.setTool('shape'); done(); });
     this.toolPop.replaceChildren(content);
@@ -443,7 +497,13 @@ export class App {
     this.toolPopFor = id;
     for (const [tid, b] of this.toolButtons) b.classList.toggle('open', tid === id && b === anchor);
     const r = anchor.getBoundingClientRect();
-    const w = this.toolPop.offsetWidth;
+    const w = this.toolPop.offsetWidth, hh = this.toolPop.offsetHeight;
+    if (this.studioOn && anchor.closest('.sp')) {
+      // Beside the vertical toolbar instead of under it.
+      this.toolPop.style.top = `${Math.round(Math.max(8, Math.min(window.innerHeight - hh - 8, r.top)))}px`;
+      this.toolPop.style.left = `${Math.round(Math.min(window.innerWidth - w - 8, r.right + 6))}px`;
+      return;
+    }
     this.toolPop.style.top = `${Math.round(r.bottom + 6)}px`;
     this.toolPop.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)))}px`;
   }
@@ -458,8 +518,8 @@ export class App {
   }
 
   private syncSliders() {
-    this.sizeSlider.set(this.ed.sizeParams.size);
-    this.opacitySlider.set(this.ed.sizeParams.opacity);
+    const p = this.ed.sizeParams;
+    this.sliders.forEach((s, i) => s.set(i % 2 ? p.opacity : p.size));
   }
 
   private updateZoom() {
@@ -502,7 +562,7 @@ export class App {
     if (isBrushTool(ed.toolId)) {
       const tool = ed.toolId, smudge = tool === 'smudge';
       const params = tool === 'eraser' ? st.eraser : smudge ? st.smudge : st.brush;
-      const name = brushById(currentPreset(ed, tool)).name;
+      const name = ed.preset(currentPreset(ed, tool)).name;
       const pick: HTMLButtonElement = h('button.preset-btn', {
         title: 'Choose a brush', 'aria-label': `Brush: ${name}. Choose a brush`, html: '',
         onclick: () => this.togglePicker(tool, pick),

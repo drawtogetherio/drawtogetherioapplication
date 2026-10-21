@@ -812,3 +812,83 @@ body.spectating .stage { cursor: grab; }
 .support-link:hover { text-decoration: underline; }
 .support-banner .icon-btn { width: 30px; height: 30px; color: inherit; }
 .support-banner .icon-btn:hover { background: rgba(0, 0, 0, 0.1); }
+
+/* Brush management */
+.brush-library { position: relative; }
+.brush-library .icon-btn.small { width: 30px; height: 30px; }
+.brush-more { color: var(--muted); opacity: 0; flex: none; }
+.brush-row:hover .brush-more, .brush-row:focus-within .brush-more { opacity: 1; }
+.brush-menu { position: absolute; right: 10px; width: 160px; padding: 4px; z-index: 2; display: flex; flex-direction: column; gap: 1px; }
+.brush-menu .menu-item { padding: 7px 8px; font-size: 13px; }
+.brush-edit { display: flex; flex-direction: column; gap: 8px; }
+.brush-edit-preview { background: var(--workspace); border-radius: 10px; padding: 6px; display: grid; place-items: center; }
+.brush-edit-preview canvas { display: block; }
+.brush-edit input[type="text"], .brush-edit select { height: 34px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; flex: 1; min-width: 0; width: auto; max-width: none; }
+.brush-code { font-size: 12px; }
+
+/* Studio layout: panels dock around the canvas or float over it */
+.studio {
+  position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--top) + env(safe-area-inset-top));
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden;
+}
+.studio .stage-wrap { position: relative; inset: auto; grid-area: 2 / 2; min-width: 0; min-height: 0; }
+.dock { display: flex; gap: 4px; padding: 4px; background: var(--bar); z-index: 5; overflow: hidden; }
+/* Docked panels share the side: they shrink from their saved size when it runs out of room */
+.dock-left .sp, .dock-right .sp { flex: 0 1 auto; min-height: 110px; }
+.dock-left .sp-color, .dock-right .sp-color { flex-shrink: 0; }
+.dock-top .sp, .dock-bottom .sp { flex: 0 1 auto; min-width: 110px; }
+.dock:empty { display: none; }
+.dock-top { grid-area: 1 / 1 / 2 / 4; border-bottom: 1px solid var(--line); }
+.dock-bottom { grid-area: 3 / 1 / 4 / 4; border-top: 1px solid var(--line); }
+.dock-left { grid-area: 2 / 1; flex-direction: column; border-right: 1px solid var(--line); align-items: flex-start; }
+.dock-right { grid-area: 2 / 3; flex-direction: column; border-left: 1px solid var(--line); align-items: flex-end; }
+.sp {
+  position: relative; display: flex; flex-direction: column; flex: none; max-width: 100%; max-height: 100%; min-width: 48px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-sizing: border-box;
+}
+.sp.float { position: absolute; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45); }
+.sp.dragging { opacity: 0.85; }
+.sp-head {
+  display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 2px 0 8px; flex: none;
+  font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--panel-2); cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none;
+}
+.sp-head .icon-btn.small { width: 22px; height: 22px; border-radius: 6px; }
+.sp-tools .sp-head span { display: none; }
+.sp-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.sp-resize { position: absolute; width: 14px; height: 14px; bottom: 0; right: 0; cursor: nwse-resize; touch-action: none; }
+.sp-resize::after { content: ''; position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); opacity: 0.6; }
+.sp.right .sp-resize { right: auto; left: 0; cursor: nesw-resize; }
+.sp.right .sp-resize::after { right: auto; left: 3px; border-right: 0; border-left: 2px solid var(--muted); }
+.sp.bottom .sp-resize { bottom: auto; top: 0; cursor: nesw-resize; }
+.sp.bottom .sp-resize::after { bottom: auto; top: 3px; border-bottom: 0; border-top: 2px solid var(--muted); }
+.dock-hint { position: absolute; background: var(--accent-soft); border: 2px dashed var(--accent); pointer-events: none; z-index: 30; border-radius: 10px; }
+.dock-hint.left { left: 0; top: 0; bottom: 0; width: 80px; }
+.dock-hint.right { right: 0; top: 0; bottom: 0; width: 80px; }
+.dock-hint.top { left: 0; right: 0; top: 0; height: 80px; }
+.dock-hint.bottom { left: 0; right: 0; bottom: 0; height: 80px; }
+/* Content borrowed from the classic bars */
+.sp-tools .sp-body { flex-direction: row; flex-wrap: wrap; align-content: flex-start; gap: 2px; padding: 4px; }
+.sp-tools .icon-btn { width: 40px; height: 40px; }
+.sp-gap { flex-basis: 100%; height: 6px; }
+.sp .optionsbar { position: static; height: auto; flex-wrap: wrap; align-items: stretch; gap: 6px; padding: 0; background: transparent; border: 0; overflow: visible; white-space: normal; }
+.sp .optionsbar .slider.compact, .sp .optionsbar .preset-btn, .sp .optionsbar .segmented, .sp .optionsbar .btn { width: 100%; box-sizing: border-box; }
+.sp .optionsbar .segmented { display: flex; }
+.sp .optionsbar .segmented button { flex: 1; justify-content: center; }
+.sp-sliders { display: flex; flex-direction: column; gap: 6px; }
+.sp .panel { width: auto; padding: 0; border: 0; box-shadow: none; background: transparent; border-radius: 0; }
+.sp .panel-head { margin: 0; justify-content: flex-end; }
+.sp .panel-title { display: none; }
+.sp .layer-list { max-height: none; flex: 1; }
+.sp .layers-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.sp .color-picker, .sp .cp-main, .sp .cp-swatches-wrap { display: flex; flex-direction: column; gap: 10px; }
+.sp .cp-swatches { grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); }
+body.studio .sidebar { display: none; }
+body.spectating .sp, body.spectating .dock { display: none; }
+body.studio .slider-preview { left: 50%; transform: translate(-50%, -50%); }
+body.studio .tool-pop { right: auto; }
+/* Colour wheel: a hue ring around the saturation/value square */
+.cp-ring { display: none; }
+.cp-svwrap.wheel { aspect-ratio: 1; overflow: visible; border-radius: 0; max-width: 360px; align-self: center; width: 100%; }
+.cp-svwrap.wheel .cp-ring { display: block; width: 100%; height: 100%; }
+.cp-svwrap.wheel .cp-sv { position: absolute; left: 23.5%; top: 23.5%; width: 53%; height: 53%; border-radius: 6px; }
+.cp-svwrap.wheel .cp-hue-thumb { position: absolute; }

@@ -3,6 +3,9 @@ import { hexToRgb } from '../engine/brush';
 import type { Editor } from '../editor';
 import { h } from './dom';
 
+/** Wheel geometry as fractions of the wrap: the ring's inner radius and the side of the square inside it (matches .wheel .cp-sv). */
+const INNER = 0.78, SQUARE = 0.53;
+
 const PALETTE = [
   '#000000', '#3c3c43', '#7c7c85', '#bdbdc4', '#ffffff', '#f2e8dc',
   '#e53935', '#f4511e', '#fb8c00', '#fdd835', '#c0ca33', '#43a047',
@@ -33,8 +36,14 @@ export function hsvToHex(hh: number, s: number, v: number): string {
 
 export class ColorPicker {
   readonly el: HTMLElement;
+  /** The picker and the swatches, so the studio layout can give each its own panel. */
+  readonly pickerEl: HTMLElement;
+  readonly swatchesEl: HTMLElement;
   private hue = 0; private sat = 0; private val = 0;
   private sv: HTMLCanvasElement;
+  private svWrap: HTMLElement;
+  private ring: HTMLCanvasElement;
+  private wheel = false;
   private hueBar: HTMLElement;
   private svThumb: HTMLElement;
   private hueThumb: HTMLElement;
@@ -56,16 +65,14 @@ export class ColorPicker {
     const palette = h('div.cp-swatches');
     for (const c of PALETTE) palette.append(this.swatch(c));
 
-    this.el = h('div.color-picker', {},
-      h('div.cp-svwrap', {}, this.sv, this.svThumb),
-      this.hueBar,
-      h('div.cp-row', {}, h('div.cp-compare', {}, this.previous, this.current), this.hex),
-      h('div.cp-section', {}, 'Palette'), palette,
-      h('div.cp-section', {}, 'Recent'), this.recent,
-    );
+    this.ring = h('canvas.cp-ring', { width: 320, height: 320 });
+    this.svWrap = h('div.cp-svwrap', {}, this.ring, this.sv, this.svThumb);
+    this.pickerEl = h('div.cp-main', {}, this.svWrap, this.hueBar, h('div.cp-row', {}, h('div.cp-compare', {}, this.previous, this.current), this.hex));
+    this.swatchesEl = h('div.cp-swatches-wrap', {}, h('div.cp-section', {}, 'Palette'), palette, h('div.cp-section', {}, 'Recent'), this.recent);
+    this.el = h('div.color-picker', {}, this.pickerEl, this.swatchesEl);
 
     this.previous.addEventListener('click', () => this.ed.setColor(this.previous.dataset.c!, true));
-    this.dragArea(this.sv, (x, y) => { this.sat = x; this.val = 1 - y; this.push(); });
+    this.dragArea(this.svWrap, (x, y) => { this.sat = x; this.val = 1 - y; this.push(); }, (x, y) => this.wheel && Math.max(Math.abs(x - 0.5), Math.abs(y - 0.5)) > SQUARE / 2);
     this.dragArea(this.hueBar, (x) => { this.hue = x * 359.9; this.push(); this.drawSV(); });
     this.hex.addEventListener('change', () => {
       const v = this.hex.value.trim();
@@ -85,6 +92,28 @@ export class ColorPicker {
     this.renderRecent();
   }
 
+  /** A hue ring around the square instead of the bar below it. */
+  setWheel(on: boolean) {
+    this.wheel = on;
+    this.svWrap.classList.toggle('wheel', on);
+    this.hueBar.hidden = on;
+    (on ? this.svWrap : this.hueBar).append(this.hueThumb);
+    if (on && !this.ring.dataset.drawn) this.drawRing();
+    this.renderThumbs();
+  }
+
+  private drawRing() {
+    const c = this.ring.getContext('2d')!, S = this.ring.width, R = S / 2, r = R * INNER;
+    c.lineWidth = R - r;
+    for (let a = 0; a < 360; a++) {
+      c.beginPath();
+      c.strokeStyle = `hsl(${a} 100% 50%)`;
+      c.arc(R, R, (R + r) / 2, ((a - 0.6) * Math.PI) / 180, ((a + 0.6) * Math.PI) / 180);
+      c.stroke();
+    }
+    this.ring.dataset.drawn = '1';
+  }
+
   private swatch(c: string) {
     return h('button.cp-swatch', { style: `background:${c}`, title: c, 'aria-label': c, onclick: () => this.ed.setColor(c, true) });
   }
@@ -93,13 +122,19 @@ export class ColorPicker {
     this.recent.replaceChildren(...this.ed.recentColors.map((c) => this.swatch(c)));
   }
 
-  private dragArea(el: HTMLElement, fn: (x: number, y: number) => void) {
+  /** `onRing` decides at pointer-down whether the drag turns the hue ring instead. */
+  private dragArea(el: HTMLElement, fn: (x: number, y: number) => void, onRing?: (x: number, y: number) => boolean) {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       el.setPointerCapture(e.pointerId);
+      const at = (ev: PointerEvent) => { const r = el.getBoundingClientRect(); return [(ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height]; };
+      const [x0, y0] = at(e);
+      const ring = !!onRing?.(x0, y0);
       const go = (ev: PointerEvent) => {
-        const r = el.getBoundingClientRect();
-        fn(clamp((ev.clientX - r.left) / r.width, 0, 1), clamp((ev.clientY - r.top) / r.height, 0, 1));
+        const [x, y] = at(ev);
+        if (ring) { this.hue = ((Math.atan2(y - 0.5, x - 0.5) * 180) / Math.PI + 360) % 360; this.push(); this.drawSV(); return; }
+        const lo = this.wheel ? (1 - SQUARE) / 2 : 0, span = this.wheel ? SQUARE : 1;
+        fn(clamp((x - lo) / span, 0, 1), clamp((y - lo) / span, 0, 1));
       };
       go(e);
       const up = () => {
@@ -131,10 +166,15 @@ export class ColorPicker {
   }
 
   private renderThumbs() {
-    this.svThumb.style.left = this.sat * 100 + '%';
-    this.svThumb.style.top = (1 - this.val) * 100 + '%';
+    const lo = this.wheel ? (1 - SQUARE) / 2 : 0, span = this.wheel ? SQUARE : 1;
+    this.svThumb.style.left = (lo + this.sat * span) * 100 + '%';
+    this.svThumb.style.top = (lo + (1 - this.val) * span) * 100 + '%';
     this.svThumb.style.background = this.ed.color;
-    this.hueThumb.style.left = (this.hue / 360) * 100 + '%';
+    if (this.wheel) {
+      const a = (this.hue * Math.PI) / 180, m = (1 + INNER) / 4;
+      this.hueThumb.style.left = (0.5 + Math.cos(a) * m) * 100 + '%';
+      this.hueThumb.style.top = (0.5 + Math.sin(a) * m) * 100 + '%';
+    } else { this.hueThumb.style.left = (this.hue / 360) * 100 + '%'; this.hueThumb.style.top = ''; }
     this.hueThumb.style.background = hsvToHex(this.hue, 1, 1);
     this.current.style.background = this.ed.color;
     if (document.activeElement !== this.hex) this.hex.value = this.ed.color;

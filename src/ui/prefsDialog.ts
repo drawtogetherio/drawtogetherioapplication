@@ -1,4 +1,4 @@
-import { DEFAULT_KEYS, KEY_ACTIONS, KeyAction, MODES, Mode, actionFor, keyOf } from '../shared/prefs';
+import { DEFAULT_KEYS, KEY_ACTIONS, KeyAction, MODES, Mode, PANELS, actionFor, keyOf } from '../shared/prefs';
 import { DEFAULT_CURVE } from '../shared/curve';
 import type { App } from './app';
 import { curveEditor } from './curveEditor';
@@ -7,7 +7,7 @@ import { clear, h } from './dom';
 import { Slider } from './slider';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
-const GROUPS = ['Appearance', 'Canvas', 'Pressure', 'Shortcuts'] as const;
+const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Shortcuts'] as const;
 
 export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'Appearance') {
   const ed = app.ed, p = ed.prefs;
@@ -30,6 +30,20 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
   };
 
   const appearance = () => [app.themeRow(), row('Mode', segmented(MODES, (m) => MODE_LABELS[m], () => p.mode, (m) => { p.mode = m; }))];
+
+  const layout = () => {
+    const panels = h('div.pref-stack');
+    const render = () => {
+      panels.hidden = p.layout !== 'studio';
+      panels.replaceChildren(
+        h('small.muted', {}, 'Drag a panel by its title to move it; drop it on an edge to dock it. Studio panels:'),
+        ...PANELS.map((pn) => toggle(pn.label, () => p.panels[pn.id].show, (v) => { p.panels[pn.id].show = v; })),
+        h('div.row', {}, h('button.btn.small', { type: 'button', onclick: () => { app.resetLayout(); } }, 'Reset layout')),
+      );
+    };
+    render();
+    return [row('Layout', segmented(['classic', 'studio'] as const, (v) => (v === 'classic' ? 'Classic' : 'Studio'), () => p.layout, (v) => { p.layout = v; render(); })), panels];
+  };
 
   const canvas = () => [
     toggle('Brush outline on hover', () => p.hoverPreview, (v) => { p.hoverPreview = v; }),
@@ -95,7 +109,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       h('button.btn.small', { type: 'button', onclick: () => { p.keys = {}; changed(); renderKeys(); } }, 'Reset'))];
   };
 
-  const pages = { Appearance: appearance, Canvas: canvas, Pressure: pressure, Shortcuts: shortcuts };
+  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Shortcuts: shortcuts };
   const page = h('div.pref-page');
   const nav = h('nav.pref-nav', { 'aria-label': 'Preference groups' });
   const show = (g: (typeof GROUPS)[number]) => {

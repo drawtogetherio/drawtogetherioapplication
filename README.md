@@ -56,6 +56,30 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   have a square tip. Dragging the Size or Opacity slider shows a preview of the brush at that size.
   The star on a brush row keeps it on the library's ★ tab; the list is saved in prefs
   (`favoriteBrushes`), so it follows the account.
+- **Your own brushes (v0.24)**: every brush row has a ⋯ menu with Clone and Copy code; the library
+  head adds a brush from the current settings, pastes a brush code, or makes a category. The editor
+  (`src/ui/brushEditor.ts`) has a slider for every `BrushParams` field, the tip shape, a live preview and
+  the brush's share code. Codes are `hive-` plus base64url of the name and numbers
+  (`src/shared/brush.ts`, `brushCode` / `parseBrushCode`); pasting one into another account's library
+  recreates the brush. Brushes (`customBrushes`, up to 80) and categories (`brushCategories`, up to 12)
+  live in prefs; `cleanPrefs` validates them with the same ranges the server uses for strokes
+  (`validBrush`). Deleting a category moves its brushes to General. `ed.preset(id)` looks a brush up in
+  your own list first, then the library.
+- **Studio layout (v0.24)**: Preferences → Layout switches between Classic (bars and popovers) and
+  Studio: a vertical toolbar and brush properties on the left, a colour wheel, swatches and layers on
+  the right. Panels drag by their title to float over the canvas, drop on an edge to dock there (any
+  side, in the order dropped), resize from the corner grip, and close with X; the Layout group lists
+  which panels show and resets the arrangement. Positions are saved in prefs (`panels`) with the
+  account. `src/ui/panels.ts` (`Studio`) owns the frames; the app moves the same tool buttons, options
+  bar, sliders, colour picker and layers panel between the classic bars and the studio frames
+  (`App.applyLayout`), so both layouts share one state. The colour wheel is the picker's `setWheel`
+  mode: a hue ring drawn once around the saturation/value square.
+- **Clipping masks and layer masks (v0.24)**: the layers panel's clip button clips a layer to the one
+  below (consecutive clipped layers render as a group over their base; hiding the base hides them). The
+  mask button adds a mask: paint on it hides, erase shows; the mask thumbnail sits beside the layer's
+  and clicking either picks what the tools edit. Apply bakes the mask into the pixels; delete and undo
+  restore it. Ops carry `mask: true` when they target the mask, so rooms and replay stay exact; PSD
+  export writes masks and clipping.
 - **Layer effects** (the ✦ button by the flip buttons lists them; the layers panel's ✦ too): Gaussian blur, motion blur, mosaic, chromatic
   aberration, glitch, sharpen and noise. Each is one `effect` op, computed with plain arithmetic in a fixed
   order (`src/engine/effects.ts`) so every client bakes the same pixels; nothing is re-applied per frame.
@@ -239,7 +263,9 @@ node tests/smoke.mjs http://localhost:4180/app.html
 node tests/touch.mjs http://localhost:4180/app.html
 node tests/replay.mjs http://localhost:4180/app.html
 node tests/pickers.mjs http://localhost:4180/app.html   # brush library, mode drop-downs, R/Z view keys
-node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, square tips, shared smudge/eraser library, slider preview, effects
+node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, square tips, custom brushes and codes, slider preview, effects
+node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer masks, replay
+node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to classic
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev

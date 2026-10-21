@@ -1,9 +1,14 @@
 import type { BrushParams, ShapeKind } from '../core/model';
 import { TiledSurface } from '../core/tiles';
-import { BRUSH_LIBRARY, BrushPreset, brushById, categoryOf, renderStroke, smudgeParams } from '../engine/brush';
+import { BRUSH_LIBRARY, BrushCategory, BrushPreset, renderStroke, smudgeParams } from '../engine/brush';
+import { brushCode, parseBrushCode } from '../shared/brush';
+import { BUILTIN_CATEGORIES, CustomBrush } from '../shared/prefs';
+import type { App } from './app';
+import { brushEditor, newCategory, removeBrush } from './brushEditor';
+import { confirmDialog, textDialog } from './dialogs';
 import type { Editor, SelectMode, ToolId } from '../editor';
-import { ctx2d, makeCanvas } from '../core/geom';
-import { clear, h } from './dom';
+import { ctx2d, makeCanvas, uid } from '../core/geom';
+import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 
 export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse']];
@@ -54,13 +59,19 @@ export function currentPreset(ed: Editor, tool: BrushTool) {
   return tool === 'eraser' ? st.eraserPreset : tool === 'smudge' ? st.smudgePreset : st.brushPreset;
 }
 
-/** Brush, eraser and smudge share one library, in categories plus the brushes you starred; the last tab you looked at stays open. */
-export function brushLibrary(ed: Editor, tool: BrushTool, onPick: () => void): HTMLElement {
-  const st = ed.settings, current = currentPreset(ed, tool), favs = ed.prefs.favoriteBrushes;
-  const cats = () => [{ name: 'Favourites', brushes: favs.map(brushById).filter((b) => favs.includes(b.id)) }, ...BRUSH_LIBRARY];
-  let tab = favs.includes(current) ? 0 : categoryOf(current) + 1;
+/** Brush, eraser and smudge share one library: the brushes you starred, the built-in categories, then your own. */
+export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTMLElement {
+  const ed = app.ed, st = ed.settings, current = currentPreset(ed, tool), p = ed.prefs, favs = p.favoriteBrushes;
+  const cats = (): (BrushCategory & { user?: boolean })[] => [
+    { name: 'Favourites', brushes: favs.map((id) => ed.preset(id)).filter((b) => favs.includes(b.id)) },
+    ...BRUSH_LIBRARY.map((c) => ({ name: c.name, brushes: [...c.brushes, ...p.customBrushes.filter((b) => b.cat === c.name)] })),
+    ...p.brushCategories.map((name) => ({ name, brushes: p.customBrushes.filter((b) => b.cat === name), user: true })),
+  ];
+  let tab = Math.max(0, cats().findIndex((c) => c.brushes.some((b) => b.id === current)));
   const tabs = h('div.brush-tabs', { role: 'tablist' });
   const list = h('div.brush-list', { role: 'listbox', 'aria-label': 'Brushes' });
+  const head = h('span.head-actions');
+  const menu = h('div.panel.brush-menu', { hidden: true });
   const pick = (pr: BrushPreset) => {
     const params = { ...pr.params };
     if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
@@ -76,25 +87,68 @@ export function brushLibrary(ed: Editor, tool: BrushTool, onPick: () => void): H
     ed.emit('prefs');
     render();
   };
+  const custom = (b: BrushPreset) => p.customBrushes.find((c) => c.id === b.id);
+  const edit = (b: CustomBrush) => brushEditor(app, b, () => { tab = Math.max(0, cats().findIndex((c) => c.name === b.cat)); render(); });
+  const clone = (b: BrushPreset) => {
+    const c = cats()[tab];
+    edit({ id: uid('c'), name: b.name + ' copy', cat: c.user || BUILTIN_CATEGORIES.includes(c.name) ? c.name : 'General', params: { ...b.params } });
+  };
+  const more = (b: BrushPreset, at: HTMLElement) => {
+    const mine = custom(b);
+    const item = (ic: string, text: string, fn: () => void) => h('button.menu-item', { type: 'button', html: icon(ic, 16) + `<span>${text}</span>`, onclick: () => { menu.hidden = true; fn(); } });
+    menu.replaceChildren(
+      item('copy', 'Clone', () => clone(b)),
+      mine ? item('rename', 'Edit', () => edit(mine)) : '',
+      item('link', 'Copy code', () => app.copyText(brushCode(b.name, b.params), 'Brush code copied')),
+      mine ? item('trash', 'Delete', async () => { if (await confirmDialog('Delete brush', `Delete “${b.name}”?`, 'Delete')) { removeBrush(app, mine); ed.emit('prefs'); render(); } }) : '',
+    );
+    menu.style.top = `${at.offsetTop + at.offsetHeight}px`;
+    menu.hidden = false;
+  };
   const render = () => {
+    const all = cats();
+    tab = Math.min(tab, all.length - 1);
     clear(tabs);
-    cats().forEach((c, i) => tabs.append(h(`button.brush-tab${i === tab ? '.active' : ''}` as 'button', {
+    all.forEach((c, i) => tabs.append(h(`button.brush-tab${i === tab ? '.active' : ''}` as 'button', {
       role: 'tab', 'aria-selected': String(i === tab), html: i === 0 ? icon('star', 14) : c.name, 'aria-label': c.name, title: c.name, onclick: () => { tab = i; render(); },
     })));
+    const cat = all[tab];
+    head.replaceChildren(
+      act('plus', 'New brush from the current settings', () => clone({ id: '', name: ed.preset(current).name, params: tool === 'eraser' ? st.eraser : tool === 'smudge' ? st.smudge : st.brush })),
+      act('link', 'Add a brush from a code', async () => {
+        const got = parseBrushCode((await textDialog('Brush code', '', 'Add')) ?? '');
+        if (!got) { app.toast('That isn’t a brush code'); return; }
+        edit({ id: uid('c'), name: got.name, cat: cat.user ? cat.name : 'General', params: got.params });
+      }),
+      act('folderPlus', 'New category', async () => { const name = await newCategory(app); if (name) { tab = all.length; render(); } }),
+      cat.user ? act('trash', 'Delete category', async () => {
+        if (!(await confirmDialog('Delete category', `Delete “${cat.name}”? Its brushes move to General.`, 'Delete'))) return;
+        for (const b of p.customBrushes) if (b.cat === cat.name) b.cat = 'General';
+        p.brushCategories.splice(p.brushCategories.indexOf(cat.name), 1);
+        ed.emit('prefs');
+        tab = 1;
+        render();
+      }) : '',
+    );
     clear(list);
-    const shown = cats()[tab].brushes;
-    if (!shown.length) list.append(h('p.muted.small', {}, 'Star a brush to keep it here.'));
-    for (const pr of shown) {
+    if (!cat.brushes.length) list.append(h('p.muted.small', {}, tab === 0 ? 'Star a brush to keep it here.' : 'No brushes yet. Clone one from its ⋯ menu.'));
+    for (const pr of cat.brushes) {
       const on = favs.includes(pr.id);
+      const dots: HTMLButtonElement = h('button.icon-btn.brush-more', { type: 'button', title: 'More', 'aria-label': `More for ${pr.name}`, html: icon('more', 16), onclick: () => more(pr, dots.parentElement!) });
       list.append(h(`div.brush-row${pr.id === current ? '.active' : ''}` as 'div', { role: 'option', 'aria-selected': String(pr.id === current) },
         h('button.brush-pick', { type: 'button', title: pr.name, onclick: () => pick(pr) }, h('span.brush-name', {}, pr.name), brushPreview(pr.params)),
-        h(`button.icon-btn.brush-star${on ? '.on' : ''}` as 'button', { type: 'button', title: on ? 'Unstar' : 'Star', 'aria-label': `${on ? 'Unstar' : 'Star'} ${pr.name}`, 'aria-pressed': String(on), html: icon('star', 16), onclick: () => star(pr.id) })));
+        h(`button.icon-btn.brush-star${on ? '.on' : ''}` as 'button', { type: 'button', title: on ? 'Unstar' : 'Star', 'aria-label': `${on ? 'Unstar' : 'Star'} ${pr.name}`, 'aria-pressed': String(on), html: icon('star', 16), onclick: () => star(pr.id) }),
+        dots));
     }
   };
   render();
   const title = tool === 'eraser' ? 'Eraser' : tool === 'smudge' ? 'Smudge' : 'Brush';
-  return h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library')), tabs, list);
+  const el = h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library'), head), tabs, list, menu);
+  dismissOnOutside(menu, [], () => { menu.hidden = true; });
+  return el;
 }
+
+const act = (ic: string, title: string, fn: () => void) => h('button.icon-btn.small', { type: 'button', title, 'aria-label': title, html: icon(ic, 16), onclick: fn });
 
 /** The brush at its real size (shrunk past 120 px) with the current opacity, shown while a sidebar slider moves. */
 export function sizePreview(params: BrushParams, color: string): HTMLCanvasElement {
