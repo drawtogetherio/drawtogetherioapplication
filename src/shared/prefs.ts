@@ -33,11 +33,13 @@ export interface Prefs {
   fingerDraws: boolean;
   /** The Patreon banner on the home screen; false once it has been closed. */
   supportBanner: boolean;
+  /** Brush ids starred in the library. */
+  favoriteBrushes: string[];
 }
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, supportBanner: true,
+  fingerDraws: true, supportBanner: true, favoriteBrushes: [],
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
@@ -61,6 +63,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
     fingerDraws: r.fingerDraws !== false,
     supportBanner: r.supportBanner !== false,
+    favoriteBrushes: Array.isArray(r.favoriteBrushes) ? r.favoriteBrushes.filter((b): b is string => typeof b === 'string' && /^[a-z-]{1,24}$/.test(b)).slice(0, 40) : [],
   };
 }
 

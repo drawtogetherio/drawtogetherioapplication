@@ -20,7 +20,7 @@ const brushBtn = page.locator('.topbar [aria-label^="Brush (B)"]');
 // Tapping the active brush opens the library.
 await brushBtn.click();
 await page.waitForSelector('.brush-library');
-check(await page.locator('.brush-tab').count() === 4 && (await page.locator('.brush-tab.active').textContent()) === 'Pen', 'library opens on the Pen tab, one of 4 categories');
+check(await page.locator('.brush-tab').count() === 5 && (await page.locator('.brush-tab.active').textContent()) === 'Pen', 'library opens on the Pen tab, one of 4 categories plus favourites');
 check(await page.locator('.brush-row').count() === 4, 'the Pen tab lists 4 brushes with previews');
 const inked = await page.evaluate(() => {
   const c = document.querySelector('.brush-row canvas');

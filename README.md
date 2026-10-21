@@ -54,11 +54,16 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   brush carry **grain**: a seeded paper texture fixed to the canvas, so every device renders the same
   speckle and strokes line up; the Grain slider in the options bar tunes it. Cube, flat and chisel brushes
   have a square tip. Dragging the Size or Opacity slider shows a preview of the brush at that size.
+  The star on a brush row keeps it on the library's ★ tab; the list is saved in prefs
+  (`favoriteBrushes`), so it follows the account.
 - **Layer effects** (the ✦ button by the flip buttons lists them; the layers panel's ✦ too): Gaussian blur, motion blur, mosaic, chromatic
   aberration, glitch, sharpen and noise. Each is one `effect` op, computed with plain arithmetic in a fixed
   order (`src/engine/effects.ts`) so every client bakes the same pixels; nothing is re-applied per frame.
-  The preview shows the effect on the selection only when there is one; the dialog warns that the
-  bake can be undone only while it is still in the undo history.
+  Picking one opens a floating bar (under the selection, or top centre for the whole layer) and the
+  canvas itself previews the effect live (`src/ui/effectsBar.ts`): the processed pixels replace the
+  layer's through the view's live layer, clipped to the selection when there is one, and only the
+  on-screen part is processed. Enter or ✓ bakes it, Escape or drawing cancels. The bar notes that
+  the bake can be undone only while it is still in the undo history.
 - Selection (rect/ellipse/lasso) with move/rotate/scale/flip; fill bucket; shapes; eyedropper
 - Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
 - R + drag rotates the view (Shift snaps 15°), Z + drag zooms

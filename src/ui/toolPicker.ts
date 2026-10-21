@@ -1,6 +1,6 @@
 import type { BrushParams, ShapeKind } from '../core/model';
 import { TiledSurface } from '../core/tiles';
-import { BRUSH_LIBRARY, categoryOf, renderStroke, smudgeParams } from '../engine/brush';
+import { BRUSH_LIBRARY, BrushPreset, brushById, categoryOf, renderStroke, smudgeParams } from '../engine/brush';
 import type { Editor, SelectMode, ToolId } from '../editor';
 import { ctx2d, makeCanvas } from '../core/geom';
 import { clear, h } from './dom';
@@ -54,31 +54,41 @@ export function currentPreset(ed: Editor, tool: BrushTool) {
   return tool === 'eraser' ? st.eraserPreset : tool === 'smudge' ? st.smudgePreset : st.brushPreset;
 }
 
-/** Brush, eraser and smudge share one library, in categories; the last tab you looked at stays open. */
+/** Brush, eraser and smudge share one library, in categories plus the brushes you starred; the last tab you looked at stays open. */
 export function brushLibrary(ed: Editor, tool: BrushTool, onPick: () => void): HTMLElement {
-  const st = ed.settings, current = currentPreset(ed, tool);
-  let tab = categoryOf(current);
+  const st = ed.settings, current = currentPreset(ed, tool), favs = ed.prefs.favoriteBrushes;
+  const cats = () => [{ name: 'Favourites', brushes: favs.map(brushById).filter((b) => favs.includes(b.id)) }, ...BRUSH_LIBRARY];
+  let tab = favs.includes(current) ? 0 : categoryOf(current) + 1;
   const tabs = h('div.brush-tabs', { role: 'tablist' });
   const list = h('div.brush-list', { role: 'listbox', 'aria-label': 'Brushes' });
+  const pick = (pr: BrushPreset) => {
+    const params = { ...pr.params };
+    if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
+    else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); }
+    else { st.brushPreset = pr.id; st.brush = params; }
+    ed.setTool(tool);
+    ed.emit('brush');
+    onPick();
+  };
+  const star = (id: string) => {
+    const i = favs.indexOf(id);
+    if (i < 0) favs.push(id); else favs.splice(i, 1);
+    ed.emit('prefs');
+    render();
+  };
   const render = () => {
     clear(tabs);
-    BRUSH_LIBRARY.forEach((c, i) => tabs.append(h(`button.brush-tab${i === tab ? '.active' : ''}` as 'button', {
-      role: 'tab', 'aria-selected': String(i === tab), onclick: () => { tab = i; render(); },
-    }, c.name)));
+    cats().forEach((c, i) => tabs.append(h(`button.brush-tab${i === tab ? '.active' : ''}` as 'button', {
+      role: 'tab', 'aria-selected': String(i === tab), html: i === 0 ? icon('star', 14) : c.name, 'aria-label': c.name, title: c.name, onclick: () => { tab = i; render(); },
+    })));
     clear(list);
-    for (const pr of BRUSH_LIBRARY[tab].brushes) {
-      list.append(h(`button.brush-row${pr.id === current ? '.active' : ''}` as 'button', {
-        role: 'option', 'aria-selected': String(pr.id === current), title: pr.name,
-        onclick: () => {
-          const params = { ...pr.params };
-          if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
-          else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); }
-          else { st.brushPreset = pr.id; st.brush = params; }
-          ed.setTool(tool);
-          ed.emit('brush');
-          onPick();
-        },
-      }, h('span.brush-name', {}, pr.name), brushPreview(pr.params)));
+    const shown = cats()[tab].brushes;
+    if (!shown.length) list.append(h('p.muted.small', {}, 'Star a brush to keep it here.'));
+    for (const pr of shown) {
+      const on = favs.includes(pr.id);
+      list.append(h(`div.brush-row${pr.id === current ? '.active' : ''}` as 'div', { role: 'option', 'aria-selected': String(pr.id === current) },
+        h('button.brush-pick', { type: 'button', title: pr.name, onclick: () => pick(pr) }, h('span.brush-name', {}, pr.name), brushPreview(pr.params)),
+        h(`button.icon-btn.brush-star${on ? '.on' : ''}` as 'button', { type: 'button', title: on ? 'Unstar' : 'Star', 'aria-label': `${on ? 'Unstar' : 'Star'} ${pr.name}`, 'aria-pressed': String(on), html: icon('star', 16), onclick: () => star(pr.id) })));
     }
   };
   render();

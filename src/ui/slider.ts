@@ -73,6 +73,8 @@ export class Slider {
 
   get() { return this.value; }
 
+  setLabel(text: string) { this.el.querySelector('.slider-label')!.textContent = text; }
+
   private render() {
     const t = this.toT(this.value) * 100;
     if (this.o.vertical) this.fill.style.height = t + '%';

@@ -32,7 +32,7 @@ import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
 import { BrushTool as BrushToolId, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
-import { effectsDialog } from './effectsDialog';
+import { effectsBar } from './effectsBar';
 
 const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'smudge', 'select', 'shape'];
 const isBrushTool = (id: ToolId): id is BrushToolId => id === 'brush' || id === 'eraser' || id === 'smudge';
@@ -106,7 +106,7 @@ export class App {
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
     const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {}, ...EFFECTS.map((e) =>
-      h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsDialog(ed, e); } }))));
+      h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsBar(ed, e); } }))));
     const effectsBtn = btn('sparkle', 'Effects', () => {
       effectsPop.style.left = `${effectsBtn.getBoundingClientRect().left}px`;
       effectsPop.hidden = !effectsPop.hidden;
