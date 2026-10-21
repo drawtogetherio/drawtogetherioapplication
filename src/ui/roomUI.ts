@@ -6,7 +6,7 @@ import type { RoomClient, RoomEvent } from '../net/roomClient';
 import { CHAT_MAX, ChatMsg, Member } from '../shared/protocol';
 import { clear, h } from './dom';
 import { icon } from './icons';
-import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, profileCardBody } from './people';
+import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, nameText, profileCardBody } from './people';
 import { confirmDialog, exportDialog, modal } from './dialogs';
 
 interface RemoteStroke { renderer: StrokeRenderer; layerId: string; touched: number }
@@ -287,7 +287,7 @@ export class RoomUI {
     const el = h(`div.chat-msg${m.system ? '.system' : ''}` as 'div', { 'data-at': m.at });
     if (m.system) { el.textContent = m.text; return el; }
     const who = this.room?.member(m.from);
-    const name = h('span.chat-name', { style: who ? `color:${who.favoriteColor}` : '' }, who?.displayName ?? 'Someone');
+    const name = h('span.chat-name', {}, who ? nameText(who, 'chat-who', who.favoriteColor) : 'Someone');
     if (who) name.append(badges(who.role, who.premium));
     el.append(name, h('span.chat-text', {}, m.text));
     return el;

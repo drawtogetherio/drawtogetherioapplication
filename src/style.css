@@ -303,7 +303,7 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .fav-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.25); }
 .profile-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
 .profile-link {
-  display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; background: var(--panel-2);
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--panel-2);
   color: var(--text); text-decoration: none; border: 1px solid var(--line); overflow: hidden;
 }
 .profile-link:hover { border-color: var(--accent); }
@@ -442,9 +442,13 @@ button.brand:hover { background: rgba(255, 255, 255, 0.06); }
 
 /* ---------- Premium name gradient ---------- */
 .gradient-name {
-  background: linear-gradient(90deg, var(--g1), var(--g2)); -webkit-background-clip: text; background-clip: text;
-  color: transparent; -webkit-text-fill-color: transparent; font-weight: 700;
+  background: linear-gradient(90deg, var(--g1), var(--g2), var(--g1)) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; font-weight: 700;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--g1) 45%, transparent));
+  animation: gradient-scroll 5s linear infinite;
 }
+@keyframes gradient-scroll { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .gradient-name { animation: none; } }
 .profile-card-head.has-gradient { padding: 12px; border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--g1) 22%, transparent), color-mix(in srgb, var(--g2) 22%, transparent)); }
 .profile-status { margin-top: 4px; font-size: 13.5px; }
 .premium-box { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(124, 92, 255, 0.06); }
@@ -548,3 +552,53 @@ button.friend-row:hover { background: var(--panel-2); }
 .guest-card { grid-column: 1 / -1; max-width: 520px; padding: 22px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line); }
 .guest-card p { margin: 0 0 12px; line-height: 1.5; }
 .home.guest .home-body { grid-template-columns: 1fr; }
+
+/* Socials in the profile editor */
+.social-logo { display: inline-grid; place-items: center; border-radius: 7px; flex: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+.social-list { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.social-chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 4px 4px 5px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+.social-chip .icon-btn { width: 24px; height: 24px; }
+.social-add { width: 32px; height: 32px; border-radius: 9px; border: 1px dashed var(--line); background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; }
+.social-add:hover { color: var(--accent); border-color: var(--accent); }
+.social-picker { padding: 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.social-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.social-choice { padding: 0; border: 0; background: none; border-radius: 9px; cursor: pointer; transition: transform 0.1s; }
+.social-choice:hover { transform: translateY(-2px); }
+.social-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.social-ask { display: flex; align-items: center; gap: 8px; }
+
+/* You, at the top of the friends panel */
+.me-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px; margin: 0 0 14px; border-radius: 14px; color: #fff;
+  background: linear-gradient(rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.32)), linear-gradient(120deg, var(--g1), var(--g2), var(--g1)) 0 0 / 200% 100%;
+}
+.me-card.has-gradient { animation: gradient-scroll 8s linear infinite; box-shadow: 0 0 18px color-mix(in srgb, var(--g1) 35%, transparent); }
+@media (prefers-reduced-motion: reduce) { .me-card.has-gradient { animation: none; } }
+.me-pic { padding: 0; border: 0; background: none; cursor: pointer; border-radius: 50%; flex: none; }
+.me-text { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.me-name { font-size: 15px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.me-handle { color: rgba(255, 255, 255, 0.8); font-size: 12px; }
+.me-status, .me-status-add {
+  margin-top: 5px; border: 0; font: inherit; font-size: 12.5px; color: #fff; cursor: pointer; border-radius: 8px; max-width: 100%;
+  background: rgba(0, 0, 0, 0.28); padding: 3px 8px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.me-status-add { display: inline-flex; align-items: center; gap: 4px; }
+.me-status:hover, .me-status-add:hover { background: rgba(0, 0, 0, 0.42); }
+.me-card input { margin-top: 5px; width: 100%; height: 30px; border-radius: 8px; border: 0; padding: 0 8px; font: inherit; font-size: 13px; background: rgba(0, 0, 0, 0.4); color: #fff; }
+.me-card input::placeholder { color: rgba(255, 255, 255, 0.6); }
+
+/* New canvas */
+.new-canvas { display: grid !important; grid-template-columns: 1fr 220px; gap: 18px; align-items: start; }
+.new-canvas-fields { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.new-canvas .error { grid-column: 1 / -1; }
+.size-row input { width: 100px; }
+.size-row input:disabled { opacity: 0.45; }
+.canvas-preview { height: 190px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.canvas-shape { border-radius: 3px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); transition: width 0.15s, height 0.15s; }
+.canvas-shape.transparent { background: repeating-conic-gradient(#bbb 0 25%, #eee 0 50%) 0 0 / 14px 14px !important; }
+.canvas-shape.infinite { width: 100% !important; height: 120px !important; border-radius: 10px; box-shadow: none; outline: 1px dashed var(--line);
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 45%, transparent 75%); mask-image: radial-gradient(ellipse at center, #000 45%, transparent 75%); }
+@media (max-width: 560px) { .new-canvas { grid-template-columns: 1fr; } }
+.new-canvas input[type="text"], .new-canvas select { width: 100%; max-width: none; }
+.new-canvas label.field { display: flex; flex-direction: column; align-items: stretch; text-align: left; }
+.new-canvas .field-label { justify-content: flex-start; }

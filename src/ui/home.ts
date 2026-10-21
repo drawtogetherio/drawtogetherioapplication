@@ -1,3 +1,4 @@
+import { STATUS_MAX, cleanStatus } from '../shared/profile';
 import { ApiError, Friend, FriendsList, api } from '../net/api';
 import type { ProjectInfo } from '../shared/protocol';
 import { brandHtml } from '../site/brand';
@@ -35,6 +36,7 @@ export class Home {
   private plus: HTMLButtonElement;
   private friendsPanel: HTMLElement;
   private projectsHead = h('h1', {}, 'Recent');
+  private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
 
   constructor(private app: App) {
@@ -74,6 +76,7 @@ export class Home {
       ),
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
+          this.meCard,
           h('div.panel-head', {}, h('span.panel-title', {}, 'Friends ', this.friendCount)),
           addForm, addErr,
           this.requestsEl,
@@ -117,6 +120,44 @@ export class Home {
     const me = this.app.ed.me;
     clear(this.accountBtn);
     if (me) this.accountBtn.append(avatarEl(me, 34, true));
+    this.renderMeCard();
+  }
+
+  /** You, at the top of the friends list: picture, name, handle and your status (+ to set one). */
+  private renderMeCard(editing = false) {
+    const me = this.app.ed.me;
+    clear(this.meCard);
+    if (!me) return;
+    this.meCard.className = 'me-card' + (me.gradient ? ' has-gradient' : '');
+    this.meCard.setAttribute('style', me.gradient ? gradientStyle(me.gradient) : `--g1:${me.favoriteColor};--g2:${me.favoriteColor}`);
+    let status: HTMLElement;
+    if (editing) {
+      const inp = h('input', { type: 'text', id: 'status', value: me.status, maxlength: STATUS_MAX * 2, placeholder: 'What are you up to?', 'aria-label': 'Status' });
+      let done = false;
+      const save = async () => {
+        if (done) return;
+        done = true;
+        const text = cleanStatus(inp.value);
+        if (text === null) { done = false; this.app.toast(`Keep it to ${STATUS_MAX} characters`); return; }
+        try { this.app.ed.me = await api.updateMe({ status: text }); } catch (e) { this.app.toast((e as Error).message); }
+        this.renderMeCard();
+      };
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); save(); }
+        if (e.key === 'Escape') { done = true; this.renderMeCard(); }
+      });
+      inp.addEventListener('blur', () => save());
+      status = inp;
+      queueMicrotask(() => inp.focus());
+    } else if (me.status) {
+      status = h('button.me-status', { type: 'button', title: 'Change status', onclick: () => this.renderMeCard(true) }, me.status);
+    } else {
+      status = h('button.me-status-add', { type: 'button', 'aria-label': 'Set a status', html: icon('plus', 14) + '<span>Status</span>', onclick: () => this.renderMeCard(true) });
+    }
+    this.meCard.append(
+      h('button.me-pic', { type: 'button', title: 'Edit profile', onclick: () => this.app.session.editProfile() }, avatarEl(me, 44, true)),
+      h('div.me-text', {}, h('strong.me-name', {}, me.displayName), h('small.me-handle', {}, '@' + me.handle), status),
+    );
   }
 
   private renderAccountMenu() {
@@ -126,7 +167,7 @@ export class Home {
     clear(this.accountPop);
     this.accountPop.append(h('div.panel', {},
       h('div.account', {}, avatarEl(me, 40, true), h('div.account-text', {}, nameLine(me), h('small.muted', {}, '@' + me.handle), me.status ? h('small.status-line', {}, me.status) : null)),
-      h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile & status</span>', onclick: () => { close(); s.editProfile(); } }),
+      h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
       h('button.menu-item', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
     ));
   }

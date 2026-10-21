@@ -1,6 +1,6 @@
 import { ApiError, api } from '../net/api';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, DISPLAY_NAME_MAX, HANDLE_MAX, STATUS_MAX, cleanStatus, LINK_PLATFORMS, MyProfile,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, DISPLAY_NAME_MAX, HANDLE_MAX, LINK_PLATFORMS, MyProfile,
   graphemeCount, handleError, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../shared/profile';
 import { cropAvatar, makeAvatar } from './avatarCrop';
@@ -8,6 +8,7 @@ import { h } from './dom';
 import { icon } from './icons';
 import { avatarEl, badges, gradientStyle } from './people';
 import { modal } from './dialogs';
+import { socialLogo } from './socials';
 
 /**
  * Profile editor. Used once after the first login (setup) and later from the account menu.
@@ -76,16 +77,11 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     shuffle.addEventListener('click', async () => { handleIn.value = (await api.randomHandle()).handle; });
     if (guest) handleIn.readOnly = true;
     const handle = () => handleIn.value.trim().replace(/^@/, '');
-    const handleHint = guest
-      ? 'Guests get a random handle. Log in with Discord to choose your own.'
-      : setup && me.provider === 'discord'
-        ? 'We suggested your Discord username. Change it to anything you like.'
-        : 'Letters, numbers, underscores and periods. This is how friends find you.';
     const handleField = h('div.field', {},
       h('label.field-label', { for: 'handle' }, 'Handle'),
       h('div.row.handle-row', {}, h('span.handle-input', {}, h('span.at', {}, '@'), handleIn), guest ? shuffle : null),
-      guest ? null : handleState,
-      h('small.muted', {}, handleHint), err('handle'),
+      guest ? h('small.muted', {}, 'Log in with Discord to choose your own handle.') : handleState,
+      err('handle'),
     );
     if (!guest) checkHandle();
 
@@ -100,16 +96,6 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     };
     nameIn.addEventListener('input', checkName);
 
-    // Status message
-    const statusIn = h('input', { type: 'text', id: 'status', value: me.status ?? '', maxlength: STATUS_MAX * 2, placeholder: 'Working on a comic, open to collabs…', 'aria-label': 'Status message' });
-    const statusCount = h('span.counter');
-    const checkStatus = () => {
-      const c = cleanStatus(statusIn.value);
-      statusCount.textContent = `${graphemeCount(sanitizeDisplayName(statusIn.value))}/${STATUS_MAX}`;
-      showErr('status', c === null ? `Keep it to ${STATUS_MAX} characters.` : '');
-    };
-    statusIn.addEventListener('input', checkStatus);
-
     // Premium: name gradient and animated picture
     const premium = me.premium;
     const g = me.gradient ?? [me.favoriteColor, '#f4c25b'];
@@ -119,7 +105,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     const g2 = h('input', { type: 'color', id: 'gradient-2', value: g[1], 'aria-label': 'Gradient end colour' });
     for (const el of [gradOn, g1, g2]) { el.disabled = !premium; el.addEventListener('input', () => renderAvatar()); }
     const gif = h('input', { type: 'file', accept: 'image/gif', id: 'avatar-gif', hidden: true });
-    const gifBtn = h('button.btn', { type: 'button', onclick: () => gif.click() }, 'Upload GIF');
+    const gifBtn = h('button.btn', { type: 'button', title: `GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} px`, onclick: () => gif.click() }, 'Upload GIF');
     const gifRemove = h('button.btn', { type: 'button' }, 'Remove GIF');
     gifBtn.disabled = gifRemove.disabled = !premium;
     gif.addEventListener('change', async () => {
@@ -130,7 +116,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
         if (f.type !== 'image/gif') throw new Error('Animated pictures need to be GIFs.');
         if (f.size > AVATAR_ANIM_MAX_BYTES) throw new Error(`That GIF is too large. Keep it under ${Math.round(AVATAR_ANIM_MAX_BYTES / 1024)} KB.`);
         gifBtn.disabled = true;
-        // The GIF plays on your profile and in friends lists; everywhere else uses a small still of its first frame.
+        // The GIF plays on your profile and in friends lists; everywhere else uses a still of its first frame.
         current = await api.uploadAnimatedAvatar(f);
         current = await api.uploadAvatar(await makeAvatar(f));
         showErr('gif', '');
@@ -139,51 +125,75 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     });
     gifRemove.addEventListener('click', async () => { current = await api.deleteAnimatedAvatar(); renderAvatar(); });
     const premiumBox = h(`div.field.premium-box${premium ? '' : '.locked'}` as 'div', {},
-      h('span.field-label', {}, 'Premium extras ', badges(undefined, true)),
-      premium ? null : h('small.muted', {}, 'Available with premium.'),
+      h('span.field-label', {}, 'Premium ', badges(undefined, true)),
       h('label.check', {}, gradOn, 'Name gradient', g1, g2, h('span.gradient-preview', {}, namePreview)),
-      h('div.row', {}, gifBtn, gifRemove, h('small.muted', {}, `Animated GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} px.`)),
+      h('div.row', {}, gifBtn, gifRemove),
       err('gradient'), err('gif'), gif,
     );
 
-    // Favourite colour (no alpha)
-    const colorIn = h('input', { type: 'color', id: 'fav-color', value: me.favoriteColor, 'aria-label': 'Favourite colour' });
-    const hexIn = h('input', { type: 'text', id: 'fav-hex', value: me.favoriteColor, maxlength: 7, spellcheck: 'false', 'aria-label': 'Favourite colour hex' });
+    // Profile colour (no alpha)
+    const colorIn = h('input', { type: 'color', id: 'fav-color', value: me.favoriteColor, 'aria-label': 'Profile colour' });
+    const hexIn = h('input', { type: 'text', id: 'fav-hex', value: me.favoriteColor, maxlength: 7, spellcheck: 'false', 'aria-label': 'Profile colour hex' });
     colorIn.addEventListener('input', () => { hexIn.value = colorIn.value; showErr('favoriteColor', ''); renderAvatar(); });
     hexIn.addEventListener('input', () => {
       const c = normalizeColor(hexIn.value);
-      if (c) { colorIn.value = c; showErr('favoriteColor', ''); renderAvatar(); } else showErr('favoriteColor', 'Use 6 hex digits, like #f4c25b (no transparency).');
+      if (c) { colorIn.value = c; showErr('favoriteColor', ''); renderAvatar(); } else showErr('favoriteColor', 'Use 6 hex digits, like #f4c25b.');
     });
 
-    // Links (usernames only)
-    const linkInputs = new Map<string, HTMLInputElement>();
-    const links = h('div.links-grid');
-    for (const p of LINK_PLATFORMS) {
-      const inp = h('input', { type: 'text', id: 'link-' + p.id, value: me.links[p.id] ?? '', placeholder: p.hint, spellcheck: 'false', autocapitalize: 'off', 'aria-label': p.label });
-      linkInputs.set(p.id, inp);
-      const e = err('link:' + p.id);
-      inp.addEventListener('input', () => showErr('link:' + p.id, normalizeLink(p.id, inp.value) === null ? `That doesn’t look like a ${p.label} ${p.hint}.` : ''));
-      links.append(h('label.link-row', {}, h('span.link-label', {}, p.label), h('span.link-input', {}, h('span.at', {}, p.id === 'pixiv' ? '#' : '@'), inp), e));
-    }
+    // Socials: the ones you've added, plus a + that opens a picker of the rest.
+    const links: Record<string, string> = { ...me.links };
+    const socials = h('div.social-list');
+    const picker = h('div.social-picker', { hidden: true });
+    const addSocial = h('button.social-add', { type: 'button', title: 'Add a social', 'aria-label': 'Add a social', html: icon('plus', 18) });
+    const renderSocials = () => {
+      socials.replaceChildren(...LINK_PLATFORMS.filter((p) => links[p.id]).map((p) => h('span.social-chip', {},
+        socialLogo(p.id, 22),
+        h('span', {}, (p.id === 'pixiv' ? '#' : '@') + links[p.id]),
+        h('button.icon-btn', { type: 'button', title: `Remove ${p.label}`, html: icon('x', 14), onclick: () => { delete links[p.id]; renderSocials(); } }),
+      )), addSocial);
+      addSocial.hidden = LINK_PLATFORMS.every((p) => links[p.id]);
+    };
+    const askUsername = (p: typeof LINK_PLATFORMS[number]) => {
+      const inp = h('input', { type: 'text', id: 'link-' + p.id, placeholder: p.hint, spellcheck: 'false', autocapitalize: 'off', 'aria-label': `${p.label} ${p.hint}` });
+      const add = () => {
+        const v = normalizeLink(p.id, inp.value);
+        if (!v) { showErr('links', `That doesn’t look like a ${p.label} ${p.hint}.`); return; }
+        links[p.id] = v;
+        showErr('links', '');
+        picker.hidden = true;
+        renderSocials();
+      };
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+      picker.replaceChildren(h('div.social-ask', {},
+        socialLogo(p.id, 32),
+        h('span.handle-input', {}, h('span.at', {}, p.id === 'pixiv' ? '#' : '@'), inp),
+        h('button.btn', { type: 'button', onclick: add }, 'Add'),
+        h('button.icon-btn', { type: 'button', title: 'Cancel', html: icon('x', 16), onclick: () => { picker.hidden = true; showErr('links', ''); } }),
+      ));
+      inp.focus();
+    };
+    addSocial.addEventListener('click', () => {
+      picker.replaceChildren(h('div.social-choices', {}, ...LINK_PLATFORMS.filter((p) => !links[p.id]).map((p) =>
+        h('button.social-choice', { type: 'button', title: p.label, 'aria-label': p.label, onclick: () => askUsername(p) }, socialLogo(p.id, 36)))));
+      picker.hidden = !picker.hidden;
+    });
+    renderSocials();
 
     const body = h('form.modal-body.profile-form', {},
-      setup ? h('p.muted', {}, 'Welcome! This is how other artists will see you in shared rooms. You can change it any time.') : null,
       h('div.profile-top', {},
         avatarBox,
         h('div.profile-top-fields', {},
-          h('div.field', {}, h('span.field-label', {}, 'Picture'), h('div.row', {}, upload, remove), h('small.muted', {}, 'Shown small, so it’s resized to 128 × 128.'), err('avatar'), file),
+          h('div.field', {}, h('span.field-label', {}, 'Picture'), h('div.row', {}, upload, remove), err('avatar'), file),
         ),
       ),
-      h('div.field', {}, h('label.field-label', { for: 'display-name' }, 'Display name ', counter), nameIn, h('small.muted', {}, 'Anything you like. Letters, numbers, emoji and accents are fine.'), err('displayName')),
-      h('div.field', {}, h('label.field-label', { for: 'status' }, 'Status ', statusCount), statusIn, h('small.muted', {}, 'Shown to your friends next to your name.'), err('status')),
+      h('div.field', {}, h('label.field-label', { for: 'display-name' }, 'Display name ', counter), nameIn, err('displayName')),
       handleField,
-      h('div.field', {}, h('label.field-label', { for: 'fav-hex' }, 'Favourite colour'), h('div.row', {}, colorIn, hexIn), h('small.muted', {}, 'Colours your folder and name bubble in rooms.'), err('favoriteColor')),
+      h('div.field', {}, h('label.field-label', { for: 'fav-hex' }, 'Profile colour'), h('div.row', {}, colorIn, hexIn), err('favoriteColor')),
       premiumBox,
-      h('details.field', { open: setup ? null : true }, h('summary.field-label', {}, 'Your other profiles'), h('small.muted', {}, 'Type a username to show a link on your profile. Nothing gets connected.'), links),
+      h('div.field', {}, h('span.field-label', {}, 'Socials'), socials, picker, err('links')),
       err('form'),
     );
     checkName();
-    checkStatus();
     renderAvatar();
 
     const saveBtn = h('button.btn.primary', { type: 'submit' }, setup ? 'Start drawing' : 'Save');
@@ -191,13 +201,11 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     const save = async (e?: Event) => {
       e?.preventDefault();
       for (const el of errors.values()) el.textContent = '';
-      const linkVals: Record<string, string> = {};
-      for (const [k, inp] of linkInputs) linkVals[k] = inp.value;
       saveBtn.disabled = true;
       try {
         saved = await api.updateMe({
           displayName: sanitizeDisplayName(nameIn.value), handle: handle(), favoriteColor: normalizeColor(hexIn.value) ?? colorIn.value,
-          links: linkVals, done: true, status: cleanStatus(statusIn.value) ?? statusIn.value,
+          links: Object.fromEntries(LINK_PLATFORMS.map((p) => [p.id, links[p.id] ?? ''])), done: true,
           ...(premium ? { gradient: gradOn.checked ? [g1.value, g2.value] as [string, string] : null } : {}),
         });
         close();

@@ -24,8 +24,11 @@ async function person(name, color, target = url) {
   await page.waitForSelector('#display-name');
   await page.fill('#display-name', name + ' ✿');
   await page.fill('#fav-hex', color);
-  await page.locator('summary', { hasText: 'Your other profiles' }).click();
+  await page.locator('.social-add').click();
+  await page.locator('.social-choice[aria-label="Bluesky"]').click();
   await page.fill('#link-bluesky', name.toLowerCase() + '.bsky.social');
+  await page.press('#link-bluesky', 'Enter');
+  await page.waitForSelector('.social-chip');
   await page.screenshot({ path: `${out}/00-${name}-setup.png` });
   await page.getByRole('button', { name: 'Start drawing' }).click();
   return page;

@@ -18,16 +18,13 @@ export function modal(title: string, body: HTMLElement, actions: HTMLElement[], 
   return close;
 }
 
-interface Preset { name: string; w: number; h: number; note?: string }
-
-const PRESETS: Preset[] = [
-  { name: 'Screen size', w: 0, h: 0, note: 'Matches this display' },
-  { name: 'Square', w: 2048, h: 2048 },
-  { name: 'HD 1080p', w: 1920, h: 1080 },
-  { name: '4K', w: 3840, h: 2160 },
-  { name: 'A4 · 300 dpi', w: 2480, h: 3508 },
-  { name: 'Letter · 300 dpi', w: 2550, h: 3300 },
-  { name: 'Comic page', w: 1988, h: 3056 },
+const PRESETS = [
+  { id: 'square', name: 'Square', w: 2048, h: 2048 },
+  { id: 'hd', name: 'HD 1080p', w: 1920, h: 1080 },
+  { id: '4k', name: '4K', w: 3840, h: 2160 },
+  { id: 'a4', name: 'A4 · 300 dpi', w: 2480, h: 3508 },
+  { id: 'letter', name: 'Letter · 300 dpi', w: 2550, h: 3300 },
+  { id: 'comic', name: 'Comic page', w: 1988, h: 3056 },
 ];
 
 export interface CanvasChoice { width: number; height: number; infinite: boolean; background: string | null; roomName: string }
@@ -37,48 +34,61 @@ export interface CanvasChoice { width: number; height: number; infinite: boolean
  * (the server creates the room); otherwise it creates a local document.
  */
 export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = true, room?: { onCreate: (c: CanvasChoice) => Promise<void>; solo?: boolean }) {
-  let choice: 'unlimited' | Preset = 'unlimited';
-  const wIn = h('input', { type: 'number', min: 16, max: 16384, value: 2048, 'aria-label': 'Width' });
-  const hIn = h('input', { type: 'number', min: 16, max: 16384, value: 2048, 'aria-label': 'Height' });
-  const bg = h('select', { 'aria-label': 'Background' },
-    h('option', { value: '#ffffff' }, 'White paper'), h('option', { value: '#f4efe6' }, 'Warm paper'),
+  const preset = h('select', { id: 'canvas-preset', 'aria-label': 'Size' },
+    h('option', { value: 'unlimited' }, 'Unlimited'),
+    ...PRESETS.map((p) => h('option', { value: p.id }, p.name)),
+    h('option', { value: 'custom' }, 'Custom'));
+  const wIn = h('input', { type: 'number', id: 'canvas-w', min: 16, max: 16384, value: 2048, 'aria-label': 'Width' });
+  const hIn = h('input', { type: 'number', id: 'canvas-h', min: 16, max: 16384, value: 2048, 'aria-label': 'Height' });
+  const bg = h('select', { id: 'canvas-bg', 'aria-label': 'Background' },
+    h('option', { value: '#ffffff' }, 'White'), h('option', { value: '#f4efe6' }, 'Warm paper'),
     h('option', { value: '#1e1e22' }, 'Dark'), h('option', { value: '' }, 'Transparent'));
+  const shape = h('div.canvas-shape');
+  const sizeNote = h('small.muted');
 
-  const cards: HTMLElement[] = [];
-  const pick = (c: 'unlimited' | Preset, card: HTMLElement) => {
-    choice = c;
-    cards.forEach((x) => x.classList.toggle('active', x === card));
-    if (c !== 'unlimited') {
-      const [w, hh] = c.w ? [c.w, c.h] : [Math.round(screen.width * devicePixelRatio), Math.round(screen.height * devicePixelRatio)];
-      wIn.value = String(w); hIn.value = String(hh);
-    }
-    custom.hidden = c === 'unlimited';
+  const size = () => [Math.max(16, Math.min(16384, Math.round(+wIn.value || 2048))), Math.max(16, Math.min(16384, Math.round(+hIn.value || 2048)))];
+  const update = () => {
+    const infinite = preset.value === 'unlimited';
+    wIn.disabled = hIn.disabled = infinite;
+    const [w, hh] = size();
+    // Fit the canvas shape inside a 200 × 150 box.
+    const k = Math.min(200 / w, 150 / hh);
+    shape.style.width = infinite ? '200px' : `${Math.max(8, w * k)}px`;
+    shape.style.height = infinite ? '150px' : `${Math.max(8, hh * k)}px`;
+    shape.style.background = bg.value || '';
+    shape.classList.toggle('transparent', !bg.value);
+    shape.classList.toggle('infinite', infinite);
+    sizeNote.textContent = infinite ? 'Endless canvas' : `${w} × ${hh} px`;
   };
-  const unlimited = h('button.preset-card.unlimited.active', {},
-    h('strong', {}, 'Unlimited'), h('small', {}, 'Endless whiteboard. Export crops to your artwork.'));
-  unlimited.addEventListener('click', () => pick('unlimited', unlimited));
-  cards.push(unlimited);
-  const grid = h('div.preset-grid', {}, unlimited);
-  for (const p of PRESETS) {
-    const card = h('button.preset-card', {}, h('strong', {}, p.name), h('small', {}, p.note ?? `${p.w} × ${p.h} px`));
-    card.addEventListener('click', () => pick(p, card));
-    cards.push(card);
-    grid.append(card);
-  }
+  preset.addEventListener('change', () => {
+    const p = PRESETS.find((x) => x.id === preset.value);
+    if (p) { wIn.value = String(p.w); hIn.value = String(p.h); }
+    update();
+  });
+  for (const inp of [wIn, hIn]) inp.addEventListener('input', () => { preset.value = 'custom'; update(); });
+  bg.addEventListener('change', update);
+
   const err = h('p.error', { role: 'alert' });
-  const custom = h('div.row.custom-size', {}, h('label', {}, 'Width', wIn), h('span', {}, '×'), h('label', {}, 'Height', hIn), h('span.muted', {}, 'px'));
-  custom.hidden = true;
   const solo = !!room?.solo;
-  const roomName = h('input', { type: 'text', id: 'room-name', maxlength: 48, placeholder: solo ? 'Untitled sketch' : 'Sketch night', 'aria-label': solo ? 'Name' : 'Room name' });
-  const body = h('div.modal-body', {}, room ? h('label.row', {}, solo ? 'Name' : 'Room name', roomName) : null, grid, custom, h('div.row', {}, h('label', {}, 'Background', bg)), err);
+  const roomName = h('input', { type: 'text', id: 'room-name', maxlength: 48, placeholder: solo ? 'Untitled sketch' : 'Sketch night', 'aria-label': 'Name' });
+  const body = h('div.modal-body.new-canvas', {},
+    h('div.new-canvas-fields', {},
+      room ? h('label.field', {}, h('span.field-label', {}, 'Name'), roomName) : null,
+      h('label.field', {}, h('span.field-label', {}, 'Size'), preset),
+      h('div.row.size-row', {}, wIn, h('span.muted', {}, '×'), hIn, h('span.muted', {}, 'px')),
+      h('label.field', {}, h('span.field-label', {}, 'Background'), bg),
+    ),
+    h('div.canvas-preview', {}, shape, sizeNote),
+    err,
+  );
+  update();
 
   const create = h('button.btn.primary', {}, room && !solo ? 'Create room' : 'Create canvas');
   const close = modal(room && !solo ? 'New shared room' : 'New canvas', body, [create], undefined, closable);
   create.addEventListener('click', async () => {
-    const infinite = choice === 'unlimited';
-    const w = Math.max(16, Math.min(16384, Math.round(+wIn.value || 2048)));
-    const hh = Math.max(16, Math.min(16384, Math.round(+hIn.value || 2048)));
-    if (!infinite && w * hh > 100_000_000) { err.textContent = 'That canvas is too large. Keep it under 100 megapixels (for example 10000 × 10000).'; return; }
+    const infinite = preset.value === 'unlimited';
+    const [w, hh] = size();
+    if (!infinite && w * hh > 100_000_000) { err.textContent = 'That canvas is too large. Keep it under 100 megapixels.'; return; }
     if (room) {
       create.disabled = true;
       try {

@@ -15,7 +15,7 @@ await page.screenshot({ path: `${out}/01-new-canvas.png` });
 
 // Pick A4 fixed canvas
 const mode = process.env.MODE ?? 'fixed';
-if (mode === 'fixed') await page.getByText('Square').click();
+if (mode === 'fixed') await page.selectOption('#canvas-preset', 'square');
 await page.getByText('Create canvas').click();
 await page.waitForTimeout(200);
 

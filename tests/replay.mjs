@@ -3,7 +3,7 @@ import { chromium } from '@playwright/test';
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
 const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
 await page.goto(process.argv[2] ?? 'http://localhost:4173/');
-await page.getByText('Square').click();
+await page.selectOption('#canvas-preset', 'square');
 await page.getByText('Create canvas').click();
 const m = page.mouse;
 await m.move(400, 300); await m.down(); for (let i = 0; i < 40; i++) await m.move(400 + i * 12, 300 + Math.sin(i / 5) * 80); await m.up();

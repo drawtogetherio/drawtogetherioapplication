@@ -32,9 +32,16 @@ async function signUp(page, name, status) {
   // Dev login stands in for Discord: the handle starts as the login name.
   check(await page.inputValue('#handle') === name + suffix, `${name}: handle suggested from the login name`);
   await page.fill('#display-name', name);
-  if (status) await page.fill('#status', status);
+  check(await page.locator('#status').count() === 0, `${name}: no status at setup`);
   await page.getByRole('button', { name: 'Start drawing' }).click();
   await page.waitForSelector('.home:not([hidden])');
+  if (status) {
+    // Status lives on your card at the top of the friends list.
+    await page.locator('.me-card .me-status-add').click();
+    await page.fill('.me-card #status', status);
+    await page.press('.me-card #status', 'Enter');
+    await page.waitForSelector(`.me-card .me-status:has-text("${status}")`);
+  }
   return page.evaluate(() => window.doodlehive.ed.me.handle);
 }
 
@@ -44,6 +51,7 @@ await visitor.goto(base + '/');
 await visitor.getByRole('heading', { name: 'Drawing together with friends' }).waitFor().then(() => check(true, 'landing headline'), () => check(false, 'landing headline'));
 check(await visitor.locator('a.btn', { hasText: 'Open in browser' }).first().getAttribute('href') === '/app', 'Open in browser goes to /app');
 check(await visitor.locator('header').count() === 0, 'no top nav bar');
+await visitor.locator('.btn', { hasText: 'Download for Mac' }).first().waitFor();
 check(await visitor.locator('.btn', { hasText: 'Download for Mac' }).count() >= 1 && await visitor.locator('.btn', { hasText: 'Download for Windows' }).count() >= 1, 'Mac and Windows download buttons');
 await visitor.screenshot({ path: `${out}/01-landing.png`, fullPage: true });
 const phone = await newPage('phone', { width: 390, height: 844 });
@@ -149,6 +157,8 @@ if (process.env.DB_PATH) {
   await bob.evaluate(() => window.doodlehive.home.loadFriends());
   await bob.waitForSelector('.friends-list .friend-row.has-gradient');
   check(await bob.locator('.friends-list .friend-row .badges svg').count() >= 1, 'premium friend shows the star and gradient');
+  await ren.evaluate(async () => { window.doodlehive.ed.me = await (await fetch('/api/me')).json(); window.doodlehive.home.renderAccount(); });
+  check(await ren.locator('.me-card.has-gradient').count() === 1, 'premium profile card uses the gradient');
   // Plain users can't set a gradient.
   const status = await bob.evaluate(async () => (await fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gradient: ['#000000', '#ffffff'] }) })).status);
   check(status === 403, 'gradient is premium-only on the server');
@@ -167,7 +177,8 @@ await kai.waitForURL(/\/login/);
 await kai.fill('#guest-name', 'Kai');
 await kai.screenshot({ path: `${out}/07-guest-login.png` });
 await kai.getByRole('button', { name: 'Join as guest' }).click();
-await kai.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+await kai.waitForURL(/\/app/);
+await kai.waitForFunction(() => window.doodlehive?.ed.room?.status === 'open');
 const kaiMe = await kai.evaluate(() => window.doodlehive.ed.me);
 check(kaiMe.guest && /^[A-Z][a-z]+[A-Z][a-z]+\d*$/.test(kaiMe.handle), 'guest joins the room with a random handle: @' + kaiMe.handle);
 const guestCreate = await kai.evaluate(async () => (await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'x', settings: { infinite: true } }) })).status);
