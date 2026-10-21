@@ -50,6 +50,8 @@ export const config = {
   persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
+  /** Handles made admin at startup, comma separated. */
+  adminHandles: (env.ADMIN_HANDLES || '').split(',').map((h) => h.trim()).filter(Boolean),
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
   secureCookies: publicUrl.startsWith('https://'),
 };

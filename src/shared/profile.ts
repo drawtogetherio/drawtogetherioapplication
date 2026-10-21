@@ -118,7 +118,13 @@ export interface PublicProfile {
   /** Premium GIF; `avatar` is its still. */
   avatarAnimated: string | null;
   guest: boolean;
+  badges: Badge[];
 }
+
+/** Badges an admin can hand out, shown next to the name. */
+export const BADGES = { staff: 'Staff', supporter: 'Supporter', artist: 'Featured artist', early: 'Early bee' } as const;
+export type Badge = keyof typeof BADGES;
+export const cleanBadges = (v: unknown): Badge[] => (Array.isArray(v) ? [...new Set(v.filter((b): b is Badge => typeof b === 'string' && b in BADGES))] : []);
 
 /** `offline` also covers "appear offline". */
 export type Presence = 'online' | 'away' | 'dnd' | 'offline';
@@ -131,6 +137,7 @@ export interface MyProfile extends PublicProfile {
   provider: 'discord' | 'dev' | 'guest';
   theme: string;
   prefs: Prefs;
+  admin: boolean;
 }
 
 export const AVATAR_SIZE = 128;

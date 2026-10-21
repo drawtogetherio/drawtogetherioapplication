@@ -1,8 +1,8 @@
-import { LINK_PLATFORMS, PublicProfile } from '../shared/profile';
+import { Badge, LINK_PLATFORMS, PublicProfile } from '../shared/profile';
 import type { Role } from '../shared/protocol';
 import { socialLogo } from './socials';
 import { h } from './dom';
-import { CROWN_SVG, HOST_SVG, STAR_SVG } from './icons';
+import { BADGE_SVGS, CROWN_SVG, HOST_SVG, STAR_SVG } from './icons';
 
 export function initials(name: string) {
   const parts = [...name.trim()].filter((c) => /[\p{L}\p{N}]/u.test(c));
@@ -34,9 +34,9 @@ export function avatarEl(
   return el;
 }
 
-export function badges(role: Role | undefined, premium: boolean): HTMLElement {
+export function badges(role: Role | undefined, premium: boolean, extra: Badge[] = []): HTMLElement {
   const el = h('span.badges');
-  el.innerHTML = (role === 'owner' ? CROWN_SVG : role === 'host' ? HOST_SVG : '') + (premium ? STAR_SVG : '');
+  el.innerHTML = (role === 'owner' ? CROWN_SVG : role === 'host' ? HOST_SVG : '') + (premium ? STAR_SVG : '') + extra.map((b) => BADGE_SVGS[b] ?? '').join('');
   return el;
 }
 
@@ -51,7 +51,7 @@ export function nameText(p: Pick<PublicProfile, 'displayName' | 'gradient'>, cls
 
 export function nameLine(p: PublicProfile, role?: Role, you = false): HTMLElement {
   const name = nameText(p);
-  return h('span.name-line', {}, name, badges(role, p.premium), you ? h('span.you-tag', {}, 'you') : null);
+  return h('span.name-line', {}, name, badges(role, p.premium, p.badges), you ? h('span.you-tag', {}, 'you') : null);
 }
 
 const imgCache = new Map<string, HTMLImageElement>();
@@ -75,7 +75,7 @@ export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLEleme
   const head = h(`div.profile-card-head${p.gradient ? '.has-gradient' : ''}` as 'div', { style: gradientStyle(p.gradient) },
     avatarEl(p, 64, true),
     h('div', {},
-      h('div.profile-card-name', {}, nameText(p, 'card-name'), badges(role, p.premium)),
+      h('div.profile-card-name', {}, nameText(p, 'card-name'), badges(role, p.premium, p.badges)),
       h('div.muted', {}, '@' + p.handle),
       p.status ? h('div.profile-status', {}, p.status) : null,
       p.gradient ? null : h('div.fav', {}, h('span.fav-swatch', { style: `background:${p.favoriteColor}` }))),

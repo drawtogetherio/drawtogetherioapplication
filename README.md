@@ -113,6 +113,19 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   live over `/api/events` (Server-Sent Events).
 - Status message (80 characters) on your card. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
 
+**Admin dashboard**
+- `/admin` is only served to admins (everyone else gets a 404). The first admins come from the
+  `ADMIN_HANDLES` variable or `npm run admin -- admin <handle> on`; admins can promote others there.
+- Overview: online now, people in rooms, live rooms, accounts, premium, new today, guests, bans, plus
+  running totals of strokes, smudges, fills, shapes, undos, redos and chat messages drawn in rooms
+  (`server/stats.ts`, batched to the `stats` table every 10 s).
+- Users: search and filter, then manage: premium (30 days, a year, forever, off), badges (Staff,
+  Supporter, Featured artist, Early bee, shown next to the name), rename, clear status, remove avatar,
+  sign out everywhere, make admin, ban/unban, ban their address, delete the account and its canvases.
+- IP bans: a banned address gets a plain 403 everywhere, sockets included. Every action is in the Log.
+- Addresses: each signed-in person's current address is kept in memory only (never stored) so an
+  admin can ban it; only admins see it. The ban list itself is stored.
+
 **Shared rooms (v0.2)**
 - Start a room, share the invite link (`?room=code`), others join after logging in
 - Each person gets a folder named after them, coloured with their favourite colour. Their layers
@@ -156,7 +169,8 @@ Easy to move to Postgres later; all queries are in `server/db.ts`.
 
 **Safety.** Everything goes through the server; people never connect to each other, so nobody can see
 anyone's address. Addresses are only used in memory to rate limit (guest sign-ups, logins, uploads,
-friend requests, room creation, sockets) and are never stored or logged. Every room message is checked
+friend requests, room creation, sockets) and to let admins ban one; they are never stored or logged,
+apart from the admin ban list. Every room message is checked
 for shape and size before it is saved or relayed (`server/validate.ts`); cross-site requests and
 sockets are refused; pages carry a content security policy and anti-framing headers; cookies are
 HttpOnly, SameSite and Secure; uploads are checked by their bytes; sessions expire after 30 days and
@@ -188,6 +202,7 @@ node tests/spectate.mjs                       # watch links: chat only, no edits
 node tests/smudge.mjs                         # smudge: drags paint, undo, selection clip, room sync
 DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
 DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
+DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

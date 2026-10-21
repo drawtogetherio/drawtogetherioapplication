@@ -312,7 +312,7 @@ export class RoomUI {
     if (m.system) { el.textContent = m.text; return el; }
     const who = this.room?.member(m.from);
     const name = h('span.chat-name', {}, who ? nameText(who, 'chat-who', who.favoriteColor) : 'Someone');
-    if (who) name.append(badges(who.role, who.premium));
+    if (who) name.append(badges(who.role, who.premium, who.badges));
     el.append(name, h('span.chat-text', {}, m.text));
     return el;
   }

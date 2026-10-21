@@ -6,6 +6,7 @@ import { config } from './config.ts';
 import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isValidHandle, suggestHandle } from '../src/shared/profile.ts';
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
+import { cleanBadges } from '../src/shared/profile.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 export const db = new DatabaseSync(config.dbPath);
@@ -71,6 +72,9 @@ addColumn('users', 'prefs', `TEXT NOT NULL DEFAULT '{}'`);
 addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
 addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
 addColumn('rooms', 'watch_key', 'TEXT');
+addColumn('users', 'admin', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('users', 'banned', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('users', 'badges', `TEXT NOT NULL DEFAULT '[]'`);
 db.exec(`UPDATE rooms SET visibility = 'private' WHERE private = 1 AND visibility <> 'private'`);
 db.exec(`
   -- One row per pair, with user_a < user_b. Pending until the other person accepts.
@@ -84,6 +88,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
   CREATE INDEX IF NOT EXISTS rooms_owner ON rooms (owner_id);
+  CREATE TABLE IF NOT EXISTS ip_bans (ip TEXT PRIMARY KEY, reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS stats (key TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0);
+  CREATE TABLE IF NOT EXISTS admin_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', at INTEGER NOT NULL);
 `);
 
 export interface UserRow {
@@ -91,15 +98,19 @@ export interface UserRow {
   favorite_color: string; links: string; has_avatar: number; avatar_type: string | null;
   avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
   status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string; premium_warned: number | null; prefs: string;
+  admin: number; banned: number; badges: string;
 }
 
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
-  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs`;
+  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs, admin, banned, badges`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
 const PALETTE = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#00acc1', '#1e88e5', '#8e24aa', '#d81b60'];
+
+/** Guests can never be admins, whatever the row says. */
+export const isAdmin = (u: UserRow) => !!u.admin && u.provider !== 'guest';
 
 export function isPremium(u: UserRow) {
   return !!u.premium && (u.premium_until == null || u.premium_until > Date.now());
@@ -113,6 +124,7 @@ export function publicProfile(u: UserRow): PublicProfile {
     gradient: isPremium(u) && u.gradient ? (u.gradient.split(',') as [string, string]) : null,
     avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
     guest: u.provider === 'guest',
+    badges: cleanBadges(safeJson(u.badges)),
   };
 }
 
@@ -120,7 +132,7 @@ export function myProfile(u: UserRow): MyProfile {
   const theme = canUseTheme(u.theme, isPremium(u)) ? u.theme : DEFAULT_THEME;
   return {
     ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme,
-    presenceMode: u.presence_mode as MyProfile['presenceMode'], prefs: cleanPrefs(safeJson(u.prefs)),
+    presenceMode: u.presence_mode as MyProfile['presenceMode'], prefs: cleanPrefs(safeJson(u.prefs)), admin: isAdmin(u),
   };
 }
 
@@ -157,12 +169,19 @@ export function freeHandleLike(base: string): string {
 }
 
 export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string, displayName: string, handleHint: string): UserRow {
-  const existing = db.prepare(`SELECT ${USER_COLS} FROM users WHERE provider = ? AND provider_id = ?`).get(provider, providerId) as UserRow | undefined;
-  if (existing) return existing;
-  const id = newId('u_');
-  db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, provider, providerId, freeHandleLike(handleHint), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now());
-  return getUser(id)!;
+  let u = db.prepare(`SELECT ${USER_COLS} FROM users WHERE provider = ? AND provider_id = ?`).get(provider, providerId) as UserRow | undefined;
+  if (!u) {
+    const id = newId('u_');
+    db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, provider, providerId, freeHandleLike(handleHint), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now());
+    u = getUser(id)!;
+  }
+  // ADMIN_HANDLES names the first admins; the rest are made in the dashboard.
+  if (!u.admin && config.adminHandles.some((h) => h.toLowerCase() === u!.handle.toLowerCase())) {
+    db.prepare('UPDATE users SET admin = 1 WHERE id = ?').run(u.id);
+    u = getUser(u.id)!;
+  }
+  return u;
 }
 
 export function createGuest(displayName: string): UserRow {

@@ -6,13 +6,16 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isPremium, myProfile, publicProfile, sessionUser, UserRow,
+  createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
 import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser, saveShare } from './rooms.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, premiumWarnings, readNotices } from './notify.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
+import { HttpError, Req, Res, body, json, jsonBody } from './http.ts';
+import { adminRoute, bannedIp, lastIp } from './admin-api.ts';
+import { flushStats } from './stats.ts';
 import {
   AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
@@ -20,16 +23,10 @@ import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/p
 import { cleanPrefs } from '../src/shared/prefs.ts';
 import { canUseTheme, isTheme } from '../src/shared/themes.ts';
 
-type Req = http.IncomingMessage;
-type Res = http.ServerResponse;
 
 const COOKIE = 'dw_session';
 const SESSION_MS = 30 * 864e5;
 const MINUTE = 60_000, HOUR = 3600_000;
-
-class HttpError extends Error {
-  constructor(public status: number, message: string, public field?: string) { super(message); }
-}
 
 function cookies(req: Req): Record<string, string> {
   const out: Record<string, string> = {};
@@ -47,27 +44,8 @@ function setCookie(res: Res, name: string, value: string, maxAgeSec: number) {
   res.setHeader('Set-Cookie', [...(Array.isArray(prev) ? prev : prev ? [String(prev)] : []), parts.join('; ')]);
 }
 
-function json(res: Res, status: number, body: unknown) {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(body));
-}
-
 function redirect(res: Res, to: string) { res.writeHead(302, { Location: to }); res.end(); }
 
-async function body(req: Req, limit: number): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let n = 0;
-  for await (const c of req) {
-    n += (c as Buffer).length;
-    if (n > limit) throw new HttpError(413, 'That file is too large.');
-    chunks.push(c as Buffer);
-  }
-  return Buffer.concat(chunks);
-}
-
-async function jsonBody(req: Req): Promise<Record<string, unknown>> {
-  try { return JSON.parse((await body(req, 64 * 1024)).toString('utf8') || '{}'); } catch { throw new HttpError(400, 'Invalid request.'); }
-}
 
 function limit(key: string, n: number, windowMs: number) {
   if (!allow(key, n, windowMs)) throw new HttpError(429, 'Too many requests. Try again in a bit.');
@@ -76,7 +54,9 @@ function limit(key: string, n: number, windowMs: number) {
 function requireUser(req: Req): UserRow {
   const u = sessionUser(cookies(req)[COOKIE]);
   if (!u) throw new HttpError(401, 'Please log in.');
+  if (u.banned) throw new HttpError(403, 'This account is banned.');
   touch(u.id);
+  lastIp(u.id, clientIp(req));
   return u;
 }
 
@@ -152,6 +132,7 @@ async function route(req: Req, res: Res) {
   securityHeaders(res);
 
   if (p === '/healthz') return json(res, 200, { ok: true });
+  if (bannedIp(clientIp(req))) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('Blocked.'); }
   const host = String(req.headers.host ?? '');
   const canonical = new URL(config.publicUrl).host;
   if (config.production && host === 'www.' + canonical) {
@@ -201,6 +182,7 @@ async function route(req: Req, res: Res) {
     const d = await me.json() as { id: string; username: string; global_name?: string | null };
     const name = sanitizeDisplayName(d.global_name || d.username).slice(0, 32) || 'Artist';
     const user = findOrCreateUser('discord', d.id, name, d.username);
+    if (user.banned) return redirect(res, config.clientUrl + '/login?error=banned');
     login(res, user);
     setCookie(res, 'dw_oauth', '', 0);
     return redirect(res, config.clientUrl + next);
@@ -213,6 +195,7 @@ async function route(req: Req, res: Res) {
     const err = validateDisplayName(name);
     if (err) throw new HttpError(400, err, 'name');
     const user = findOrCreateUser('dev', name.toLowerCase(), name, name);
+    if (user.banned) throw new HttpError(403, 'This account is banned.');
     login(res, user);
     return json(res, 200, myProfile(user));
   }
@@ -403,6 +386,8 @@ async function route(req: Req, res: Res) {
     return u ? json(res, 200, publicProfile(u)) : json(res, 404, { error: 'Not found.' });
   }
 
+  if (p.startsWith('/api/admin/')) return adminRoute(req, res, url, requireUser(req), profileChanged);
+
   // ---- Rooms ----
   if (p === '/api/rooms' && m === 'POST') {
     const u = requireMember(req, 'make your own canvases');
@@ -481,6 +466,11 @@ async function route(req: Req, res: Res) {
     return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length });
   }
 
+  if (p === '/admin' || p.startsWith('/admin/')) {
+    const u = sessionUser(cookies(req)[COOKIE]);
+    if (!u) return redirect(res, '/login?next=/admin');
+    if (!isAdmin(u)) throw new HttpError(404, 'Not found.');
+  }
   if ((m === 'GET' || m === 'HEAD') && !api && fs.existsSync(config.staticDir)) return serveStatic(req, res, p, m);
   json(res, 404, { error: 'Not found.' });
 }
@@ -512,7 +502,7 @@ function serveStatic(req: Req, res: Res, p: string, m: string) {
   const dir = config.staticDir;
   const file = path.join(dir, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
   // Pages sit at the top of dist/: / is the landing page, /login the login page, /app (and sub-paths) the app.
-  const page = p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html' : 'index.html';
+  const page = p === '/app' || p.startsWith('/app/') ? 'app.html' : p === '/login' || p === '/login/' ? 'login.html' : p === '/admin' || p.startsWith('/admin/') ? 'admin.html' : 'index.html';
   const target = file.startsWith(dir + path.sep) && !p.endsWith('/') ? file : '';
   const c = (target && loadFile(target)) || loadFile(path.join(dir, page));
   if (!c) {
@@ -555,9 +545,11 @@ server.on('upgrade', (req, socket, head) => {
   const room = m && getRoom(m[1]);
   const origin = req.headers.origin;
   const watch = url.searchParams.get('watch') ?? undefined;
-  const ok = m && user && room && (!origin || ORIGINS.has(origin)) && (watch === undefined || WATCH_KEY_RE.test(watch))
-    && allow('ws:' + clientIp(req), 60, MINUTE) && room.connections(user.id) < 6;
+  const ip = clientIp(req);
+  const ok = m && user && !user.banned && !bannedIp(ip) && room && (!origin || ORIGINS.has(origin)) && (watch === undefined || WATCH_KEY_RE.test(watch))
+    && allow('ws:' + ip, 60, MINUTE) && room.connections(user.id) < 6;
   if (!ok) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
+  lastIp(user.id, ip);
   wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); room.join(ws, user, watch); });
 });
 
@@ -585,6 +577,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     for (const ws of wss.clients) ws.close(1012, 'Server restarting');
     closeAllStreams();
+    flushStats();
     server.close();
     try { db.close(); } catch { /* already closed */ }
     process.exit(0);
@@ -598,7 +591,7 @@ server.listen(config.port, () => {
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Database: ${config.dbPath}`);
-  const pages = ['index.html', 'login.html', 'app.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
+  const pages = ['index.html', 'login.html', 'app.html', 'admin.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
   console.log(`  Pages in ${config.staticDir}: ${pages.join(', ')}`);
   if (path.resolve(config.dbPath).startsWith(path.resolve(config.staticDir) + path.sep)) {
     console.warn('  WARNING: the database is inside the web build folder. Mount the volume at /data instead.');

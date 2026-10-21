@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws';
 import { db, getUser, newId, publicProfile, UserRow } from './db.ts';
 import { areFriends, notifyFriends, touch } from './social.ts';
 import { validLive, validOp } from './validate.ts';
+import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import {
   CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, Member, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
@@ -208,6 +209,9 @@ export class Room {
       case 'typing':
         this.broadcast({ type: 'typing', from: c.userId, on: !!msg.on }, c);
         return;
+      case 'count':
+        if (msg.what === 'undo' || msg.what === 'redo') bump(msg.what === 'undo' ? 'undos' : 'redos');
+        return;
       case 'chat': {
         const text = String(msg.text ?? '').replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX);
         if (!text) return;
@@ -329,6 +333,11 @@ export class Room {
 
   private commit(op: Op, from?: Client) {
     this.track(op);
+    if (from) {
+      bump('ops');
+      const k = op.t === 'stroke' ? 'strokes' : op.t === 'smudge' ? 'smudges' : op.t === 'fill' ? 'fills' : op.t === 'shape' ? 'shapes' : null;
+      if (k) bump(k);
+    }
     const json = JSON.stringify(op);
     this.ops.push(json);
     if (!this.seq) this.seq = (db.prepare('SELECT max(seq) AS s FROM room_ops WHERE room_id = ?').get(this.info.id) as { s: number | null }).s ?? 0;
@@ -339,6 +348,7 @@ export class Room {
   }
 
   private pushChat(m: ChatMsg) {
+    if (!m.system) bump('messages');
     this.chat.push(m);
     if (this.chat.length > 200) this.chat.splice(0, this.chat.length - 200);
     this.broadcast({ type: 'chat', msg: m });
@@ -407,6 +417,13 @@ export function getRoom(id: string): Room | undefined {
   r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share }, JSON.parse(row.hosts), key);
   rooms.set(id, r);
   return r;
+}
+
+export const liveRooms = () => [...rooms.values()].filter((r) => r.clients.size);
+
+/** Drops every connection a person has, e.g. after a ban or a forced sign-out. */
+export function disconnectUser(userId: string, reason: string) {
+  for (const r of liveRooms()) for (const c of [...r.clients]) if (c.userId === userId) { c.ws.close(4001, reason); r.clients.delete(c); }
 }
 
 export function roomsWithUser(userId: string): Room[] {

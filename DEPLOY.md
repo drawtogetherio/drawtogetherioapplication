@@ -36,6 +36,7 @@ log ever says `WARNING: no volume attached`, the volume is missing.
 | `DOWNLOAD_MAC_URL` | optional, later: link to the Mac app download (the landing page shows "soon" until set) |
 | `DOWNLOAD_WINDOWS_URL` | optional, later: link to the Windows app download |
 | `PATREON_URL` | optional: where the home-screen support banner links (default `https://www.patreon.com/doodlehive`) |
+| `ADMIN_HANDLES` | your @handle (without the @; several separated by commas). Those accounts get the admin dashboard at `/admin` on their next login |
 
 Saving variables redeploys the service.
 
@@ -63,8 +64,9 @@ Keep the `http://localhost:8787/auth/discord/callback` redirect too, so login ke
   If the build fails, the old version keeps running.
 - **Rollback:** Railway → Deployments → pick an earlier one → Redeploy.
 - **Logs:** Railway → the service → Deployments → View logs.
-- **Give someone premium:** install the Railway CLI, run `railway link` once, then
-  `railway ssh` and inside it `npm run admin -- premium SomeHandle 30` (or `forever` / `off`).
+- **Give someone premium, badges, or a ban:** open https://doodlehive.net/admin (admins only).
+  Without the dashboard: install the Railway CLI, run `railway link` once, then `railway ssh` and
+  inside it `npm run admin -- premium SomeHandle 30` (or `forever` / `off`), or `npm run admin -- admin SomeHandle on`.
 - Deploys restart the server for a few seconds; people in a room reconnect on their own.
 
 ## Limits to know about

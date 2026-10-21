@@ -1,7 +1,7 @@
 import { db, getUser, publicProfile, USER_COLS, UserRow } from './db.ts';
-import { isConnected, sendTo } from './live.ts';
+import { connectedIds, isConnected, sendTo } from './live.ts';
 import { dropNotice, notify } from './notify.ts';
-import { roomsWithUser, type Room } from './rooms.ts';
+import { liveRooms, roomsWithUser, type Room } from './rooms.ts';
 import type { Presence, PublicProfile } from '../src/shared/profile.ts';
 
 // Online: an app tab is open, they're in a room, or they were seen recently.
@@ -13,6 +13,13 @@ export function touch(userId: string) { lastSeen.set(userId, Date.now()); }
 export function forget(userId: string) { lastSeen.delete(userId); }
 export function isOnline(userId: string) {
   return isConnected(userId) || roomsWithUser(userId).length > 0 || (lastSeen.get(userId) ?? 0) > Date.now() - ONLINE_MS;
+}
+
+export function onlineIds(): Set<string> {
+  const now = Date.now(), ids = new Set(connectedIds());
+  for (const [id, t] of lastSeen) if (t > now - ONLINE_MS) ids.add(id);
+  for (const r of liveRooms()) for (const c of r.clients) ids.add(c.userId);
+  return ids;
 }
 
 export function presenceOf(u: UserRow): Presence {

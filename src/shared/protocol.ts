@@ -67,7 +67,8 @@ export type ClientMsg =
   | { type: 'typing'; on: boolean }
   | { type: 'kick'; user: string }
   | { type: 'set-host'; user: string; on: boolean }
-  | { type: 'admit'; user: string; allow: boolean };
+  | { type: 'admit'; user: string; allow: boolean }
+  | { type: 'count'; what: 'undo' | 'redo' };
 
 export type ServerMsg =
   | { type: 'welcome'; room: RoomInfo; you: string; spectator: boolean; members: Member[]; ops: Op[]; chat: ChatMsg[] }

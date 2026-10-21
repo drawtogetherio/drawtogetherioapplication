@@ -29,7 +29,8 @@ async function main() {
   if (await api.me().catch(() => null)) { location.replace(next); return; }
 
   body.innerHTML = '';
-  if (params.get('error')) body.insertAdjacentHTML('beforeend', '<p class="login-error" role="alert">Discord login didn’t finish. Try again.</p>');
+  const error = params.get('error');
+  if (error) body.insertAdjacentHTML('beforeend', `<p class="login-error" role="alert">${error === 'banned' ? 'This account is banned.' : 'Discord login didn’t finish. Try again.'}</p>`);
   if (cfg.discord) {
     const a = document.createElement('a');
     a.className = 'btn discord';

@@ -1,7 +1,7 @@
 // Fails the build if a page is missing from dist/, so a broken build never replaces a working deploy.
 import fs from 'node:fs';
 
-const pages = ['dist/index.html', 'dist/login.html', 'dist/app.html'];
+const pages = ['dist/index.html', 'dist/login.html', 'dist/app.html', 'dist/admin.html'];
 const missing = pages.filter((p) => !fs.existsSync(p));
 if (missing.length) {
   console.error('Build is missing pages: ' + missing.join(', '));

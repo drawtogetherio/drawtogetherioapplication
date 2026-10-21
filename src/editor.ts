@@ -197,6 +197,7 @@ export class Editor {
     if (this.currentTool.busy?.()) { this.currentTool.cancel(); this.view.invalidate(null); return; }
     const e = this.doc.history.takeUndo();
     if (!e) return;
+    this.room?.send({ type: 'count', what: 'undo' });
     e.redo = this.replay(e.undo);
     e.cost = opsCost(e.redo);
     this.doc.history.putUndone(e);
@@ -207,6 +208,7 @@ export class Editor {
     this.commitPending();
     const e = this.doc.history.takeRedo();
     if (!e) return;
+    this.room?.send({ type: 'count', what: 'redo' });
     e.undo = this.replay(e.redo);
     e.cost = opsCost(e.undo);
     this.doc.history.putDone(e);

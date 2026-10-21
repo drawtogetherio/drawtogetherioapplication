@@ -12,6 +12,9 @@ const HEARTBEAT_MS = 25_000;
 
 export function streamCount(userId: string) { return streams.get(userId)?.size ?? 0; }
 export function isConnected(userId: string) { return streamCount(userId) > 0; }
+export const connectedIds = () => [...streams.keys()];
+
+export function closeStreams(userId: string) { for (const res of streams.get(userId) ?? []) res.end(); }
 
 export function sendTo(userId: string, e: LiveEvent) {
   const set = streams.get(userId);

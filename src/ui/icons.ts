@@ -62,4 +62,13 @@ export function icon(name: keyof typeof P | string, size = 22): string {
 
 export const CROWN_SVG = '<svg class="badge crown" viewBox="0 0 24 24" width="14" height="14" aria-label="Room owner" role="img"><path fill="#f5b301" stroke="#9a6b00" stroke-width="1.2" stroke-linejoin="round" d="M3 18l1.6-10 4.6 4.3L12 5l2.8 7.3L19.4 8 21 18z"/><rect x="3" y="18.5" width="18" height="2.5" rx="1" fill="#f5b301" stroke="#9a6b00" stroke-width="1.2"/></svg>';
 export const STAR_SVG = '<svg class="badge star" viewBox="0 0 24 24" width="14" height="14" aria-label="Premium" role="img"><path fill="#7c5cff" stroke="#4b33c9" stroke-width="1.2" stroke-linejoin="round" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
+const badge = (cls: string, label: string, fill: string, stroke: string, d: string) =>
+  `<svg class="badge ${cls}" viewBox="0 0 24 24" width="14" height="14" aria-label="${label}" role="img"><path fill="${fill}" stroke="${stroke}" stroke-width="1.2" stroke-linejoin="round" d="${d}"/></svg>`;
+/** Badges an admin hands out (see BADGES in shared/profile). */
+export const BADGE_SVGS: Record<string, string> = {
+  staff: badge('staff', 'Staff', '#4f8cff', '#2b5cc4', 'M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6zm-1.5 11.5l-2.5-2.5 1.4-1.4 1.1 1.1 3.6-3.6 1.4 1.4z'),
+  supporter: badge('supporter', 'Supporter', '#ff5f7a', '#b8324a', 'M12 20.5l-1.4-1.3C5.4 14.6 2 11.6 2 7.9 2 4.9 4.4 2.6 7.4 2.6c1.7 0 3.4.8 4.6 2.2 1.2-1.4 2.9-2.2 4.6-2.2 3 0 5.4 2.3 5.4 5.3 0 3.7-3.4 6.7-8.6 11.3z'),
+  artist: badge('artist', 'Featured artist', '#f4c25b', '#9a6b00', 'M3 20c3-1 4.5-4.5 8-10l5-6 4 4-6 5c-5.5 3.5-9 5-11 7zm0 0l1 1'),
+  early: badge('early', 'Early bee', '#2f9e6e', '#1b6b48', 'M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5zM9 9h6M9 12h6M9 15h6'),
+};
 export const HOST_SVG = '<svg class="badge host" viewBox="0 0 24 24" width="14" height="14" aria-label="Host" role="img"><path fill="#2f9e6e" stroke="#1b6b48" stroke-width="1.2" stroke-linejoin="round" d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/></svg>';
