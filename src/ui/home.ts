@@ -1,6 +1,8 @@
 import { STATUS_MAX, cleanStatus } from '../shared/profile';
 import { ApiError, Friend, FriendsList, api } from '../net/api';
-import type { ProjectInfo } from '../shared/protocol';
+import type { ProjectInfo, Visibility } from '../shared/protocol';
+import { MODE_CHOICES, presenceLabel } from './presence';
+import { shareDialog } from './share';
 import { brandHtml } from '../site/brand';
 import type { App } from './app';
 import { confirmDialog, modal, textDialog } from './dialogs';
@@ -8,7 +10,11 @@ import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 
-const FRIENDS_POLL_MS = 20_000;
+// Live updates come over the event stream; this slow poll is only a fallback.
+const FRIENDS_POLL_MS = 60_000;
+
+const VIS_LABEL: Record<Visibility, string> = { private: 'Just you', open: 'Open link', friends: 'Friends', unlisted: 'Unlisted' };
+const VIS_ICON: Record<Visibility, string> = { private: 'lock', open: 'link', friends: 'users', unlisted: 'eye' };
 
 export function timeAgo(t: number) {
   const s = Math.max(0, (Date.now() - t) / 1000);
@@ -154,10 +160,33 @@ export class Home {
     } else {
       status = h('button.me-status-add', { type: 'button', 'aria-label': 'Set a status', html: icon('plus', 14) + '<span>Status</span>', onclick: () => this.renderMeCard(true) });
     }
+    const mode = MODE_CHOICES.find((c) => c.mode === me.presenceMode) ?? MODE_CHOICES[0];
+    const presenceBtn = h(`button.me-presence.${mode.shows}` as 'button', { type: 'button', 'aria-label': `Status: ${mode.label}`, html: `<i></i><span>${mode.label}</span>` });
+    presenceBtn.addEventListener('click', () => this.presenceMenu(presenceBtn));
     this.meCard.append(
-      h('button.me-pic', { type: 'button', title: 'Edit profile', onclick: () => this.app.session.editProfile() }, avatarEl(me, 44, true)),
-      h('div.me-text', {}, h('strong.me-name', {}, me.displayName), h('small.me-handle', {}, '@' + me.handle), status),
+      h('button.me-pic', { type: 'button', title: 'Edit profile', onclick: () => this.app.session.editProfile() },
+        avatarEl(me, 44, true), h(`span.presence.${mode.shows}` as 'span')),
+      h('div.me-text', {}, h('strong.me-name', {}, me.displayName), h('span.me-sub', {}, h('small.me-handle', {}, '@' + me.handle), presenceBtn), status),
     );
+  }
+
+  /** Online / Away / Do not disturb / Offline. Friends see the change right away. */
+  private presenceMenu(anchor: HTMLElement) {
+    const pop = h('div.popover.tile-pop.presence-pop');
+    const close = () => { pop.remove(); document.removeEventListener('pointerdown', off, true); };
+    const off = (e: PointerEvent) => { if (!pop.contains(e.target as Node)) close(); };
+    pop.append(h('div.panel', {}, ...MODE_CHOICES.map((c) => h(`button.menu-item.${c.shows}` as 'button', {
+      type: 'button', html: `<i class="presence-dot"></i><span>${c.label}</span>`,
+      onclick: async () => {
+        close();
+        try { this.app.ed.me = await api.updateMe({ presenceMode: c.mode }); this.renderMeCard(); } catch (e) { this.app.toast((e as Error).message); }
+      },
+    }))));
+    const r = anchor.getBoundingClientRect();
+    pop.style.top = `${Math.round(r.bottom + 4)}px`;
+    pop.style.left = `${Math.round(r.left)}px`;
+    this.el.append(pop);
+    setTimeout(() => document.addEventListener('pointerdown', off, true));
   }
 
   private renderAccountMenu() {
@@ -226,13 +255,21 @@ export class Home {
   }
 
   private friendRow(p: Friend): HTMLElement {
-    const pic = h('span.friend-pic', {}, avatarEl(p, 38, true), h(`span.presence${p.online ? '.on' : ''}` as 'span', { title: p.online ? 'Online' : 'Offline' }));
-    const row = h(`button.friend-row${p.online ? '.online' : ''}${p.premium ? '.premium' : ''}${p.gradient ? '.has-gradient' : ''}` as 'button', {
-      type: 'button', style: gradientStyle(p.gradient), onclick: () => this.friendCard(p),
+    const pic = h('span.friend-pic', {}, avatarEl(p, 38, true), h(`span.presence.${p.presence}` as 'span', { title: presenceLabel(p.presence) }));
+    const row = h(`div.friend-row.${p.presence}${p.online ? '.online' : ''}${p.premium ? '.premium' : ''}${p.gradient ? '.has-gradient' : ''}` as 'div', {
+      role: 'button', tabindex: 0, style: gradientStyle(p.gradient), onclick: () => this.friendCard(p),
     },
       pic,
-      h('span.friend-text', {}, nameLine(p), p.status ? h('small.status-line', { title: p.status }, p.status) : h('small', {}, p.online ? 'Online' : '@' + p.handle)),
+      h('span.friend-text', {}, nameLine(p),
+        p.room ? h('small.friend-room', {}, 'In ', h('strong', {}, p.room.name))
+          : p.status ? h('small.status-line', { title: p.status }, p.status)
+            : h('small', {}, p.online ? presenceLabel(p.presence) : '@' + p.handle)),
     );
+    if (p.room) {
+      const room = p.room;
+      row.append(h('button.btn.small.join-btn', { type: 'button', title: `Join ${room.name}`, onclick: (e: Event) => { e.stopPropagation(); this.app.session.joinRoom(room.id); } }, 'Join'));
+    }
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === row) this.friendCard(p); });
     return row;
   }
 
@@ -245,7 +282,8 @@ export class Home {
         if (await confirmDialog('Remove friend?', `${p.displayName} will be removed from your friends list.`, 'Remove')) this.setFriends(await api.removeFriend(p.id));
       },
     });
-    close = modal('Friend', profileCardBody(p, undefined, h('p.muted.small', {}, p.online ? 'Online now' : 'Offline')), [remove]);
+    const join = p.room ? h('button.btn.primary', { onclick: () => { close(); this.app.session.joinRoom(p.room!.id); } }, `Join ${p.room.name}`) : null;
+    close = modal('Friend', profileCardBody(p, undefined, h('p.muted.small', {}, presenceLabel(p.presence))), join ? [remove, join] : [remove]);
   }
 
   private renderGuest() {
@@ -283,7 +321,7 @@ export class Home {
       h('button.tile-open', { type: 'button', 'aria-label': `Open ${p.name}`, onclick: () => this.app.session.joinRoom(p.id) },
         thumb,
         h('span.tile-name', {}, p.name),
-        h('span.tile-meta', {}, h('span', { html: icon(p.private ? 'lock' : 'users', 13) }), `${p.private ? 'Just you' : 'Shared'} · ${timeAgo(p.updatedAt)}`),
+        h('span.tile-meta', {}, h('span', { html: icon(VIS_ICON[p.visibility], 13) }), `${VIS_LABEL[p.visibility]} · ${timeAgo(p.updatedAt)}`),
       ),
       more,
     );
@@ -302,10 +340,21 @@ export class Home {
         if (name == null) return;
         try { await api.updateRoom(p.id, { name }); this.loadProjects(); } catch (e) { this.app.toast((e as Error).message); }
       }),
-      p.private
-        ? item('users', 'Make shared', async () => { await api.updateRoom(p.id, { private: false }); this.loadProjects(); this.app.toast('Anyone with the link can join now'); })
-        : item('link', 'Copy invite link', () => this.app.copyText(this.app.session.inviteLinkFor(p.id), 'Invite link copied')),
-      !p.private ? item('lock', 'Make private', async () => { await api.updateRoom(p.id, { private: true }); this.loadProjects(); }) : null,
+      item('users', p.private ? 'Share…' : 'Sharing…', async () => {
+        try {
+          const info = await api.room(p.id);
+          const share = await shareDialog(info.share, !p.private);
+          if (!share) return;
+          await api.updateRoom(p.id, { share });
+          this.loadProjects();
+          if (p.private) await this.app.copyText(this.app.session.inviteLinkFor(p.id), 'Invite link copied');
+        } catch (e) { this.app.toast((e as Error).message); }
+      }),
+      !p.private ? item('link', 'Copy invite link', () => this.app.copyText(this.app.session.inviteLinkFor(p.id), 'Invite link copied')) : null,
+      !p.private ? item('lock', 'Make private', async () => {
+        try { const info = await api.room(p.id); await api.updateRoom(p.id, { share: { ...info.share, visibility: 'private' } }); this.loadProjects(); }
+        catch (e) { this.app.toast((e as Error).message); }
+      }) : null,
       item('trash', 'Delete', async () => {
         if (!(await confirmDialog('Delete this canvas?', `“${p.name}” will be deleted for everyone. This can’t be undone.`, 'Delete'))) return;
         try { await api.deleteRoom(p.id); this.loadProjects(); } catch (e) { this.app.toast((e as Error).message); }

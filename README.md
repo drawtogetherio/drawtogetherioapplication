@@ -88,7 +88,14 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   **+** in the top-left does the same: choose **Draw alone** (a private canvas) or **Shared room**.
 - Every saved canvas is a room. Private ones only open for their owner; share one any time from the
   canvas or the tile's ⋯ menu (rename, share, make private, delete).
-- Status message (80 characters) in Edit profile. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
+- Sharing asks who can join: **Open link** (switches: logged-in users only, friends can join from
+  their list, approve each join), **Friends only**, or **Unlisted** (friends just see you online).
+  With approval on, hosts get "<name> wants to join the session" in chat with Allow / Deny.
+- Friends in an open or friends-only room show a **Join** button. Hosts invite friends from the
+  dock (person+ icon); invited friends get a toast and skip approval.
+- Presence on your card: Online, Away, Do not disturb, Offline (invisible). Friends see changes
+  live over `/api/events` (Server-Sent Events).
+- Status message (80 characters) on your card. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
 
 **Shared rooms (v0.2)**
 - Start a room, share the invite link (`?room=code`), others join after logging in
@@ -152,5 +159,6 @@ node tests/pickers.mjs http://localhost:4180/app.html   # brush library, mode dr
 DB_PATH=/tmp/dw-test.db npm run dev
 DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room/
 DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, private canvases
+node tests/share.mjs                          # sharing, joining from friends, approval, invites, presence
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

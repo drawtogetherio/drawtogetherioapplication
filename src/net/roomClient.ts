@@ -1,5 +1,6 @@
 import { DrawDoc, toWire } from '../core/document';
 import type { Op } from '../core/model';
+import type { PublicProfile } from '../shared/profile';
 import type { ChatMsg, ClientMsg, LiveStroke, Member, RoomInfo, ServerMsg } from '../shared/protocol';
 
 export type RoomEvent =
@@ -13,6 +14,7 @@ export type RoomEvent =
   | { kind: 'cursor'; from: string; x: number; y: number; drawing: boolean }
   | { kind: 'status' }
   | { kind: 'room' }
+  | { kind: 'requests' }
   | { kind: 'error'; message: string };
 
 /**
@@ -26,7 +28,9 @@ export class RoomClient {
   chat: ChatMsg[] = [];
   /** user id -> time their typing indicator expires */
   typing = new Map<string, number>();
-  status: 'connecting' | 'open' | 'reconnecting' | 'closed' | 'kicked' = 'connecting';
+  status: 'connecting' | 'waiting' | 'open' | 'reconnecting' | 'closed' | 'kicked' = 'connecting';
+  /** Hosts: people waiting to be let in. */
+  requests: PublicProfile[] = [];
   doc: DrawDoc | null = null;
 
   private ws: WebSocket | null = null;
@@ -79,6 +83,7 @@ export class RoomClient {
         this.you = m.you;
         this.members = m.members;
         this.chat = m.chat;
+        this.requests = [];
         this.retry = 0;
         const doc = new DrawDoc({ ...m.room.settings });
         this.queue = this.queue.then(async () => {
@@ -125,6 +130,18 @@ export class RoomClient {
       case 'live': this.emit({ kind: 'live', from: m.from, live: m.live }); return;
       case 'live-end': this.emit({ kind: 'live-end', from: m.from, stroke: m.stroke }); return;
       case 'cursor': this.emit({ kind: 'cursor', from: m.from, x: m.x, y: m.y, drawing: m.drawing }); return;
+      case 'waiting':
+        this.status = 'waiting';
+        this.emit({ kind: 'status' });
+        return;
+      case 'join-request':
+        if (!this.requests.some((r) => r.id === m.user.id)) this.requests.push(m.user);
+        this.emit({ kind: 'requests' });
+        return;
+      case 'join-request-gone':
+        this.requests = this.requests.filter((r) => r.id !== m.user);
+        this.emit({ kind: 'requests' });
+        return;
       case 'kicked':
         this.status = 'kicked';
         this.emit({ kind: 'status' });
@@ -136,6 +153,9 @@ export class RoomClient {
   }
 
   send(m: ClientMsg) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m)); }
+
+  /** Hosts: let someone in, or not. */
+  admit(user: string, allow: boolean) { this.send({ type: 'admit', user, allow }); }
 
   sendOp(op: Op) { this.send({ type: 'op', op: toWire(op) }); }
 

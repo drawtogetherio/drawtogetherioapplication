@@ -63,6 +63,11 @@ addColumn('rooms', 'private', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('rooms', 'updated_at', 'INTEGER');
 addColumn('rooms', 'thumb', 'BLOB');
 addColumn('rooms', 'thumb_version', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('users', 'presence_mode', `TEXT NOT NULL DEFAULT 'auto'`);
+// Sharing: JSON ShareSettings minus visibility, which lives in its own column ('open' when unset).
+addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
+addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
+db.exec(`UPDATE rooms SET visibility = 'private' WHERE private = 1 AND visibility <> 'private'`);
 db.exec(`
   -- One row per pair, with user_a < user_b. Pending until the other person accepts.
   CREATE TABLE IF NOT EXISTS friendships (
@@ -81,13 +86,13 @@ export interface UserRow {
   id: string; provider: string; provider_id: string; handle: string; display_name: string;
   favorite_color: string; links: string; has_avatar: number; avatar_type: string | null;
   avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
-  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number;
+  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string;
 }
 
 /** Every user column except the picture blobs (those are only read by the /avatars route). */
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
-  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version`;
+  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
@@ -112,7 +117,10 @@ export function publicProfile(u: UserRow): PublicProfile {
 export function myProfile(u: UserRow): MyProfile {
   // A premium theme falls back to the default once premium runs out.
   const theme = canUseTheme(u.theme, isPremium(u)) ? u.theme : DEFAULT_THEME;
-  return { ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme };
+  return {
+    ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme,
+    presenceMode: u.presence_mode as MyProfile['presenceMode'],
+  };
 }
 
 export function getUser(id: string): UserRow | undefined {

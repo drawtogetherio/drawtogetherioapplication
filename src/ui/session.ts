@@ -8,6 +8,7 @@ import { h } from './dom';
 import { icon } from './icons';
 import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
+import type { LiveEvent } from '../net/api';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const PRESENCE_MS = 30_000;
@@ -56,6 +57,7 @@ export class Session {
     }
     this.app.refreshAccount();
     setInterval(() => { if (!document.hidden) api.ping().catch(() => {}); }, PRESENCE_MS);
+    this.listen();
     if (this.me?.needsSetup) {
       const saved = await profileDialog(this.me, true);
       if (saved) this.ed.me = saved;
@@ -64,6 +66,28 @@ export class Session {
     const room = this.roomFromUrl();
     if (room) this.joinRoom(room);
     else this.showHome();
+  }
+
+  /** Live updates: friends changing status or rooms, and invites. EventSource reconnects by itself. */
+  private listen() {
+    const es = new EventSource('/api/events');
+    es.onmessage = (ev) => {
+      let e: LiveEvent;
+      try { e = JSON.parse(ev.data); } catch { return; }
+      if (e.type === 'friends') { if (this.app.home.visible) this.app.home.loadFriends(); }
+      else if (e.type === 'invite') this.showInvite(e);
+    };
+  }
+
+  private showInvite(e: Extract<LiveEvent, { type: 'invite' }>) {
+    if (this.ed.room?.id === e.room.id) return;
+    const card = h('div.invite-toast', { role: 'alert' },
+      h('span', {}, h('strong', {}, e.from.displayName), ' invited you to ', h('strong', {}, e.room.name)),
+      h('button.btn.small.primary', { type: 'button', onclick: () => { card.remove(); this.joinRoom(e.room.id); } }, 'Join'),
+      h('button.icon-btn', { type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss', html: icon('x', 16), onclick: () => card.remove() }),
+    );
+    document.body.append(card);
+    setTimeout(() => card.remove(), 60_000);
   }
 
   showHome() {
@@ -93,7 +117,7 @@ export class Session {
     newCanvasDialog(() => {}, true, {
       solo,
       onCreate: async (c) => {
-        const info = await api.createRoom(c.roomName, { width: c.width, height: c.height, infinite: c.infinite, background: c.background }, solo);
+        const info = await api.createRoom(c.roomName, { width: c.width, height: c.height, infinite: c.infinite, background: c.background }, c.share);
         this.joinRoom(info.id);
       },
     });
@@ -107,7 +131,15 @@ export class Session {
     this.ed.room = room;
     this.app.roomUI.attach(room);
     this.app.refreshRoom();
+    let waitClose: (() => void) | null = null;
+    const stopWaiting = () => { waitClose?.(); waitClose = null; };
     room.on((e) => {
+      if (e.kind === 'status' && room.status === 'waiting' && !waitClose) {
+        const cancel = h('button.btn', { type: 'button', onclick: () => { stopWaiting(); this.leaveRoom(); } }, 'Cancel');
+        waitClose = modal('Waiting to join', h('div.modal-body', {}, h('p.muted', {}, 'The host will let you in shortly.')), [cancel], undefined, false);
+      } else if (e.kind !== 'status' || room.status !== 'waiting') {
+        if (room.status !== 'waiting') stopWaiting();
+      }
       if (e.kind === 'ready') {
         this.ed.setDoc(e.doc, !e.first);
         this.ed.ensureOwnLayer();

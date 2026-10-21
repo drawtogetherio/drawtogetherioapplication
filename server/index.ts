@@ -8,12 +8,13 @@ import { config } from './config.ts';
 import {
   createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isPremium, myProfile, publicProfile, sessionUser, UserRow,
 } from './db.ts';
-import { createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser } from './rooms.ts';
-import { FriendError, acceptFriend, listFriends, removeFriend, requestFriend, touch } from './social.ts';
+import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser, saveShare } from './rooms.ts';
+import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
+import { closeAllStreams, isConnected, openStream, sendTo } from './live.ts';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
-import { ROOM_NAME_MAX } from '../src/shared/protocol.ts';
+import { ROOM_NAME_MAX, type ShareSettings } from '../src/shared/protocol.ts';
 import { THEMES, canUseTheme } from '../src/shared/themes.ts';
 
 type Req = http.IncomingMessage;
@@ -124,7 +125,11 @@ function checkAvatar(buf: Buffer): string {
   throw new HttpError(400, 'Use a PNG, JPEG or WebP image.');
 }
 
-function notifyRooms(userId: string) { for (const r of roomsWithUser(userId)) r.profileChanged(); }
+/** Someone's profile changed: refresh the rooms they're in and their friends' lists. */
+function notifyRooms(userId: string) {
+  for (const r of roomsWithUser(userId)) r.profileChanged();
+  notifyFriends(userId);
+}
 
 async function route(req: Req, res: Res) {
   const url = new URL(req.url ?? '/', 'http://x');
@@ -266,6 +271,11 @@ async function route(req: Req, res: Res) {
         sets.push('gradient = ?'); vals.push(g.join(','));
       }
     }
+    if (b.presenceMode !== undefined) {
+      const pm = String(b.presenceMode);
+      if (!PRESENCE_MODES.includes(pm as PresenceMode)) throw new HttpError(400, 'Unknown status.', 'presenceMode');
+      sets.push('presence_mode = ?'); vals.push(pm);
+    }
     if (b.done === true) sets.push('needs_setup = 0');
     if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, u.id);
     notifyRooms(u.id);
@@ -341,6 +351,20 @@ async function route(req: Req, res: Res) {
     return json(res, 200, listFriends(u.id));
   }
   if (p === '/api/presence' && m === 'POST') { requireUser(req); return json(res, 200, { ok: true }); }
+  // Live updates for an open app tab (friends' presence, invites).
+  if (p === '/api/events' && m === 'GET') {
+    const u = requireUser(req);
+    openStream(u.id, res, (connected) => {
+      if (connected) { notifyFriends(u.id); return; }
+      // Give a reload a moment before telling friends they left.
+      setTimeout(() => {
+        if (isConnected(u.id) || roomsWithUser(u.id).length) return;
+        forget(u.id);
+        notifyFriends(u.id);
+      }, 15_000);
+    });
+    return;
+  }
 
   mm = /^\/api\/users\/([\w-]+)$/.exec(p);
   if (mm && m === 'GET') {
@@ -359,7 +383,8 @@ async function route(req: Req, res: Res) {
     if (!infinite && !(width >= 16 && height >= 16 && width <= 16384 && height <= 16384 && width * height <= 100e6)) throw new HttpError(400, 'Invalid canvas size.');
     const bg = s.background === null ? null : normalizeColor(String(s.background ?? '#ffffff'));
     const name = sanitizeDisplayName(String(b.name ?? '')).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
-    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, !!b.private);
+    const share = cleanShare(b.share ?? (b.private ? { visibility: 'private' } : undefined));
+    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, share);
     return json(res, 200, info);
   }
   if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));
@@ -384,19 +409,34 @@ async function route(req: Req, res: Res) {
   if (mm && m === 'PATCH') {
     ownRoom(req, mm[1]);
     const b = await jsonBody(req);
-    const patch: { name?: string; private?: boolean } = {};
+    const patch: { name?: string; share?: ShareSettings } = {};
     if (b.name !== undefined) {
       const name = sanitizeDisplayName(String(b.name)).slice(0, ROOM_NAME_MAX);
       if (!name) throw new HttpError(400, 'Give it a name.', 'name');
       patch.name = name;
       db.prepare('UPDATE rooms SET name = ? WHERE id = ?').run(name, mm[1]);
     }
-    if (b.private !== undefined) {
-      patch.private = !!b.private;
-      db.prepare('UPDATE rooms SET private = ? WHERE id = ?').run(patch.private ? 1 : 0, mm[1]);
+    if (b.share !== undefined || typeof b.private === 'boolean') {
+      const cur = getRoom(mm[1])!.info.share;
+      patch.share = cleanShare(b.share ?? { ...cur, visibility: b.private ? 'private' : cur.visibility === 'private' ? 'open' : cur.visibility });
+      saveShare(mm[1], patch.share);
     }
     getRoom(mm[1])!.updateInfo(patch);
     return json(res, 200, getRoom(mm[1])!.info);
+  }
+  // Hosts invite friends from the canvas.
+  const inv = /^\/api\/rooms\/([a-z0-9]+)\/invite$/.exec(p);
+  if (inv && m === 'POST') {
+    const u = requireMember(req, 'invite friends');
+    const r = getRoom(inv[1]);
+    if (!r || !r.isHost(u.id)) throw new HttpError(403, 'Only hosts can invite people.');
+    if (r.info.private) throw new HttpError(409, 'Share this canvas first.');
+    const b = await jsonBody(req);
+    const to = String(b.user ?? '');
+    if (!areFriends(u.id, to)) throw new HttpError(403, 'You can only invite friends.');
+    r.invite(to);
+    sendTo(to, { type: 'invite', room: { id: r.info.id, name: r.info.name }, from: { id: u.id, displayName: u.display_name } });
+    return json(res, 200, { ok: true });
   }
   if (mm && m === 'DELETE') {
     ownRoom(req, mm[1]);
@@ -483,6 +523,7 @@ wss.on('connection', (ws) => { const w = ws as typeof ws & { alive?: boolean }; 
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     for (const ws of wss.clients) ws.close(1012, 'Server restarting');
+    closeAllStreams();
     server.close();
     try { db.close(); } catch { /* already closed */ }
     process.exit(0);

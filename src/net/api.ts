@@ -1,6 +1,6 @@
 import type { DocSettings } from '../core/model';
-import type { MyProfile, PublicProfile } from '../shared/profile';
-import type { ProjectInfo, RoomInfo } from '../shared/protocol';
+import type { MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
+import type { ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public field?: string) { super(message); }
@@ -20,7 +20,13 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
 
 export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null } }
 
-export interface Friend extends PublicProfile { online: boolean }
+/** `room`: a room you can join from your friends list. */
+export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
+
+/** Pushed to an open tab over /api/events. */
+export type LiveEvent =
+  | { type: 'friends' }
+  | { type: 'invite'; room: { id: string; name: string }; from: { id: string; displayName: string } };
 export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
 
 export const api = {
@@ -39,7 +45,7 @@ export const api = {
   guestLogin: (name: string) => call<MyProfile>('POST', '/auth/guest', { name }),
   logout: () => call('POST', '/auth/logout'),
   discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
-  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null }>) =>
+  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null; presenceMode: PresenceMode }>) =>
     call<MyProfile>('PATCH', '/api/me', patch),
   uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),
@@ -47,9 +53,10 @@ export const api = {
   checkHandle: (h: string) => call<{ valid: boolean; available: boolean; error: string | null }>('GET', '/api/handle/check?h=' + encodeURIComponent(h)),
   uploadAnimatedAvatar: (gif: Blob) => call<MyProfile>('PUT', '/api/me/avatar-animated', undefined, gif),
   deleteAnimatedAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar-animated'),
-  createRoom: (name: string, settings: Omit<DocSettings, 'id'>, isPrivate = false) =>
-    call<RoomInfo>('POST', '/api/rooms', { name, settings, private: isPrivate }),
-  updateRoom: (id: string, patch: { name?: string; private?: boolean }) => call<RoomInfo>('PATCH', '/api/rooms/' + id, patch),
+  createRoom: (name: string, settings: Omit<DocSettings, 'id'>, share: ShareSettings) =>
+    call<RoomInfo>('POST', '/api/rooms', { name, settings, share }),
+  updateRoom: (id: string, patch: { name?: string; share?: ShareSettings }) => call<RoomInfo>('PATCH', '/api/rooms/' + id, patch),
+  invite: (roomId: string, userId: string) => call<{ ok: true }>('POST', `/api/rooms/${roomId}/invite`, { user: userId }),
   deleteRoom: (id: string) => call<{ ok: true }>('DELETE', '/api/rooms/' + id),
   uploadThumb: (id: string, img: Blob) => call<{ ok: true }>('PUT', `/api/rooms/${id}/thumb`, undefined, img),
   projects: () => call<ProjectInfo[]>('GET', '/api/projects'),

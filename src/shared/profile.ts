@@ -145,7 +145,14 @@ export interface PublicProfile {
   guest: boolean;
 }
 
+/** What friends see. `offline` covers both "not here" and "appear offline". */
+export type Presence = 'online' | 'away' | 'dnd' | 'offline';
+/** What you pick on your card. `auto` shows online while you're here. */
+export type PresenceMode = 'auto' | 'away' | 'dnd' | 'invisible';
+export const PRESENCE_MODES: PresenceMode[] = ['auto', 'away', 'dnd', 'invisible'];
+
 export interface MyProfile extends PublicProfile {
+  presenceMode: PresenceMode;
   /** True until the person has confirmed their profile once. */
   needsSetup: boolean;
   provider: 'discord' | 'dev' | 'guest';

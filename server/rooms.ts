@@ -1,9 +1,11 @@
 import crypto from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { db, getUser, newId, publicProfile, UserRow } from './db.ts';
-import { touch } from './social.ts';
+import { areFriends, notifyFriends, touch } from './social.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
-import { CHAT_MAX, ChatMsg, ClientMsg, Member, ProjectInfo, Role, RoomInfo, ServerMsg, userFolderId } from '../src/shared/protocol.ts';
+import {
+  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, Member, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
+} from '../src/shared/protocol.ts';
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
 
@@ -25,6 +27,10 @@ export class Room {
   private chat: ChatMsg[] = [];
   private kicked = new Map<string, number>();
   private leaving = new Map<string, ReturnType<typeof setTimeout>>();
+  /** People waiting for a host to let them in. */
+  private waiting = new Map<string, { ws: WebSocket; user: UserRow }>();
+  /** Let in by a host, or invited: they skip the checks until the server restarts. */
+  private allowed = new Set<string>();
   hosts: Set<string>;
 
   constructor(public info: RoomInfo, hosts: string[]) {
@@ -54,19 +60,56 @@ export class Room {
     for (const c of this.clients) if (c !== except && c.ws.readyState === 1) c.ws.send(s);
   }
 
-  join(ws: WebSocket, user: UserRow) {
-    if (this.info.private && user.id !== this.info.ownerId) {
-      ws.send(JSON.stringify({ type: 'error', message: 'This canvas is private.' } satisfies ServerMsg));
-      ws.close(4003, 'private');
-      return;
-    }
-    touch(user.id);
+  invite(userId: string) { this.allowed.add(userId); }
+
+  /** Can this person come in: 'yes', 'ask' (a host has to let them in), or why not. */
+  private access(user: UserRow): 'yes' | 'ask' | string {
     const until = this.kicked.get(user.id);
-    if (until && until > Date.now()) {
-      ws.send(JSON.stringify({ type: 'error', message: 'You were removed from this room. Try again later.' } satisfies ServerMsg));
-      ws.close(4003, 'kicked');
+    if (until && until > Date.now()) return 'You were removed from this room. Try again later.';
+    if (this.isHost(user.id) || this.allowed.has(user.id)) return 'yes';
+    const s = this.info.share;
+    switch (s.visibility) {
+      case 'private': return 'This canvas is private.';
+      case 'friends': {
+        if (areFriends(user.id, this.info.ownerId)) return 'yes';
+        return `Only ${getUser(this.info.ownerId)?.display_name ?? 'the owner'}’s friends can join this room.`;
+      }
+      case 'unlisted': return 'yes';
+      case 'open':
+        if (s.requireLogin && user.provider === 'guest') return 'Log in with Discord to join this room.';
+        return s.approveJoins ? 'ask' : 'yes';
+    }
+  }
+
+  join(ws: WebSocket, user: UserRow) {
+    const ok = this.access(user);
+    if (ok === 'ask') { this.ask(ws, user); return; }
+    if (ok !== 'yes') {
+      ws.send(JSON.stringify({ type: 'error', message: ok } satisfies ServerMsg));
+      ws.close(4003, 'denied');
       return;
     }
+    this.admit(ws, user);
+  }
+
+  /** Hold the connection until a host says yes or no. */
+  private ask(ws: WebSocket, user: UserRow) {
+    this.waiting.get(user.id)?.ws.close(4003, 'replaced');
+    this.waiting.set(user.id, { ws, user });
+    ws.send(JSON.stringify({ type: 'waiting' } satisfies ServerMsg));
+    const req: ServerMsg = { type: 'join-request', user: publicProfile(user) };
+    for (const c of this.clients) if (this.isHost(c.userId)) this.send(c, req);
+    ws.on('close', () => {
+      if (this.waiting.get(user.id)?.ws !== ws) return;
+      this.waiting.delete(user.id);
+      this.toHosts({ type: 'join-request-gone', user: user.id });
+    });
+  }
+
+  private toHosts(m: ServerMsg) { for (const c of this.clients) if (this.isHost(c.userId)) this.send(c, m); }
+
+  private admit(ws: WebSocket, user: UserRow) {
+    touch(user.id);
     const c: Client = { ws, userId: user.id, lastChat: [] };
     const firstConnection = ![...this.clients].some((x) => x.userId === user.id);
     this.clients.add(c);
@@ -84,8 +127,10 @@ export class Room {
     ws.send(welcome.replace('"ops":[]', `"ops":[${this.ops.join(',')}]`));
     const pendingLeave = this.leaving.get(user.id);
     if (pendingLeave) { clearTimeout(pendingLeave); this.leaving.delete(user.id); } // quick reconnect: say nothing
-    else if (firstConnection) this.systemChat(`${user.display_name} joined`);
+    else if (firstConnection) { this.systemChat(`${user.display_name} joined`); notifyFriends(user.id); }
     this.broadcast({ type: 'members', members: this.members() }, c);
+    // A host arriving sees who is already waiting.
+    if (this.isHost(user.id)) for (const w of this.waiting.values()) this.send(c, { type: 'join-request', user: publicProfile(w.user) });
 
     ws.on('message', (data) => {
       let msg: ClientMsg;
@@ -98,7 +143,11 @@ export class Room {
         const u = getUser(c.userId);
         if (u && !this.kicked.has(c.userId)) {
           // Wait a moment so a page reload or network blip doesn't post "left" + "joined".
-          this.leaving.set(c.userId, setTimeout(() => { this.leaving.delete(c.userId); this.systemChat(`${u.display_name} left`); }, 5000));
+          this.leaving.set(c.userId, setTimeout(() => {
+            this.leaving.delete(c.userId);
+            this.systemChat(`${u.display_name} left`);
+            notifyFriends(c.userId);
+          }, 5000));
         }
         this.broadcast({ type: 'typing', from: c.userId, on: false });
       }
@@ -163,6 +212,18 @@ export class Room {
         if (msg.on) this.hosts.add(msg.user); else this.hosts.delete(msg.user);
         db.prepare('UPDATE rooms SET hosts = ? WHERE id = ?').run(JSON.stringify([...this.hosts]), this.info.id);
         this.broadcast({ type: 'members', members: this.members() });
+        return;
+      }
+      case 'admit': {
+        const w = this.waiting.get(String(msg.user));
+        if (!this.isHost(c.userId) || !w) return;
+        this.waiting.delete(w.user.id);
+        this.toHosts({ type: 'join-request-gone', user: w.user.id });
+        if (msg.allow) { this.allowed.add(w.user.id); this.admit(w.ws, w.user); }
+        else {
+          w.ws.send(JSON.stringify({ type: 'error', message: 'The host didn’t let you in this time.' } satisfies ServerMsg));
+          w.ws.close(4003, 'denied');
+        }
         return;
       }
       case 'ping':
@@ -275,21 +336,30 @@ export class Room {
   systemChat(text: string) { this.pushChat({ id: newId('m_'), from: 'system', text, at: Date.now(), system: true }); }
 
   /** The owner renamed the canvas or changed who can join. */
-  updateInfo(patch: { name?: string; private?: boolean }) {
-    Object.assign(this.info, patch);
+  updateInfo(patch: { name?: string; share?: ShareSettings }) {
+    if (patch.name !== undefined) this.info.name = patch.name;
+    if (patch.share) { this.info.share = patch.share; this.info.private = patch.share.visibility === 'private'; }
     if (this.info.private) {
       for (const c of this.clients) {
         if (c.userId === this.info.ownerId) continue;
         this.send(c, { type: 'error', message: 'The owner made this canvas private.' });
         c.ws.close(4003, 'private');
       }
+      for (const w of this.waiting.values()) w.ws.close(4003, 'private');
+      this.waiting.clear();
+    } else if (patch.share && !patch.share.approveJoins) {
+      // Approval switched off: let everyone waiting in.
+      for (const w of [...this.waiting.values()]) { this.waiting.delete(w.user.id); this.toHosts({ type: 'join-request-gone', user: w.user.id }); this.admit(w.ws, w.user); }
     }
     this.broadcast({ type: 'room', room: this.info });
+    // Who can join from their friends list may have changed.
+    for (const id of new Set([...this.clients].map((c) => c.userId))) notifyFriends(id);
   }
 
   /** The canvas was deleted: disconnect everyone. */
   close() {
     for (const c of this.clients) { this.send(c, { type: 'error', message: 'This canvas was deleted.' }); c.ws.close(4003, 'deleted'); }
+    for (const w of this.waiting.values()) w.ws.close(4003, 'deleted');
     for (const t of this.leaving.values()) clearTimeout(t);
   }
 
@@ -299,23 +369,41 @@ export class Room {
 
 const rooms = new Map<string, Room>();
 
-export function createRoom(owner: UserRow, name: string, settings: DocSettings, isPrivate = false): RoomInfo {
+const VISIBILITIES: Visibility[] = ['private', 'open', 'friends', 'unlisted'];
+
+/** Clean up share settings from a request (unknown values fall back to the defaults). */
+export function cleanShare(raw: unknown): ShareSettings {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const visibility = VISIBILITIES.includes(r.visibility as Visibility) ? r.visibility as Visibility : DEFAULT_SHARE.visibility;
+  const flag = (k: keyof ShareSettings) => (typeof r[k] === 'boolean' ? r[k] as boolean : DEFAULT_SHARE[k] as boolean);
+  return { visibility, requireLogin: flag('requireLogin'), friendsCanJoin: flag('friendsCanJoin'), approveJoins: flag('approveJoins') };
+}
+
+/** Store share settings: visibility in its own column (the home screen filters on it), the toggles as JSON. */
+export function saveShare(id: string, s: ShareSettings) {
+  const { visibility, ...flags } = s;
+  db.prepare('UPDATE rooms SET visibility = ?, share = ?, private = ? WHERE id = ?').run(visibility, JSON.stringify(flags), visibility === 'private' ? 1 : 0, id);
+}
+
+export function createRoom(owner: UserRow, name: string, settings: DocSettings, share: ShareSettings): RoomInfo {
   // Short, readable room codes.
   const id = Array.from(crypto.randomBytes(8), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
-  const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: isPrivate };
+  const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: share.visibility === 'private', share };
   const now = Date.now();
-  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, private) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(id, name, owner.id, JSON.stringify(info.settings), now, now, isPrivate ? 1 : 0);
+  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, name, owner.id, JSON.stringify(info.settings), now, now);
+  saveShare(id, share);
   return info;
 }
 
 export function getRoom(id: string): Room | undefined {
   let r = rooms.get(id);
   if (r) return r;
-  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, private FROM rooms WHERE id = ?').get(id) as
-    { id: string; name: string; owner_id: string; settings: string; hosts: string; private: number } | undefined;
+  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share FROM rooms WHERE id = ?').get(id) as
+    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string } | undefined;
   if (!row) return undefined;
-  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: !!row.private }, JSON.parse(row.hosts));
+  const share = cleanShare({ ...JSON.parse(row.share), visibility: row.visibility });
+  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share }, JSON.parse(row.hosts));
   rooms.set(id, r);
   return r;
 }
@@ -326,11 +414,11 @@ export function roomsWithUser(userId: string): Room[] {
 
 /** Canvases someone started, newest activity first (the home screen's "Recent"). */
 export function projectsOf(userId: string, limit = 60): ProjectInfo[] {
-  const rows = db.prepare(`SELECT id, name, private, created_at, updated_at, thumb_version, thumb IS NOT NULL AS has_thumb
+  const rows = db.prepare(`SELECT id, name, visibility, created_at, updated_at, thumb_version, thumb IS NOT NULL AS has_thumb
     FROM rooms WHERE owner_id = ? ORDER BY coalesce(updated_at, created_at) DESC LIMIT ?`).all(userId, limit) as
-    { id: string; name: string; private: number; created_at: number; updated_at: number | null; thumb_version: number; has_thumb: number }[];
+    { id: string; name: string; visibility: Visibility; created_at: number; updated_at: number | null; thumb_version: number; has_thumb: number }[];
   return rows.map((r) => ({
-    id: r.id, name: r.name, private: !!r.private, createdAt: r.created_at, updatedAt: r.updated_at ?? r.created_at,
+    id: r.id, name: r.name, private: r.visibility === 'private', visibility: r.visibility, createdAt: r.created_at, updatedAt: r.updated_at ?? r.created_at,
     thumb: r.has_thumb ? `/thumbs/${r.id}?v=${r.thumb_version}` : null,
     online: rooms.get(r.id)?.members().length ?? 0,
   }));

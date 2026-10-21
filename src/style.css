@@ -602,3 +602,71 @@ button.friend-row:hover { background: var(--panel-2); }
 .new-canvas input[type="text"], .new-canvas select { width: 100%; max-width: none; }
 .new-canvas label.field { display: flex; flex-direction: column; align-items: stretch; text-align: left; }
 .new-canvas .field-label { justify-content: flex-start; }
+
+/* Sharing */
+.share-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.share-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; border-radius: 12px; text-align: left;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; font: inherit;
+}
+.share-choice svg { color: var(--muted); }
+.share-choice small { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.share-choice.active { border-color: var(--accent); background: var(--accent-tint); }
+.share-choice.active svg { color: var(--accent); }
+.share-options { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.switch-row { display: flex !important; justify-content: space-between; align-items: center; padding: 8px 2px; font-size: 14px; cursor: pointer; }
+.switch-row input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; width: 38px; height: 22px; border-radius: 11px; background: var(--line); position: relative; cursor: pointer; flex: none; margin: 0; transition: background 0.15s;
+}
+.switch-row input[type="checkbox"]::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.switch-row input[type="checkbox"]:checked { background: var(--accent); }
+.switch-row input[type="checkbox"]:checked::after { transform: translateX(16px); }
+.new-canvas-share { grid-column: 1 / -1; }
+@media (max-width: 560px) { .share-choices { grid-template-columns: 1fr; } }
+
+/* Presence: online, away, do not disturb, offline */
+.presence.online, .online > .presence-dot, .online .presence-wrap .presence-dot, .menu-item.online .presence-dot, .me-presence.online i { background: #3ecf72; }
+.presence.away, .away .presence-dot, .menu-item.away .presence-dot, .me-presence.away i { background: #f5b041; }
+.presence.dnd, .dnd .presence-dot, .menu-item.dnd .presence-dot, .me-presence.dnd i { background: #ef4444; }
+.presence.offline, .offline .presence-dot, .menu-item.offline .presence-dot, .me-presence.offline i { background: #6b6b76; }
+.presence-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.me-pic { position: relative; }
+.me-pic .presence { box-shadow: 0 0 0 2.5px rgba(0, 0, 0, 0.35); }
+.me-sub { display: flex; align-items: center; gap: 8px; }
+.me-presence { display: inline-flex; align-items: center; gap: 5px; border: 0; background: rgba(0, 0, 0, 0.25); color: #fff; font: inherit; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; cursor: pointer; }
+.me-presence:hover { background: rgba(0, 0, 0, 0.4); }
+.me-presence i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.presence-pop .menu-item { gap: 10px; }
+.friend-row { cursor: pointer; }
+.friend-row .join-btn { margin-left: auto; flex: none; }
+.friend-room { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.friend-room strong { color: var(--text); font-weight: 600; }
+.friend-row.away .friend-text, .friend-row.dnd .friend-text { opacity: 0.9; }
+
+/* Invite friends (canvas, bottom right) */
+.invite-pop { top: auto; bottom: calc(66px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right)); width: 320px; max-width: calc(100vw - 24px); }
+.invite-panel { padding: 12px; max-height: 60vh; overflow: auto; }
+.invite-panel .panel-title { font-weight: 700; margin: 0 0 8px; }
+.invite-list { display: flex; flex-direction: column; gap: 4px; }
+.invite-row { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; }
+.invite-row:hover { background: var(--panel-2); }
+.invite-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.presence-wrap { position: relative; display: inline-grid; flex: none; }
+.presence-wrap .presence-dot { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; box-shadow: 0 0 0 2px var(--panel); }
+.invite-empty { margin: 4px 2px; font-size: 13px; }
+
+/* Join requests (hosts only), in the chat */
+.chat-msg.join-request { display: flex; align-items: center; gap: 8px; pointer-events: auto; background: rgba(20, 20, 24, 0.92); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.join-request .join-text { flex: 1; min-width: 0; }
+.join-request .btn.small { height: 28px; padding: 0 10px; font-size: 13px; }
+.join-request .allow { background: #2fb36a; border-color: transparent; color: #fff; }
+.join-request .allow:hover { background: #279a5b; }
+.join-request .deny { background: #e5484d; border-color: transparent; color: #fff; }
+.join-request .deny:hover { background: #c93c40; }
+
+/* "X invited you to Y" */
+.invite-toast {
+  position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 60;
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border-radius: 14px; max-width: calc(100vw - 24px);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); color: var(--text); font-size: 14px;
+}

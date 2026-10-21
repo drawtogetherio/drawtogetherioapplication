@@ -21,6 +21,8 @@ import { THEMES, canUseTheme } from '../shared/themes';
 import { api } from '../net/api';
 import { applyTheme, theme } from './theme';
 import { Home } from './home';
+import { InvitePanel } from './invitePanel';
+import { shareDialog } from './share';
 import { LOGO_SVG } from '../site/brand';
 import { SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, iconChoices } from './toolPicker';
 
@@ -56,6 +58,8 @@ export class App {
   private menuDyn = h('div.menu-dyn');
   private dock = h('div.room-dock', { hidden: true });
   private membersPop = h('div.popover.members-pop', { hidden: true });
+  private invitePanel = new InvitePanel();
+  private invitePop = h('div.popover.invite-pop', { hidden: true });
   /** Drop-down under a tool button: brush library, selection modes, shape kinds. */
   private toolPop = h('div.popover.tool-pop', { hidden: true });
   private toolPopFor: ToolId | null = null;
@@ -77,6 +81,8 @@ export class App {
     this.roomUI.onLeave = () => this.session.leaveRoom();
     this.membersPop.append(this.roomUI.membersPanel);
     dismissOnOutside(this.membersPop, [this.dock], () => { this.membersPop.hidden = true; });
+    this.invitePop.append(this.invitePanel.el);
+    dismissOnOutside(this.invitePop, [this.dock], () => { this.invitePop.hidden = true; });
 
     // ---- Top bar ----
     const btn = (name: string, title: string, fn: () => void, cls = '') =>
@@ -143,7 +149,7 @@ export class App {
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
 
-    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.roomUI.chatEl, this.dock, menuPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -196,7 +202,7 @@ export class App {
     this.renderMenuDyn();
     clear(d);
     d.hidden = !room;
-    if (!room) { this.membersPop.hidden = true; return; }
+    if (!room) { this.membersPop.hidden = this.invitePop.hidden = true; return; }
     const ib = (name: string, title: string, fn: () => void) =>
       h('button.icon-btn', { title, 'aria-label': title, html: icon(name, 20), onclick: fn });
     if (room.status === 'connecting' || room.status === 'reconnecting') {
@@ -219,6 +225,12 @@ export class App {
       ib('chat', 'Chat (Enter)', () => this.roomUI.toggleChat()),
       ib('link', 'Copy invite link', () => this.copyInvite()),
     );
+    if (room.isHost && !this.ed.me?.guest) {
+      d.append(ib('userPlus', 'Invite friends', () => {
+        this.invitePop.hidden = !this.invitePop.hidden;
+        if (!this.invitePop.hidden) this.invitePanel.render(room);
+      }));
+    }
   }
 
   async copyText(text: string, done: string) {
@@ -228,21 +240,24 @@ export class App {
 
   copyInvite() { return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
 
-  /** Turn a private canvas into a shared room and copy its invite link. */
+  /** Share a private canvas, or change who can join a shared one. Copies the link after first sharing. */
   async shareCanvas() {
     const room = this.ed.room;
-    if (!room) return;
+    if (!room?.info) return;
+    const wasPrivate = room.info.private;
+    const share = await shareDialog(room.info.share, !wasPrivate);
+    if (!share) return;
     try {
-      await api.updateRoom(room.id, { private: false });
-      await this.copyInvite();
+      await api.updateRoom(room.id, { share });
+      if (wasPrivate) await this.copyInvite();
     } catch (e) { this.toast((e as Error).message); }
   }
 
-  private async setPrivate(on: boolean) {
+  private async makePrivate() {
     const room = this.ed.room;
-    if (!room) return;
-    if (on && room.members.length > 1 && !(await confirmDialog('Make this canvas private?', 'Everyone else will be disconnected, and only you will be able to open it.', 'Make private'))) return;
-    try { await api.updateRoom(room.id, { private: on }); } catch (e) { this.toast((e as Error).message); }
+    if (!room?.info) return;
+    if (room.members.length > 1 && !(await confirmDialog('Make this canvas private?', 'Everyone else will be disconnected.', 'Make private'))) return;
+    try { await api.updateRoom(room.id, { share: { ...room.info.share, visibility: 'private' } }); } catch (e) { this.toast((e as Error).message); }
   }
 
   private onChange(w: string) {
@@ -459,7 +474,7 @@ export class App {
         if (own) d.append(item('users', 'Share with friends…', () => this.shareCanvas()));
       } else {
         d.append(item('link', 'Copy invite link', () => this.copyInvite()));
-        if (own) d.append(item('lock', 'Make private', () => this.setPrivate(true)));
+        if (own) d.append(item('users', 'Sharing…', () => this.shareCanvas()), item('lock', 'Make private', () => this.makePrivate()));
       }
       d.append(item('home', 'Back to home', () => s.leaveRoom()));
     } else if (me) {

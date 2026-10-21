@@ -3,6 +3,7 @@ import { StrokeRenderer } from '../engine/brush';
 import { polyPath } from '../core/geom';
 import type { Editor } from '../editor';
 import type { RoomClient, RoomEvent } from '../net/roomClient';
+import type { PublicProfile } from '../shared/profile';
 import { CHAT_MAX, ChatMsg, Member } from '../shared/protocol';
 import { clear, h } from './dom';
 import { icon } from './icons';
@@ -79,6 +80,7 @@ export class RoomUI {
         ed.view.requestRender();
         return;
       case 'chat':
+      case 'requests':
         this.renderChat();
         return;
       case 'typing':
@@ -278,9 +280,20 @@ export class RoomUI {
     const room = this.room;
     if (!room) return;
     const msgs = room.chat.slice(-(this.chatOpen ? 50 : 6));
-    this.chatLog.replaceChildren(...msgs.map((m) => this.chatLine(m)));
+    // Join requests sit under the messages and only hosts get them.
+    this.chatLog.replaceChildren(...msgs.map((m) => this.chatLine(m)), ...room.requests.map((u) => this.requestLine(u)));
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
     this.fadeChat();
+  }
+
+  private requestLine(u: PublicProfile): HTMLElement {
+    const room = this.room!;
+    return h('div.chat-msg.join-request', {},
+      avatarEl(u, 22),
+      h('span.join-text', {}, nameText(u, 'chat-who', u.favoriteColor), ' wants to join the session'),
+      h('button.btn.small.allow', { type: 'button', onclick: () => room.admit(u.id, true) }, 'Allow'),
+      h('button.btn.small.deny', { type: 'button', onclick: () => room.admit(u.id, false) }, 'Deny'),
+    );
   }
 
   private chatLine(m: ChatMsg): HTMLElement {

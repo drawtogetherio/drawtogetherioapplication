@@ -1,3 +1,5 @@
+import { DEFAULT_SHARE, type ShareSettings } from '../shared/protocol';
+import { shareFields } from './share';
 import { DrawDoc } from '../core/document';
 import type { Editor } from '../editor';
 import { ExportFormat, exportDoc, exportRect } from '../io/export';
@@ -27,7 +29,7 @@ const PRESETS = [
   { id: 'comic', name: 'Comic page', w: 1988, h: 3056 },
 ];
 
-export interface CanvasChoice { width: number; height: number; infinite: boolean; background: string | null; roomName: string }
+export interface CanvasChoice { width: number; height: number; infinite: boolean; background: string | null; roomName: string; share: ShareSettings }
 
 /**
  * Pick a canvas size. In 'room' mode it also asks for a room name and hands back the settings
@@ -71,6 +73,7 @@ export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = tru
   const err = h('p.error', { role: 'alert' });
   const solo = !!room?.solo;
   const roomName = h('input', { type: 'text', id: 'room-name', maxlength: 48, placeholder: solo ? 'Untitled sketch' : 'Sketch night', 'aria-label': 'Name' });
+  const share = shareFields(solo ? { ...DEFAULT_SHARE, visibility: 'private' } : DEFAULT_SHARE);
   const body = h('div.modal-body.new-canvas', {},
     h('div.new-canvas-fields', {},
       room ? h('label.field', {}, h('span.field-label', {}, 'Name'), roomName) : null,
@@ -79,6 +82,7 @@ export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = tru
       h('label.field', {}, h('span.field-label', {}, 'Background'), bg),
     ),
     h('div.canvas-preview', {}, shape, sizeNote),
+    room && !solo ? h('div.field.new-canvas-share', {}, h('span.field-label', {}, 'Who can join'), share.el) : null,
     err,
   );
   update();
@@ -92,7 +96,10 @@ export function newCanvasDialog(onCreate: (doc: DrawDoc) => void, closable = tru
     if (room) {
       create.disabled = true;
       try {
-        await room.onCreate({ width: w, height: hh, infinite, background: bg.value || null, roomName: roomName.value });
+        await room.onCreate({
+          width: w, height: hh, infinite, background: bg.value || null, roomName: roomName.value,
+          share: solo ? { ...DEFAULT_SHARE, visibility: 'private' } : share.value(),
+        });
         close();
       } catch (e) { err.textContent = (e as Error).message; create.disabled = false; }
       return;
