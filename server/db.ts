@@ -64,6 +64,7 @@ addColumn('rooms', 'updated_at', 'INTEGER');
 addColumn('rooms', 'thumb', 'BLOB');
 addColumn('rooms', 'thumb_version', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'presence_mode', `TEXT NOT NULL DEFAULT 'auto'`);
+addColumn('users', 'premium_warned', 'INTEGER'); // the premium_until a warning went out for
 // visibility has its own column so the home screen can filter on it; the other share flags are JSON.
 addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
 addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
@@ -87,12 +88,12 @@ export interface UserRow {
   id: string; provider: string; provider_id: string; handle: string; display_name: string;
   favorite_color: string; links: string; has_avatar: number; avatar_type: string | null;
   avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
-  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string;
+  status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string; premium_warned: number | null;
 }
 
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
-  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode`;
+  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 

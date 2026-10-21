@@ -96,6 +96,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - The dock's link button opens **Share links**: the draw link, the room code (paste it on the home
   screen) and a **watch link** (`?room=code&watch=key`). Watchers see the canvas and chat but get no
   tools, undo, layers or export; they can be removed like anyone else. The key is only sent to hosts.
+- A bell by the account button counts unread notifications: friend requests (accept or decline
+  right there), accepted requests, room invites (Join) and system notices such as premium ending
+  within a day. They arrive live over the event stream; the server keeps the last 100 per person.
 - Presence on your card: Online, Away, Do not disturb, Offline (invisible). Friends see changes
   live over `/api/events` (Server-Sent Events).
 - Status message (80 characters) on your card. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
@@ -173,6 +176,7 @@ DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, p
 node tests/share.mjs                          # sharing, joining from friends, approval, invites, presence
 node tests/spectate.mjs                       # watch links: chat only, no edits or export, removable
 node tests/smudge.mjs                         # smudge: drags paint, undo, selection clip, room sync
+DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

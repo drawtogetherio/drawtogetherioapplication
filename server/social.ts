@@ -1,5 +1,6 @@
 import { db, getUser, publicProfile, USER_COLS, UserRow } from './db.ts';
 import { isConnected, sendTo } from './live.ts';
+import { dropNotice, notify } from './notify.ts';
 import { roomsWithUser, type Room } from './rooms.ts';
 import type { Presence, PublicProfile } from '../src/shared/profile.ts';
 
@@ -100,6 +101,7 @@ export function requestFriend(me: UserRow, handle: string): 'requested' | 'accep
   const [a, b] = pair(me.id, them.id);
   db.prepare('INSERT INTO friendships (user_a, user_b, requested_by, accepted, created_at) VALUES (?, ?, ?, 0, ?)').run(a, b, me.id, Date.now());
   sendTo(them.id, { type: 'friends' });
+  notify(them.id, 'friend', `${me.display_name} sent you a friend request`, person(me), 'friend-' + me.id);
   return 'requested';
 }
 
@@ -109,10 +111,17 @@ export function acceptFriend(me: string, other: string) {
   const [a, b] = pair(me, other);
   db.prepare('UPDATE friendships SET accepted = 1 WHERE user_a = ? AND user_b = ?').run(a, b);
   sendTo(other, { type: 'friends' });
+  dropNotice(me, 'friend-' + other);
+  const u = getUser(me);
+  if (u) notify(other, 'friend-accepted', `${u.display_name} accepted your friend request`, person(u), 'accepted-' + me);
 }
 
 export function removeFriend(me: string, other: string) {
   const [a, b] = pair(me, other);
   db.prepare('DELETE FROM friendships WHERE user_a = ? AND user_b = ?').run(a, b);
   sendTo(other, { type: 'friends' });
+  dropNotice(me, 'friend-' + other);
+  dropNotice(other, 'friend-' + me);
 }
+
+const person = (u: UserRow) => ({ user: u.id, handle: u.handle, name: u.display_name });

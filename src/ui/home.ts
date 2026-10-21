@@ -1,6 +1,7 @@
 import { STATUS_MAX, cleanStatus } from '../shared/profile';
 import { ApiError, Friend, FriendsList, api } from '../net/api';
 import type { ProjectInfo, Visibility } from '../shared/protocol';
+import type { Notice } from '../shared/notices';
 import { MODE_CHOICES, presenceLabel } from './presence';
 import { shareDialog } from './share';
 import { brandHtml } from '../site/brand';
@@ -40,6 +41,10 @@ export class Home {
   private projectsHead = h('h1', {}, 'Recent');
   private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
+  private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 20) });
+  private bellBadge = h('span.bell-badge', { hidden: true });
+  private noticesPop = h('div.popover.notices-pop', { hidden: true });
+  private notices: Notice[] = [];
 
   constructor(private app: App) {
     const plus = this.plus = h('button.icon-btn.plus-btn', { title: 'Create new', 'aria-label': 'Create new', html: icon('plus', 22), onclick: () => this.app.session.createNew() });
@@ -54,6 +59,9 @@ export class Home {
     });
     this.accountBtn.addEventListener('click', () => { this.renderAccountMenu(); this.accountPop.hidden = !this.accountPop.hidden; });
     dismissOnOutside(this.accountPop, [this.accountBtn], () => { this.accountPop.hidden = true; });
+    this.bellBtn.append(this.bellBadge);
+    this.bellBtn.addEventListener('click', () => this.toggleNotices());
+    dismissOnOutside(this.noticesPop, [this.bellBtn], () => { this.noticesPop.hidden = true; });
 
     const addIn = h('input', { type: 'text', placeholder: '@handle', 'aria-label': 'Friend’s handle', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off' });
     const addForm = h('form.add-friend', {}, addIn, h('button.icon-btn', { type: 'submit', title: 'Send friend request', 'aria-label': 'Send friend request', html: icon('plus', 18) }));
@@ -74,7 +82,7 @@ export class Home {
       h('header.home-top', {},
         plus,
         h('div.home-brand', { html: brandHtml('/') }),
-        h('div.home-top-right', {}, joinForm, this.accountBtn),
+        h('div.home-top-right', {}, joinForm, this.bellBtn, this.accountBtn),
       ),
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
@@ -90,6 +98,7 @@ export class Home {
         ),
       ),
       this.accountPop,
+      this.noticesPop,
     );
   }
 
@@ -100,18 +109,19 @@ export class Home {
     this.renderAccount();
     const guest = !!this.app.ed.me?.guest;
     this.el.classList.toggle('guest', guest);
-    this.plus.hidden = this.friendsPanel.hidden = guest;
+    this.plus.hidden = this.friendsPanel.hidden = this.bellBtn.hidden = guest;
     if (guest) { this.renderGuest(); return; }
     this.projectsHead.textContent = 'Recent';
     this.loadProjects();
     this.loadFriends();
+    this.loadNotices();
     clearInterval(this.timer);
     this.timer = window.setInterval(() => { if (!document.hidden) this.loadFriends(); }, FRIENDS_POLL_MS);
   }
 
   hide() {
     this.el.hidden = true;
-    this.accountPop.hidden = true;
+    this.accountPop.hidden = this.noticesPop.hidden = true;
     clearInterval(this.timer);
   }
 
@@ -191,6 +201,54 @@ export class Home {
       h('div.account', {}, avatarEl(me, 40, true), h('div.account-text', {}, nameLine(me), h('small.muted', {}, '@' + me.handle), me.status ? h('small.status-line', {}, me.status) : null)),
       h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
       h('button.menu-item', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
+    ));
+  }
+
+  // ---- Notifications ----
+
+  async loadNotices() {
+    if (this.app.ed.me?.guest) return;
+    let r: { unread: number; notices: Notice[] };
+    try { r = await api.notices(); } catch { return; }
+    this.notices = r.notices;
+    this.bellBadge.hidden = !r.unread;
+    this.bellBadge.textContent = r.unread > 99 ? '99+' : String(r.unread);
+    if (!this.noticesPop.hidden) this.renderNotices();
+  }
+
+  private toggleNotices() {
+    this.noticesPop.hidden = !this.noticesPop.hidden;
+    if (this.noticesPop.hidden) return;
+    this.renderNotices();
+    if (this.notices.some((n) => !n.read)) {
+      this.bellBadge.hidden = true;
+      api.readNotices().catch(() => {});
+    }
+  }
+
+  private renderNotices() {
+    const s = this.app.session, pop = this.noticesPop;
+    const refresh = () => { this.loadFriends(); this.loadNotices(); };
+    const rows = this.notices.map((n) => {
+      const d = n.data as { user?: string; name?: string; room?: { id: string; name: string } };
+      const actions: HTMLElement[] = [];
+      if (n.kind === 'friend' && d.user && this.friends.incoming.some((p) => p.id === d.user)) {
+        actions.push(
+          h('button.icon-btn.accept', { title: 'Accept', 'aria-label': `Accept ${d.name}`, html: icon('check', 18), onclick: async () => { await api.acceptFriend(d.user!).catch(() => {}); refresh(); } }),
+          h('button.icon-btn', { title: 'Decline', 'aria-label': `Decline ${d.name}`, html: icon('x', 18), onclick: async () => { await api.removeFriend(d.user!).catch(() => {}); refresh(); } }),
+        );
+      } else if (n.kind === 'invite' && d.room) {
+        actions.push(h('button.btn.small.primary', { type: 'button', onclick: () => { pop.hidden = true; s.joinRoom(d.room!.id); } }, 'Join'));
+      }
+      const ic = n.kind === 'friend' ? 'userPlus' : n.kind === 'friend-accepted' ? 'users' : n.kind === 'invite' ? 'link' : 'sparkle';
+      return h(`div.notice-row${n.read ? '' : '.unread'}` as 'div', {}, h('span.notice-icon', { html: icon(ic, 18) }),
+        h('span.notice-text', {}, n.text, h('small', {}, ago(n.at))), ...actions);
+    });
+    clear(pop);
+    pop.append(h('div.panel', {},
+      h('div.panel-head', {}, h('span.panel-title', {}, 'Notifications'),
+        this.notices.length ? h('button.btn.small', { type: 'button', onclick: async () => { await api.clearNotices().catch(() => {}); this.loadNotices(); } }, 'Clear') : null),
+      ...(rows.length ? rows : [h('p.notices-empty', {}, 'Nothing new')]),
     ));
   }
 
@@ -364,3 +422,13 @@ export class Home {
   }
 }
 
+
+function ago(t: number): string {
+  const m = Math.round((Date.now() - t) / 60_000);
+  if (m < 1) return 'Just now';
+  if (m < 60) return `${m}m ago`;
+  const hrs = Math.round(m / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const d = Math.round(hrs / 24);
+  return d === 1 ? 'Yesterday' : `${d}d ago`;
+}

@@ -81,6 +81,7 @@ export class Session {
       let e: LiveEvent;
       try { e = JSON.parse(ev.data); } catch { return; }
       if (e.type === 'friends') { if (this.app.home.visible) this.app.home.loadFriends(); }
+      else if (e.type === 'notices') this.app.home.loadNotices();
       else if (e.type === 'invite') this.showInvite(e);
     };
   }

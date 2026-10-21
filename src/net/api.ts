@@ -1,6 +1,7 @@
 import type { DocSettings } from '../core/model';
 import type { MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
 import type { ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
+import type { Notice } from '../shared/notices';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public field?: string) { super(message); }
@@ -24,6 +25,7 @@ export interface Friend extends PublicProfile { online: boolean; presence: Prese
 
 export type LiveEvent =
   | { type: 'friends' }
+  | { type: 'notices' }
   | { type: 'invite'; room: { id: string; name: string }; from: { id: string; displayName: string } };
 export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
 
@@ -62,4 +64,7 @@ export const api = {
   acceptFriend: (id: string) => call<FriendsList>('POST', `/api/friends/${id}/accept`),
   removeFriend: (id: string) => call<FriendsList>('DELETE', '/api/friends/' + id),
   room: (id: string) => call<RoomInfo & { owner: PublicProfile | null; online: number }>('GET', '/api/rooms/' + id),
+  notices: () => call<{ unread: number; notices: Notice[] }>('GET', '/api/notices'),
+  readNotices: () => call<{ ok: true }>('POST', '/api/notices/read'),
+  clearNotices: () => call<{ ok: true }>('DELETE', '/api/notices'),
 };

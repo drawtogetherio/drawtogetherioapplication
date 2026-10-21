@@ -4,6 +4,7 @@ import type { ServerResponse } from 'node:http';
 
 export type LiveEvent =
   | { type: 'friends' }
+  | { type: 'notices' }
   | { type: 'invite'; room: { id: string; name: string }; from: { id: string; displayName: string } };
 
 const streams = new Map<string, Set<ServerResponse>>();

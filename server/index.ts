@@ -11,6 +11,7 @@ import {
 import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, roomsWithUser, saveShare } from './rooms.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
+import { clearNotices, listNotices, notify, premiumWarning, premiumWarnings, readNotices } from './notify.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import {
   AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
@@ -370,6 +371,13 @@ async function route(req: Req, res: Res) {
     } catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message); throw e; }
     return json(res, 200, listFriends(u.id));
   }
+  if (p === '/api/notices' && m === 'GET') {
+    const u = requireUser(req);
+    premiumWarning(u);
+    return json(res, 200, listNotices(u.id));
+  }
+  if (p === '/api/notices/read' && m === 'POST') { readNotices(requireUser(req).id); return json(res, 200, { ok: true }); }
+  if (p === '/api/notices' && m === 'DELETE') { clearNotices(requireUser(req).id); return json(res, 200, { ok: true }); }
   if (p === '/api/events' && m === 'GET') {
     const u = requireUser(req);
     if (streamCount(u.id) >= 8) throw new HttpError(429, 'Too many open tabs.');
@@ -433,6 +441,7 @@ async function route(req: Req, res: Res) {
     if (!areFriends(u.id, to)) throw new HttpError(403, 'You can only invite friends.');
     r.invite(to);
     sendTo(to, { type: 'invite', room: { id: r.info.id, name: r.info.name }, from: { id: u.id, displayName: u.display_name } });
+    notify(to, 'invite', `${u.display_name} invited you to ${r.info.name}`, { room: { id: r.info.id, name: r.info.name }, from: u.id }, `invite-${r.info.id}-${u.id}`);
     return json(res, 200, { ok: true });
   }
   mm = /^\/api\/rooms\/([a-z0-9]+)$/.exec(p);
@@ -561,6 +570,8 @@ function sweep() {
   const now = Date.now();
   db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now);
   db.prepare(`DELETE FROM users WHERE provider = 'guest' AND created_at < ? AND id NOT IN (SELECT user_id FROM sessions)`).run(now - 30 * 864e5);
+  db.prepare('DELETE FROM notices WHERE user_id NOT IN (SELECT id FROM users)').run();
+  premiumWarnings();
 }
 sweep();
 setInterval(sweep, HOUR).unref();
