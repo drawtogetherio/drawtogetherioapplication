@@ -10,11 +10,14 @@ import {
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
 
-interface Client { ws: WebSocket; userId: string; lastChat: number[]; msgs: number; msgsAt: number; bytes: number; bytesAt: number }
+interface Client { ws: WebSocket; userId: string; spectator: boolean; lastChat: number[]; msgs: number; msgsAt: number; bytes: number; bytesAt: number }
 
 const KICK_BLOCK_MS = 10 * 60_000;
 const MSGS_PER_SEC = 80, MSG_BURST = 240;
 const BYTES_PER_MIN = 24 * 1024 * 1024;
+const KICKED_MSG = 'You were removed from this room. Try again later.';
+const ID_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+const randomId = (n: number) => Array.from(crypto.randomBytes(n), (b) => ID_CHARS[b % 31]).join('');
 
 const raw = (ws: WebSocket, m: ServerMsg) => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
@@ -32,7 +35,7 @@ export class Room {
   private savedAt = 0;
   hosts: Set<string>;
 
-  constructor(public info: RoomInfo, hosts: string[]) {
+  constructor(public info: RoomInfo, hosts: string[], private watchKey: string) {
     this.hosts = new Set(hosts);
     const rows = db.prepare('SELECT op FROM room_ops WHERE room_id = ? ORDER BY seq').all(info.id) as { op: string }[];
     for (const r of rows) { this.ops.push(r.op); this.track(JSON.parse(r.op)); }
@@ -44,15 +47,20 @@ export class Room {
   isHost(userId: string) { return this.role(userId) !== 'member'; }
   connections(userId: string) { let n = 0; for (const c of this.clients) if (c.userId === userId) n++; return n; }
 
+  /** Someone with both a drawing and a watching tab open counts as drawing. */
   members(): Member[] {
-    const seen = new Map<string, Member>();
-    for (const c of this.clients) {
-      if (seen.has(c.userId)) continue;
-      const u = getUser(c.userId);
-      if (u) seen.set(c.userId, { ...publicProfile(u), role: this.role(c.userId) });
+    const watching = new Map<string, boolean>();
+    for (const c of this.clients) watching.set(c.userId, c.spectator && (watching.get(c.userId) ?? true));
+    const out: Member[] = [];
+    for (const [id, spectator] of watching) {
+      const u = getUser(id);
+      if (u) out.push({ ...publicProfile(u), role: spectator ? 'spectator' : this.role(id) });
     }
-    return [...seen.values()];
+    return out;
   }
+
+  /** The watch link's secret goes to hosts only. */
+  private infoFor(c: Client): RoomInfo { return this.isHost(c.userId) ? { ...this.info, watchKey: this.watchKey } : this.info; }
 
   send(c: Client, m: ServerMsg) { raw(c.ws, m); }
   broadcast(m: ServerMsg, except?: Client) { this.broadcastRaw(JSON.stringify(m), except); }
@@ -66,7 +74,7 @@ export class Room {
 
   private access(user: UserRow): 'yes' | 'ask' | string {
     const until = this.kicked.get(user.id);
-    if (until && until > Date.now()) return 'You were removed from this room. Try again later.';
+    if (until && until > Date.now()) return KICKED_MSG;
     if (this.isHost(user.id) || this.allowed.has(user.id)) return 'yes';
     const s = this.info.share;
     switch (s.visibility) {
@@ -80,7 +88,14 @@ export class Room {
     }
   }
 
-  join(ws: WebSocket, user: UserRow) {
+  join(ws: WebSocket, user: UserRow, watch?: string) {
+    if (watch !== undefined && !this.isHost(user.id)) {
+      const until = this.kicked.get(user.id);
+      if (until && until > Date.now()) { this.deny(ws, KICKED_MSG); return; }
+      if (watch.length !== this.watchKey.length || !crypto.timingSafeEqual(Buffer.from(watch), Buffer.from(this.watchKey))) { this.deny(ws, 'This watch link doesn’t work.'); return; }
+      this.admit(ws, user, true);
+      return;
+    }
     const ok = this.access(user);
     if (ok === 'ask') { this.ask(ws, user); return; }
     if (ok !== 'yes') { this.deny(ws, ok); return; }
@@ -104,25 +119,25 @@ export class Room {
     });
   }
 
-  private admit(ws: WebSocket, user: UserRow) {
+  private admit(ws: WebSocket, user: UserRow, spectator = false) {
     touch(user.id);
     const now = Date.now();
-    const c: Client = { ws, userId: user.id, lastChat: [], msgs: MSG_BURST, msgsAt: now, bytes: 0, bytesAt: now };
+    const c: Client = { ws, userId: user.id, spectator, lastChat: [], msgs: MSG_BURST, msgsAt: now, bytes: 0, bytesAt: now };
     const firstConnection = !this.connections(user.id);
     this.clients.add(c);
 
     const fid = userFolderId(user.id);
-    if (!this.nodes.has(fid)) {
+    if (!spectator && !this.nodes.has(fid)) {
       this.commit({
         t: 'folder.add', id: newId('op_'), author: 'server', parent: null, index: this.rootCount,
         folder: { id: fid, name: user.display_name, visible: true, owner: user.id, user: true, color: user.favorite_color },
       });
     }
-    const head = JSON.stringify({ type: 'welcome', room: this.info, you: user.id, members: this.members(), chat: this.chat.slice(-50) });
+    const head = JSON.stringify({ type: 'welcome', room: this.infoFor(c), you: user.id, spectator, members: this.members(), chat: this.chat.slice(-50) });
     ws.send(`${head.slice(0, -1)},"ops":[${this.ops.join(',')}]}`);
     const pendingLeave = this.leaving.get(user.id);
     if (pendingLeave) { clearTimeout(pendingLeave); this.leaving.delete(user.id); }
-    else if (firstConnection) { this.systemChat(`${user.display_name} joined`); notifyFriends(user.id); }
+    else if (firstConnection) { this.systemChat(`${user.display_name} ${spectator ? 'is watching' : 'joined'}`); notifyFriends(user.id); }
     this.broadcast({ type: 'members', members: this.members() }, c);
     if (this.isHost(user.id)) for (const w of this.waiting.values()) this.send(c, { type: 'join-request', user: publicProfile(w.user) });
 
@@ -166,6 +181,10 @@ export class Room {
 
   private handle(c: Client, msg: ClientMsg) {
     touch(c.userId);
+    if (c.spectator && msg.type !== 'chat' && msg.type !== 'typing') {
+      if (msg.type === 'op') this.send(c, { type: 'reject', opId: String((msg.op as { id?: unknown })?.id ?? ''), reason: 'Spectators can’t draw' });
+      return;
+    }
     switch (msg.type) {
       case 'op': {
         const op = msg.op;
@@ -331,13 +350,13 @@ export class Room {
     if (patch.name !== undefined) this.info.name = patch.name;
     if (patch.share) { this.info.share = patch.share; this.info.private = patch.share.visibility === 'private'; }
     if (this.info.private) {
-      for (const c of this.clients) if (c.userId !== this.info.ownerId) this.deny(c.ws, 'The owner made this canvas private.');
+      for (const c of this.clients) if (c.userId !== this.info.ownerId && !c.spectator) this.deny(c.ws, 'The owner made this canvas private.');
       for (const w of this.waiting.values()) w.ws.close(4003, 'private');
       this.waiting.clear();
     } else if (patch.share && !patch.share.approveJoins) {
       for (const w of [...this.waiting.values()]) { this.waiting.delete(w.user.id); this.toHosts({ type: 'join-request-gone', user: w.user.id }); this.admit(w.ws, w.user); }
     }
-    this.broadcast({ type: 'room', room: this.info });
+    for (const c of this.clients) this.send(c, { type: 'room', room: this.infoFor(c) });
     for (const id of new Set([...this.clients].map((c) => c.userId))) notifyFriends(id);
   }
 
@@ -367,11 +386,11 @@ export function saveShare(id: string, s: ShareSettings) {
 }
 
 export function createRoom(owner: UserRow, name: string, settings: DocSettings, share: ShareSettings): RoomInfo {
-  const id = Array.from(crypto.randomBytes(8), (b) => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('');
+  const id = randomId(8);
   const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: share.visibility === 'private', share };
   const now = Date.now();
-  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, name, owner.id, JSON.stringify(info.settings), now, now);
+  db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, watch_key) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, name, owner.id, JSON.stringify(info.settings), now, now, randomId(16));
   saveShare(id, share);
   return info;
 }
@@ -379,11 +398,13 @@ export function createRoom(owner: UserRow, name: string, settings: DocSettings, 
 export function getRoom(id: string): Room | undefined {
   let r = rooms.get(id);
   if (r) return r;
-  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share FROM rooms WHERE id = ?').get(id) as
-    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string } | undefined;
+  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share, watch_key FROM rooms WHERE id = ?').get(id) as
+    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string; watch_key: string | null } | undefined;
   if (!row) return undefined;
   const share = cleanShare({ ...JSON.parse(row.share), visibility: row.visibility });
-  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share }, JSON.parse(row.hosts));
+  let key = row.watch_key;
+  if (!key) { key = randomId(16); db.prepare('UPDATE rooms SET watch_key = ? WHERE id = ?').run(key, id); }
+  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share }, JSON.parse(row.hosts), key);
   rooms.set(id, r);
   return r;
 }

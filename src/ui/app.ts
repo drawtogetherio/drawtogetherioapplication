@@ -8,7 +8,7 @@ import { SelectTool } from '../tools/selectTool';
 import { ShapeTool } from '../tools/shapeTool';
 import { InputController } from '../view/input';
 import { ColorPicker } from './colorPicker';
-import { confirmDialog, exportDialog, newCanvasDialog } from './dialogs';
+import { confirmDialog, exportDialog, modal, newCanvasDialog } from './dialogs';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { LayersPanel } from './layersPanel';
@@ -95,7 +95,7 @@ export class App {
         onclick: () => { if (!this.session.offline) this.session.leaveRoom(); },
       }),
       menuBtn,
-      btn('download', 'Export (Ctrl+Shift+E)', () => exportDialog(ed)),
+      btn('download', 'Export (Ctrl+Shift+E)', () => this.export(), '.edit-only'),
       h('span.sep'),
       btn('flipH', 'Flip canvas horizontally (H)', () => ed.view.viewport.flip(true)),
       btn('flipV', 'Flip canvas vertically (V)', () => ed.view.viewport.flip(false)),
@@ -115,18 +115,18 @@ export class App {
       this.toolButtons.set(t.id, b);
       right.append(b);
     }
-    right.append(h('span.sep'));
+    right.append(h('span.sep.edit-only'));
 
     const layers = new LayersPanel(ed);
     const layersPop = h('div.popover.layers-pop', { hidden: true }, layers.el);
     const layersBtn = btn('layers', 'Layers (L)', () => {
       layersPop.hidden = !layersPop.hidden; layers.open = !layersPop.hidden; if (layers.open) layers.render();
-    });
+    }, '.edit-only');
     dismissOnOutside(layersPop, [layersBtn], () => { layersPop.hidden = true; layers.open = false; });
 
     const picker = new ColorPicker(ed);
     const colorPop = h('div.popover.color-pop', { hidden: true }, h('div.panel', {}, picker.el));
-    this.colorBtn = h('button.color-btn', { title: 'Colour', 'aria-label': 'Colour' });
+    this.colorBtn = h('button.color-btn.edit-only', { title: 'Colour', 'aria-label': 'Colour' });
     this.colorBtn.addEventListener('click', () => { colorPop.hidden = !colorPop.hidden; if (!colorPop.hidden) picker.opened(); });
     dismissOnOutside(colorPop, [this.colorBtn], () => { colorPop.hidden = true; });
     right.append(layersBtn, this.colorBtn);
@@ -192,6 +192,7 @@ export class App {
 
   refreshRoom() {
     const room = this.ed.room, d = this.dock;
+    document.body.classList.toggle('spectating', !!room?.spectator);
     this.renderMenuDyn();
     clear(d);
     d.hidden = !room;
@@ -202,10 +203,14 @@ export class App {
       d.append(h('span.room-status', {}, room.status === 'connecting' ? 'Connecting…' : 'Reconnecting…'));
     }
     const own = room.info?.ownerId === room.you;
-    if (room.info?.private) {
-      if (own) d.append(h('button.btn.share-btn', { html: icon('users', 16) + '<span>Share</span>', onclick: () => this.shareCanvas() }));
+    if (room.info?.private && own) {
+      d.append(
+        h('button.btn.share-btn', { html: icon('users', 16) + '<span>Share</span>', onclick: () => this.shareCanvas() }),
+        ib('link', 'Share links', () => this.shareLinks()),
+      );
       return;
     }
+    if (room.spectator) d.append(h('span.watch-tag', { html: icon('eye', 16) + '<span>Watching</span>' }));
     const stack = h('span.avatar-stack');
     for (const m of room.members.slice(0, 4)) stack.append(avatarEl(m, 24));
     const membersBtn = h('button.members-btn', {
@@ -215,7 +220,7 @@ export class App {
     d.append(
       membersBtn,
       ib('chat', 'Chat (Enter)', () => this.roomUI.toggleChat()),
-      ib('link', 'Copy invite link', () => this.copyInvite()),
+      ib('link', 'Share links', () => this.shareLinks()),
     );
     if (room.isHost && !this.ed.me?.guest) {
       d.append(ib('userPlus', 'Invite friends', () => {
@@ -231,6 +236,29 @@ export class App {
   }
 
   copyInvite() { return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
+
+  private export() { if (!this.ed.readOnly) exportDialog(this.ed); }
+
+  shareLinks() {
+    const room = this.ed.room;
+    if (!room?.info) return;
+    const row = (label: string, value: string, note: string) => {
+      const input = h('input', { type: 'text', readonly: true, value, 'aria-label': label });
+      input.addEventListener('focus', () => input.select());
+      return h('div.link-row', {},
+        h('span.link-label', {}, label, h('small', {}, note)),
+        h('div.row', {}, input, h('button.icon-btn', { title: 'Copy', 'aria-label': `Copy ${label.toLowerCase()}`, html: icon('copy', 18), onclick: () => this.copyText(value, `${label} copied`) })),
+      );
+    };
+    const rows: HTMLElement[] = [];
+    if (!room.spectator) {
+      if (!room.info.private) rows.push(row('Draw link', this.session.inviteLink(), 'Join and draw'));
+      rows.push(row('Room code', room.id, 'Paste it on the home screen'));
+    }
+    const watch = this.session.watchLink();
+    if (watch) rows.push(row('Watch link', watch, 'Watch and chat only'));
+    modal('Share links', h('div.modal-body.share-links', {}, ...rows), []);
+  }
 
   async shareCanvas() {
     const room = this.ed.room;
@@ -458,18 +486,17 @@ export class App {
       d.append(h('div.menu-label', {}, info?.name ?? 'Canvas'));
       if (info?.private) {
         if (own) d.append(item('users', 'Share with friends…', () => this.shareCanvas()));
-      } else {
-        d.append(item('link', 'Copy invite link', () => this.copyInvite()));
-        if (own) d.append(item('users', 'Sharing…', () => this.shareCanvas()), item('lock', 'Make private', () => this.makePrivate()));
+      } else if (own) {
+        d.append(item('users', 'Sharing…', () => this.shareCanvas()), item('lock', 'Make private', () => this.makePrivate()));
       }
-      d.append(item('home', 'Back to home', () => s.leaveRoom()));
+      d.append(item('link', 'Share links…', () => this.shareLinks()), item('home', 'Back to home', () => s.leaveRoom()));
     } else if (me) {
       d.append(item('home', 'Home', () => s.showHome()));
       if (!this.ed.me?.guest) d.append(item('plus', 'Create new…', () => s.createNew()));
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
-    d.append(item('download', 'Export PNG / JPG / PSD…', () => exportDialog(ed)), h('div.menu-sep'));
+    if (!ed.readOnly) d.append(item('download', 'Export PNG / JPG / PSD…', () => this.export()), h('div.menu-sep'));
     if (ed.room || me) {
       const tog = (label: string, get: () => boolean, set: (v: boolean) => void) => {
         const cb = h('input', { type: 'checkbox' });
@@ -477,11 +504,9 @@ export class App {
         cb.addEventListener('change', () => { set(cb.checked); ed.emit('settings'); ed.view.requestRender(); });
         return h('label.check.menu-check', {}, cb, label);
       };
-      d.append(
-        tog('Name bubbles', () => st.showBubbles, (v) => { st.showBubbles = v; }),
-        tog('Only my folder in Layers', () => st.hideOthersFolders, (v) => { st.hideOthersFolders = v; }),
-        h('div.menu-sep'),
-      );
+      d.append(tog('Name bubbles', () => st.showBubbles, (v) => { st.showBubbles = v; }));
+      if (!ed.readOnly) d.append(tog('Only my folder in Layers', () => st.hideOthersFolders, (v) => { st.hideOthersFolders = v; }));
+      d.append(h('div.menu-sep'));
     }
     d.append(this.themeRow(), h('div.menu-sep'));
   }
@@ -497,7 +522,7 @@ export class App {
     this.select.overlay(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
     const hv = ed.hover;
-    if (hv && (ed.toolId === 'brush' || ed.toolId === 'eraser') && !this.input.altPick && !this.input.viewKey) {
+    if (hv && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser') && !this.input.altPick && !this.input.viewKey) {
       const p = M.transformPoint(hv);
       const r = Math.max(1, (ed.sizeParams.size * ed.view.viewport.zoom) / 2);
       ctx.lineWidth = 1;
@@ -515,11 +540,12 @@ export class App {
       if (t.closest('input, select, textarea')) return;
       const k = e.key.toLowerCase();
       const mod = e.ctrlKey || e.metaKey;
+      if (ed.readOnly && (k === 'l' || (mod && (k === 'a' || k === 'e')))) return;
       if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? ed.redo() : ed.undo(); return; }
       if (mod && k === 'y') { e.preventDefault(); ed.redo(); return; }
       if (mod && k === 'a') { e.preventDefault(); ed.setTool('select'); this.select.selectAll(); return; }
       if (mod && k === 'd') { e.preventDefault(); this.select.deselect(); return; }
-      if (mod && e.shiftKey && k === 'e') { e.preventDefault(); exportDialog(ed); return; }
+      if (mod && e.shiftKey && k === 'e') { e.preventDefault(); this.export(); return; }
       if (mod) return;
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === 'Alt') { this.input.altPick = true; e.preventDefault(); ed.view.requestRender(); return; }

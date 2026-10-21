@@ -2,7 +2,7 @@
 import type { BrushParams, DocSettings, Op, Selection } from '../core/model';
 import type { PublicProfile } from './profile';
 
-export type Role = 'owner' | 'host' | 'member';
+export type Role = 'owner' | 'host' | 'member' | 'spectator';
 
 /** private: only the owner. open: anyone with the link. friends: the owner's friends. unlisted: link only, hidden from friends lists. */
 export type Visibility = 'private' | 'open' | 'friends' | 'unlisted';
@@ -27,6 +27,8 @@ export interface RoomInfo {
   /** Same as share.visibility === 'private'. */
   private: boolean;
   share: ShareSettings;
+  /** Secret in the watch-only link; hosts only. */
+  watchKey?: string;
 }
 
 /** A canvas on the home screen. */
@@ -68,7 +70,7 @@ export type ClientMsg =
   | { type: 'admit'; user: string; allow: boolean };
 
 export type ServerMsg =
-  | { type: 'welcome'; room: RoomInfo; you: string; members: Member[]; ops: Op[]; chat: ChatMsg[] }
+  | { type: 'welcome'; room: RoomInfo; you: string; spectator: boolean; members: Member[]; ops: Op[]; chat: ChatMsg[] }
   | { type: 'op'; op: Op; from: string }
   | { type: 'reject'; opId: string; reason: string }
   | { type: 'members'; members: Member[] }
@@ -87,4 +89,5 @@ export type ServerMsg =
 export const CHAT_MAX = 500;
 export const ROOM_NAME_MAX = 48;
 
+export const WATCH_KEY_RE = /^[a-z0-9]{16}$/;
 export const userFolderId = (userId: string) => 'uf_' + userId;

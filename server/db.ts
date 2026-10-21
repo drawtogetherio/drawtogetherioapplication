@@ -67,6 +67,7 @@ addColumn('users', 'presence_mode', `TEXT NOT NULL DEFAULT 'auto'`);
 // visibility has its own column so the home screen can filter on it; the other share flags are JSON.
 addColumn('rooms', 'visibility', `TEXT NOT NULL DEFAULT 'open'`);
 addColumn('rooms', 'share', `TEXT NOT NULL DEFAULT '{}'`);
+addColumn('rooms', 'watch_key', 'TEXT');
 db.exec(`UPDATE rooms SET visibility = 'private' WHERE private = 1 AND visibility <> 'private'`);
 db.exec(`
   -- One row per pair, with user_a < user_b. Pending until the other person accepts.

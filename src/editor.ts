@@ -127,7 +127,10 @@ export class Editor {
     this.emit('layers');
   }
 
+  get readOnly() { return !!this.room?.spectator; }
+
   canEdit(nodeId: string): boolean {
+    if (this.readOnly) return false;
     if (!this.room) return true;
     const n = this.doc.node(nodeId);
     if (!n) return false;
@@ -160,6 +163,7 @@ export class Editor {
   }
 
   run(ops: Op[], label = 'Edit', opts: ApplyOptions = {}) {
+    if (this.readOnly) return;
     const inverse: Op[] = [];
     ops.forEach((op, i) => {
       op.author = this.room?.you;
@@ -185,6 +189,7 @@ export class Editor {
   }
 
   undo() {
+    if (this.readOnly) return;
     if (this.currentTool.busy?.()) { this.currentTool.cancel(); this.view.invalidate(null); return; }
     const e = this.doc.history.takeUndo();
     if (!e) return;
@@ -194,6 +199,7 @@ export class Editor {
   }
 
   redo() {
+    if (this.readOnly) return;
     this.commitPending();
     const e = this.doc.history.takeRedo();
     if (!e) return;
@@ -230,7 +236,7 @@ export class Editor {
   }
 
   ensureOwnLayer() {
-    if (!this.room) return;
+    if (!this.room || this.readOnly) return;
     const mine = this.doc.layers.find((l) => l.props.owner === this.room!.you);
     if (mine) { if (!this.canEdit(this.activeLayer)) this.setActiveLayer(mine.props.id); return; }
     const f = userFolderId(this.room.you);
@@ -271,7 +277,7 @@ export class Editor {
 
   private lastCursor = 0;
   sendCursor(x: number, y: number, drawing: boolean) {
-    if (!this.room) return;
+    if (!this.room || this.readOnly) return;
     const now = performance.now();
     if (drawing && now - this.lastCursor < 50) return;
     this.lastCursor = now;

@@ -93,6 +93,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   With approval on, hosts get "<name> wants to join the session" in chat with Allow / Deny.
 - Friends in an open or friends-only room show a **Join** button. Hosts invite friends from the
   dock (person+ icon); invited friends get a toast and skip approval.
+- The dock's link button opens **Share links**: the draw link, the room code (paste it on the home
+  screen) and a **watch link** (`?room=code&watch=key`). Watchers see the canvas and chat but get no
+  tools, undo, layers or export; they can be removed like anyone else. The key is only sent to hosts.
 - Presence on your card: Online, Away, Do not disturb, Offline (invisible). Friends see changes
   live over `/api/events` (Server-Sent Events).
 - Status message (80 characters) on your card. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
@@ -168,6 +171,7 @@ DB_PATH=/tmp/dw-test.db npm run dev
 DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room/
 DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, private canvases
 node tests/share.mjs                          # sharing, joining from friends, approval, invites, presence
+node tests/spectate.mjs                       # watch links: chat only, no edits or export, removable
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

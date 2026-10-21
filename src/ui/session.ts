@@ -9,6 +9,7 @@ import { icon } from './icons';
 import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import type { LiveEvent } from '../net/api';
+import { WATCH_KEY_RE } from '../shared/protocol';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const THUMB_DELAY_MS = 15_000;
@@ -19,25 +20,33 @@ export class Session {
   offline = false;
   private thumbTimer = 0;
   private thumbDirty = false;
+  /** The watch link's secret, when we came in through one. */
+  private watch: string | null = null;
 
   constructor(private app: App) {}
 
   get ed() { return this.app.ed; }
   get me() { return this.ed.me; }
 
-  roomFromUrl(): string | null {
-    const id = new URLSearchParams(location.search).get('room');
-    return id && /^[a-z0-9]{4,16}$/.test(id) ? id : null;
+  roomFromUrl(): { id: string; watch: string | null } | null {
+    const q = new URLSearchParams(location.search);
+    const id = q.get('room'), watch = q.get('watch');
+    return id && /^[a-z0-9]{4,16}$/.test(id) ? { id, watch: watch && WATCH_KEY_RE.test(watch) ? watch : null } : null;
   }
 
-  private setUrlRoom(id: string | null) {
+  private setUrlRoom(id: string | null, watch: string | null = null) {
     const u = new URL(location.href);
     if (id) u.searchParams.set('room', id); else u.searchParams.delete('room');
+    if (watch) u.searchParams.set('watch', watch); else u.searchParams.delete('watch');
     history.replaceState(null, '', u);
   }
 
   inviteLinkFor(id: string) { return `${location.origin}/app?room=${id}`; }
   inviteLink() { return this.ed.room ? this.inviteLinkFor(this.ed.room.id) : ''; }
+  watchLink() {
+    const room = this.ed.room, key = room?.info?.watchKey ?? this.watch;
+    return room && key ? `${this.inviteLinkFor(room.id)}&watch=${key}` : '';
+  }
 
   async start() {
     this.server = await api.config();
@@ -61,7 +70,7 @@ export class Session {
       this.app.refreshAccount();
     }
     const room = this.roomFromUrl();
-    if (room) this.joinRoom(room);
+    if (room) this.joinRoom(room.id, room.watch);
     else this.showHome();
   }
 
@@ -129,11 +138,12 @@ export class Session {
     });
   }
 
-  joinRoom(id: string) {
+  joinRoom(id: string, watch: string | null = null) {
     this.leaveRoom(false);
     this.app.home.hide();
-    this.setUrlRoom(id);
-    const room = new RoomClient(id);
+    this.setUrlRoom(id, watch);
+    this.watch = watch;
+    const room = new RoomClient(id, watch);
     this.ed.room = room;
     this.app.roomUI.attach(room);
     this.app.refreshRoom();
@@ -152,7 +162,7 @@ export class Session {
         this.ed.ensureOwnLayer();
         this.app.refreshRoom();
         this.booted();
-        if (e.first && !room.info?.private) this.app.toast(`Joined ${room.info?.name ?? 'room'}`);
+        if (e.first && (room.spectator || !room.info?.private)) this.app.toast(`${room.spectator ? 'Watching' : 'Joined'} ${room.info?.name ?? 'room'}`);
       } else if (e.kind === 'progress') {
         this.booted(`Loading… ${Math.round((100 * e.done) / e.total)}%`);
       } else if (e.kind === 'op') {
@@ -189,6 +199,7 @@ export class Session {
     const saving = this.flushThumb();
     room.close();
     this.ed.room = null;
+    this.watch = null;
     this.app.roomUI.detach();
     this.setUrlRoom(null);
     this.ed.setDoc(blankDoc());

@@ -63,7 +63,7 @@ export class InputController {
       this.viewDrag = { id: e.pointerId, mode: this.viewKey, x0: p.x, y0: p.y, m0: vp.matrix(), a0: Math.atan2(p.y - vp.h / 2, p.x - vp.w / 2) };
       return;
     }
-    if (e.button === 1 || (e.button === 0 && this.spaceHeld)) {
+    if (e.button === 1 || (e.button === 0 && (this.spaceHeld || this.ed.readOnly))) {
       this.pan = { id: e.pointerId, x: e.clientX, y: e.clientY };
       return;
     }
@@ -99,7 +99,7 @@ export class InputController {
     if (n === 1) this.tap = { t0: performance.now(), max: 1, moved: false };
     else if (this.tap) this.tap.max = Math.max(this.tap.max, n);
 
-    if (n === 1 && this.ed.settings.fingerDraws && this.toolPointer === null) {
+    if (n === 1 && this.ed.settings.fingerDraws && !this.ed.readOnly && this.toolPointer === null) {
       this.startTool(e);
       return;
     }

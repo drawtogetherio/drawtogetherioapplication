@@ -15,7 +15,7 @@ import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import {
   AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
-import { ROOM_NAME_MAX, type ShareSettings } from '../src/shared/protocol.ts';
+import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/protocol.ts';
 import { THEMES, canUseTheme } from '../src/shared/themes.ts';
 
 type Req = http.IncomingMessage;
@@ -540,9 +540,11 @@ server.on('upgrade', (req, socket, head) => {
   const user = sessionUser(cookies(req)[COOKIE]);
   const room = m && getRoom(m[1]);
   const origin = req.headers.origin;
-  const ok = m && user && room && (!origin || ORIGINS.has(origin)) && allow('ws:' + clientIp(req), 60, MINUTE) && room.connections(user.id) < 6;
+  const watch = url.searchParams.get('watch') ?? undefined;
+  const ok = m && user && room && (!origin || ORIGINS.has(origin)) && (watch === undefined || WATCH_KEY_RE.test(watch))
+    && allow('ws:' + clientIp(req), 60, MINUTE) && room.connections(user.id) < 6;
   if (!ok) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
-  wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); room.join(ws, user); });
+  wss.handleUpgrade(req, socket, head, (ws) => { wss.emit('connection', ws, req); room.join(ws, user, watch); });
 });
 
 setInterval(() => {

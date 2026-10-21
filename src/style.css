@@ -670,3 +670,14 @@ button.friend-row:hover { background: var(--panel-2); }
   display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border-radius: 14px; max-width: calc(100vw - 24px);
   background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45); color: var(--text); font-size: 14px;
 }
+
+/* Spectators: view, pan and chat only */
+body.spectating .edit-only, body.spectating .tool, body.spectating .sidebar, body.spectating .optionsbar { display: none; }
+body.spectating .stage-wrap { top: calc(var(--top) + env(safe-area-inset-top)); }
+body.spectating .stage { cursor: grab; }
+.watch-tag { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 12px; color: var(--muted); }
+.share-links { min-width: min(420px, 80vw); }
+.link-row { display: flex; flex-direction: column; gap: 6px; }
+.link-label { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 600; font-size: 13px; }
+.link-label small { color: var(--muted); font-weight: 400; }
+.link-row input[type="text"] { flex: 1; width: auto; max-width: none; min-width: 0; font-size: 13px; }

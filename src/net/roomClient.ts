@@ -24,6 +24,8 @@ const YIELD_MS = 24;
 export class RoomClient {
   info: RoomInfo | null = null;
   you = '';
+  /** Watching through the spectator link: chat only. */
+  spectator = false;
   members: Member[] = [];
   chat: ChatMsg[] = [];
   typing = new Map<string, number>();
@@ -40,7 +42,7 @@ export class RoomClient {
   private everReady = false;
   private closedByUs = false;
 
-  constructor(public readonly id: string) { this.connect(); }
+  constructor(public readonly id: string, private readonly watch: string | null = null) { this.connect(); }
 
   on(fn: (e: RoomEvent) => void) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   private emit(e: RoomEvent) { for (const fn of this.listeners) fn(e); }
@@ -51,7 +53,7 @@ export class RoomClient {
 
   private connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws/${this.id}`);
+    const ws = new WebSocket(`${proto}://${location.host}/ws/${this.id}${this.watch ? '?watch=' + this.watch : ''}`);
     this.ws = ws;
     ws.onmessage = (ev) => this.receive(JSON.parse(String(ev.data)) as ServerMsg);
     ws.onclose = (ev) => {
@@ -78,6 +80,7 @@ export class RoomClient {
       case 'welcome': {
         this.info = m.room;
         this.you = m.you;
+        this.spectator = m.spectator;
         this.members = m.members;
         this.chat = m.chat;
         this.requests = [];

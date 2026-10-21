@@ -220,14 +220,14 @@ export class RoomUI {
     const panel = this.membersPanel;
     clear(panel);
     if (!room) return;
-    const order = { owner: 0, host: 1, member: 2 } as const;
+    const order = { owner: 0, host: 1, member: 2, spectator: 3 } as const;
     const members = [...room.members].sort((a, b) => order[a.role] - order[b.role] || a.displayName.localeCompare(b.displayName));
     panel.append(h('div.panel-head', {}, h('span.panel-title', {}, `In this room · ${members.length}`)));
     const list = h('div.member-list');
     for (const m of members) {
       list.append(h('button.member-row', { type: 'button', onclick: () => this.profileCard(m) },
         avatarEl(m, 32),
-        h('span.member-text', {}, nameLine(m, m.role, m.id === room.you), h('small', {}, '@' + m.handle)),
+        h('span.member-text', {}, nameLine(m, m.role, m.id === room.you), h('small', {}, m.role === 'spectator' ? 'watching' : '@' + m.handle)),
       ));
     }
     panel.append(list);
@@ -239,7 +239,7 @@ export class RoomUI {
     const meRole = room.me?.role;
     const canKick = room.isHost && m.id !== room.you && m.role !== 'owner' && !(m.role === 'host' && meRole !== 'owner');
     let close = () => {};
-    if (meRole === 'owner' && m.id !== room.you) {
+    if (meRole === 'owner' && m.id !== room.you && m.role !== 'spectator') {
       const on = m.role !== 'host';
       actions.push(h('button.btn', { onclick: () => { room.send({ type: 'set-host', user: m.id, on }); close(); } }, on ? 'Make host' : 'Remove host'));
     }
@@ -338,7 +338,7 @@ export class RoomUI {
     const body = h('div.modal-body', {}, h('p', {}, 'A host removed you from this room.'));
     const ok = h('button.btn.primary', {}, 'Back to start');
     const save = h('button.btn', { html: icon('download', 16) + '<span>Export a copy</span>', onclick: () => exportDialog(this.ed) });
-    const close = modal('Removed', body, [save, ok], () => this.onLeave(), false);
+    const close = modal('Removed', body, this.ed.readOnly ? [ok] : [save, ok], () => this.onLeave(), false);
     ok.addEventListener('click', () => close());
   }
 }
