@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-single
+preview
+test-results
+desktop
+ipad
+server/.env
+server/data
+.git
