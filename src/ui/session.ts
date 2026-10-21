@@ -6,6 +6,7 @@ import type { App } from './app';
 import { modal, newCanvasDialog } from './dialogs';
 import { h } from './dom';
 import { icon } from './icons';
+import { avatarEl } from './people';
 import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import type { LiveEvent } from '../net/api';
@@ -118,7 +119,7 @@ export class Session {
   }
 
   createNew() {
-    if (this.me?.guest) { this.app.toast('Log in with Discord to make your own canvases'); return; }
+    const guest = !!this.me?.guest;
     let close = () => {};
     const card = (title: string, text: string, ic: string, solo: boolean) =>
       h('button.preset-card.home-card', {
@@ -126,12 +127,43 @@ export class Session {
         onclick: () => { close(); this.createFlow(solo); },
       });
     const body = h('div.modal-body', {},
-      h('div.preset-grid.home-grid', {},
+      guest ? null : h('div.preset-grid.home-grid', {},
         card('Draw alone', 'Private, saved to your account', 'brush', true),
         card('Shared room', 'Draw together on one canvas', 'users', false),
       ),
+      this.joinSection(() => close()),
     );
-    close = modal('Create new', body, []);
+    close = modal(guest ? 'Join a canvas' : 'Create a canvas or join one', body, []);
+  }
+
+  /** Looks the room up first; a room you can't join, or can't see, reads as not found. */
+  private joinSection(close: () => void): HTMLElement {
+    const input = h('input', { type: 'text', id: 'join-code', placeholder: 'Room link or code', 'aria-label': 'Room link or code', autocomplete: 'off', spellcheck: 'false' });
+    const err = h('p.field-error', { role: 'alert' });
+    const preview = h('div.join-preview', { hidden: true });
+    const form = h('form.join-form', {}, input, h('button.btn', { type: 'submit' }, 'Find'));
+    let seq = 0, timer = 0;
+    const lookup = async () => {
+      const n = ++seq;
+      preview.hidden = true;
+      err.textContent = '';
+      const m = /(?:room=)?([a-z0-9]{4,16})\s*$/i.exec(input.value.trim());
+      if (!m) { if (input.value.trim()) err.textContent = 'Unable to find room'; return; }
+      try {
+        const info = await api.room(m[1].toLowerCase());
+        if (n !== seq) return;
+        if (!info.joinable) throw new Error();
+        preview.replaceChildren(
+          ...(info.owner ? [avatarEl(info.owner, 36)] : []),
+          h('div.join-text', {}, h('strong', {}, info.name), h('small.muted', {}, info.owner ? `Hosted by ${info.owner.displayName}` : '')),
+          h('button.btn.join-go', { type: 'button', onclick: () => { close(); this.joinRoom(info.id); } }, 'Join'),
+        );
+        preview.hidden = false;
+      } catch { if (n === seq) err.textContent = 'Unable to find room'; }
+    };
+    form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); lookup(); });
+    input.addEventListener('input', () => { clearTimeout(timer); timer = window.setTimeout(lookup, 350); });
+    return h('div.join-section', {}, h('h3', {}, 'Join a canvas'), form, err, preview);
   }
 
   createFlow(solo: boolean) {

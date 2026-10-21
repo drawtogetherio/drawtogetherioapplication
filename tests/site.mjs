@@ -69,7 +69,7 @@ await visitor.screenshot({ path: `${out}/03-login.png` });
 const ren = await newPage('ren');
 const renHandle = await signUp(ren, 'Ren', 'Sketching dragons');
 check(await ren.locator('.create-tile').isVisible(), 'home shows a Create new tile first');
-check(await ren.locator('.plus-btn').isVisible(), 'home has a + button');
+check((await ren.locator('.plus-btn, .home-join').count()) === 0, 'no + button or join box in the header');
 
 // Create a private canvas, draw, come back home: the tile has a thumbnail.
 await ren.locator('.create-tile').click();
@@ -197,8 +197,32 @@ await ren.evaluate((id) => fetch('/api/rooms/' + id, { method: 'PATCH', headers:
 const roomId = await ren.evaluate(async () => (await (await fetch('/api/projects')).json())[0].id);
 await bob.goto(`${base}/app?room=${roomId}`);
 await bob.waitForURL(/\/404/, { timeout: 6000 }).then(() => check(true, 'a private canvas shows the 404 page to someone else'), () => check(false, 'a private canvas shows the 404 page to someone else'));
-await bob.getByRole('heading', { name: 'Nothing to draw here' }).waitFor();
+await bob.getByRole('heading', { name: 'Page not found' }).waitFor();
 await bob.screenshot({ path: `${out}/08-not-found.png` });
+
+// ---- Join from Create new ----
+const studio = await ren.evaluate(async () => (await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Open studio', settings: { infinite: true }, share: { visibility: 'open' } }) })).json());
+await bob.goto(base + '/app');
+await bob.waitForSelector('.home:not([hidden])');
+await bob.locator('.create-tile').click();
+await bob.waitForSelector('.modal[aria-label="Create a canvas or join one"]');
+const joinErr = bob.locator('.join-section .field-error');
+await bob.fill('#join-code', 'nope');
+await bob.locator('.join-form button').click();
+await joinErr.filter({ hasText: 'Unable to find room' }).waitFor();
+check(true, 'a bad code says unable to find room');
+await bob.fill('#join-code', `${base}/app?room=${roomId}`);
+await bob.locator('.join-form button').click();
+await bob.waitForTimeout(500);
+check((await joinErr.innerText()) === 'Unable to find room' && await bob.locator('.join-preview').isHidden(), 'a private room reads the same');
+await bob.fill('#join-code', studio.id);
+await bob.waitForSelector('.join-preview:not([hidden])');
+const previewText = await bob.locator('.join-preview').innerText();
+check(previewText.includes('Open studio') && previewText.includes('Hosted by Ren') && (await bob.locator('.join-preview .avatar').count()) === 1, 'a room you can join shows its name and host');
+await bob.screenshot({ path: `${out}/09-join.png` });
+await bob.locator('.join-go').click();
+await bob.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+check(true, 'Join opens it');
 
 console.log(errors.length ? 'Errors:\n' + errors.join('\n') : 'No page errors');
 await browser.close();

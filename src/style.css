@@ -481,15 +481,8 @@ button.brand:hover { background: var(--hover); }
   display: flex; align-items: center; gap: 10px; height: calc(60px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 14px 0;
   background: var(--bar); border-bottom: 1px solid var(--line); flex: none;
 }
-.plus-btn { background: var(--accent); color: var(--on-accent); width: 40px; height: 40px; border-radius: 12px; }
-.plus-btn:hover { background: var(--accent-hover); }
 .home-brand .brand-link { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-size: 18px; }
 .home-top-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-.home-join { display: flex; gap: 6px; }
-.home-join input {
-  width: 240px; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); padding: 0 10px;
-  -webkit-user-select: text; user-select: text;
-}
 .account-btn { border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: 50%; display: grid; }
 .account-pop { top: calc(64px + env(safe-area-inset-top)); right: 12px; }
 .account-pop .panel { width: 280px; display: flex; flex-direction: column; gap: 4px; }
@@ -558,11 +551,9 @@ button.friend-row:hover { background: var(--panel-2); }
 @media (max-width: 760px) {
   .home-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .friends-panel { border-right: 0; border-bottom: 1px solid var(--line); max-height: 38vh; }
-  .home-join input { width: 140px; }
   .projects { padding: 16px; }
   .project-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
 }
-@media (max-width: 480px) { .home-join { display: none; } }
 
 /* Guest home */
 .guest-card { grid-column: 1 / -1; max-width: 520px; padding: 22px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line); }
@@ -738,6 +729,17 @@ body.spectating .stage { cursor: grab; }
 .theme-swatch.custom::-webkit-color-swatch { border: 0; opacity: 0; }
 .avatar.has-gradient { box-shadow: none; border: 2px solid transparent; background: linear-gradient(var(--panel-2), var(--panel-2)) padding-box, linear-gradient(135deg, var(--g1), var(--g2)) border-box; }
 .avatar.has-gradient img { border-radius: 50%; }
+
+/* Join a canvas (inside Create new) */
+.join-section { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 12px; }
+.join-section h3 { margin: 0; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.join-form { display: flex; gap: 6px; }
+.modal-body .join-form input[type="text"] { flex: 1; width: auto; max-width: none; }
+.join-preview { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.join-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.join-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.join-go { background: #2f9e6e; border-color: transparent; color: #fff; font-weight: 600; }
+.btn.join-go:hover { background: #27875d; }
 
 /* Overlays on the canvas stay dark in both modes */
 .toast, .chat-log, .chat-typing { color: #ececf1; }

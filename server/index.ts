@@ -463,9 +463,9 @@ async function route(req: Req, res: Res) {
   if (mm && m === 'GET') {
     const u = requireUser(req);
     const r = getRoom(mm[1]);
-    if (!r || (r.info.private && r.info.ownerId !== u.id)) return json(res, 404, { error: 'That room doesn’t exist.' });
+    if (!r || !r.visibleTo(u)) return json(res, 404, { error: 'Unable to find room' });
     const owner = getUser(r.info.ownerId);
-    return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length });
+    return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length, joinable: r.canJoin(u) });
   }
 
   if (p === '/admin' || p.startsWith('/admin/')) {

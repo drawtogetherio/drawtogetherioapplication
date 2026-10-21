@@ -38,7 +38,6 @@ export class Home {
   private accountBtn = h('button.account-btn', { type: 'button', 'aria-label': 'Your account' });
   private accountPop = h('div.popover.account-pop', { hidden: true });
   private timer = 0;
-  private plus: HTMLButtonElement;
   private friendsPanel: HTMLElement;
   private projectsHead = h('h1', {}, 'Recent');
   private meCard = h('div.me-card');
@@ -50,16 +49,6 @@ export class Home {
   private banner = h('div.support-banner', { hidden: true });
 
   constructor(private app: App) {
-    const plus = this.plus = h('button.icon-btn.plus-btn', { title: 'Create new', 'aria-label': 'Create new', html: icon('plus', 22), onclick: () => this.app.session.createNew() });
-    const joinIn = h('input', { type: 'text', placeholder: 'Paste a room link or code', 'aria-label': 'Room link or code', autocomplete: 'off' });
-    const joinForm = h('form.home-join', {}, joinIn, h('button.btn', { type: 'submit' }, 'Join'));
-    joinForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const m = /(?:room=)?([a-z0-9]{4,16})\s*$/i.exec(joinIn.value.trim());
-      if (!m) { this.app.toast('Paste a room link or its code'); return; }
-      joinIn.value = '';
-      this.app.session.joinRoom(m[1].toLowerCase());
-    });
     this.accountBtn.addEventListener('click', () => { this.renderAccountMenu(); this.accountPop.hidden = !this.accountPop.hidden; });
     dismissOnOutside(this.accountPop, [this.accountBtn], () => { this.accountPop.hidden = true; });
     this.bellBtn.append(this.bellBadge);
@@ -84,9 +73,8 @@ export class Home {
     // Popovers anchor to the header, so the banner above can come and go.
     this.el.append(this.banner, h('div.home-main', {},
       h('header.home-top', {},
-        plus,
         h('div.home-brand', { html: brandHtml('/') }),
-        h('div.home-top-right', {}, joinForm, this.bellBtn, this.accountBtn),
+        h('div.home-top-right', {}, this.bellBtn, this.accountBtn),
       ),
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
@@ -113,7 +101,7 @@ export class Home {
     this.renderAccount();
     const guest = !!this.app.ed.me?.guest;
     this.el.classList.toggle('guest', guest);
-    this.plus.hidden = this.friendsPanel.hidden = this.bellBtn.hidden = guest;
+    this.friendsPanel.hidden = this.bellBtn.hidden = guest;
     this.renderBanner();
     if (guest) { this.renderGuest(); return; }
     this.projectsHead.textContent = 'Recent';
@@ -369,9 +357,11 @@ export class Home {
     this.projectsHead.textContent = 'You’re a guest';
     clear(this.grid);
     this.grid.append(h('div.guest-card', {},
-      h('p', {}, 'You’re drawing as ', h('strong', {}, me.displayName), ' (@' + me.handle + '). Paste a room link above to join a friend’s canvas.'),
+      h('p', {}, 'You’re drawing as ', h('strong', {}, me.displayName), ' (@' + me.handle + ').'),
       h('p.muted', {}, 'Log in with Discord to make canvases, add friends and pick a handle.'),
-      h('button.btn.primary', { type: 'button', onclick: () => this.app.session.logout('/login?next=/app') }, 'Log in with Discord'),
+      h('div.row', {},
+        h('button.btn', { type: 'button', onclick: () => this.app.session.createNew() }, 'Join a canvas'),
+        h('button.btn.primary', { type: 'button', onclick: () => this.app.session.logout('/login?next=/app') }, 'Log in with Discord')),
     ));
   }
 

@@ -43,7 +43,7 @@ const bo = await signUp('Bo');
 check((await status(bo, '/api/admin/stats')) === 404, 'the admin API is hidden from everyone else');
 await bo.goto(base + '/admin');
 await bo.waitForURL(/\/404/);
-await bo.getByRole('heading', { name: 'Nothing to draw here' }).waitFor();
+await bo.getByRole('heading', { name: 'Page not found' }).waitFor();
 check(true, 'so is the page: it shows the 404 page');
 
 execSync(`npx tsx server/admin.ts admin Ada${suffix} on`, { env: process.env, stdio: 'ignore' });

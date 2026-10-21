@@ -74,6 +74,7 @@ export class Room {
   invite(userId: string) { this.allowed.add(userId); }
   /** A private room is invisible to everyone but its hosts and invitees. */
   visibleTo(u: UserRow | undefined) { return !this.info.private || (!!u && (this.isHost(u.id) || this.allowed.has(u.id))); }
+  canJoin(u: UserRow) { const a = this.access(u); return a === 'yes' || a === 'ask'; }
 
   private access(user: UserRow): 'yes' | 'ask' | string {
     const until = this.kicked.get(user.id);
