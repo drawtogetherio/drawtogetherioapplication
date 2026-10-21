@@ -1,7 +1,8 @@
-// Preferences: rebinding keys, light mode and hover outline, synced through the account.
-// Needs `npm run dev` with dev login on. Usage: node tests/prefs.mjs [http://localhost:5173]
+// Preferences: grouped dialog, themes, pressure editor, key rebinding, synced through the account.
+// Needs `npm run dev` with dev login on. Usage: DB_PATH=... node tests/prefs.mjs [http://localhost:5173]
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
 
 const base = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '');
 const out = 'test-results/prefs';
@@ -25,6 +26,16 @@ await page.fill('#display-name', 'Pia');
 await page.getByRole('button', { name: 'Start drawing' }).click();
 await page.waitForSelector('.home:not([hidden])');
 
+const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
+const me = () => page.evaluate(async () => (await fetch('/api/me')).json());
+const group = (g) => page.locator(`.pref-group[data-group="${g}"]`).click();
+const openPrefs = async () => {
+  await page.locator('.account-btn').click();
+  await page.locator('.account-pop .menu-item', { hasText: 'Preferences' }).click();
+  await page.waitForSelector('.modal[aria-label="Preferences"]');
+};
+const closePrefs = () => page.locator('.modal-head .icon-btn').click();
+
 // ---- Patreon banner ----
 const banner = page.locator('.support-banner');
 check(await banner.isVisible() && /patreon\.com/.test(await banner.locator('a').getAttribute('href')), 'the support banner shows on the home screen');
@@ -35,19 +46,46 @@ await page.reload();
 await page.waitForSelector('.home:not([hidden])');
 check(await banner.isHidden(), 'it stays closed after a reload');
 
-// ---- Open from the account menu ----
-await page.locator('.account-btn').click();
-await page.locator('.account-pop .menu-item', { hasText: 'Preferences' }).click();
-await page.waitForSelector('.modal[aria-label="Preferences"]');
-const sections = await page.locator('.pref-section h3').evaluateAll((els) => els.map((e) => e.textContent));
-check(sections.join() === 'Appearance,Canvas,Shortcuts', 'sections: appearance, canvas, shortcuts');
+// ---- Groups ----
+await openPrefs();
+const groups = await page.locator('.pref-group').evaluateAll((els) => els.map((e) => e.textContent));
+check(groups.join() === 'Appearance,Canvas,Pressure,Shortcuts', 'groups down the left: appearance, canvas, pressure, shortcuts');
+check((await page.locator('.pref-page h3').textContent()) === 'Appearance', 'opens on appearance');
 
-// ---- Light mode ----
-await page.locator('.prefs .segmented button', { hasText: 'Light' }).click();
+// ---- Appearance ----
+await page.locator('.theme-swatch[aria-label^="Lavender"]').click();
+await page.waitForSelector('.toast.show');
+check((await page.locator('.toast').innerText()).includes('premium') && (await accent()) === '#f4c25b', 'only Honey is free');
+check((await page.locator('.theme-swatch.custom.locked').count()) === 1, 'the custom colour is locked too');
+await page.locator('.segmented button', { hasText: 'Light' }).click();
 check(await page.evaluate(() => document.documentElement.dataset.mode === 'light'), 'light mode applies at once');
-await page.screenshot({ path: `${out}/01-light-prefs.png` });
+await page.screenshot({ path: `${out}/01-appearance.png` });
 
-// ---- Rebind a key ----
+// ---- Canvas ----
+await group('Canvas');
+await page.locator('.switch-row', { hasText: 'Brush outline' }).locator('input').click();
+await page.locator('.switch-row', { hasText: 'Draw with a finger' }).locator('input').click();
+check(await page.evaluate(() => window.doodlehive.ed.prefs.fingerDraws === false), 'finger drawing lives in canvas preferences');
+
+// ---- Pressure ----
+await group('Pressure');
+check((await page.locator('.prefs .slider').count()) === 1 && (await page.locator('.curve-editor').count()) === 0, 'simple mode is a slider');
+await page.locator('.segmented button', { hasText: 'Advanced' }).click();
+const curve = page.locator('.curve-editor');
+await curve.waitFor();
+const cb = await curve.boundingBox();
+await page.mouse.click(cb.x + cb.width / 2, cb.y + cb.height / 2);
+const pts = await page.evaluate(() => window.doodlehive.ed.prefs.pressureCurve);
+check(pts.length === 6 && Math.abs(pts[2] - 0.5) < 0.05 && Math.abs(pts[3] - 0.5) < 0.05, `a click adds a point to the graph (${pts.map((v) => v.toFixed(2)).join(' ')})`);
+await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height / 2);
+await page.mouse.down();
+await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height * 0.25, { steps: 8 });
+await page.mouse.up();
+check(await page.evaluate(() => window.doodlehive.ed.prefs.pressureCurve[3] > 0.65), 'dragging moves it');
+await page.screenshot({ path: `${out}/02-pressure.png` });
+
+// ---- Shortcuts ----
+await group('Shortcuts');
 const chip = page.locator('.key-chip[data-action="brush"]');
 await chip.click();
 await page.keyboard.press('q');
@@ -60,13 +98,13 @@ await page.keyboard.press('b');
 await page.locator('.key-chip[data-action="brush"]').click();
 await page.keyboard.press('Escape');
 check((await chip.innerText()) === 'B', 'Escape keeps the old binding');
-await page.locator('.prefs .switch-row', { hasText: 'Brush outline' }).locator('input').click();
-await page.locator('.modal-head .icon-btn').click();
+await closePrefs();
 
 // ---- Saved with the account ----
 await page.waitForTimeout(700);
-const me = await page.evaluate(async () => (await fetch('/api/me')).json());
-check(me.prefs.mode === 'light' && me.prefs.keys.fill === 'q' && me.prefs.hoverPreview === false && me.prefs.supportBanner === false, 'preferences are stored on the account');
+let m = await me();
+check(m.prefs.mode === 'light' && m.prefs.keys.fill === 'q' && m.prefs.hoverPreview === false && m.prefs.fingerDraws === false
+  && m.prefs.pressureMode === 'advanced' && m.prefs.pressureCurve.length === 6 && m.prefs.supportBanner === false, 'preferences are stored on the account');
 
 await page.reload();
 await page.waitForSelector('.home:not([hidden])');
@@ -80,16 +118,50 @@ check(await page.evaluate(() => window.doodlehive.ed.toolId === 'fill'), 'the ne
 await page.keyboard.press('g');
 check(await page.evaluate(() => window.doodlehive.ed.toolId === 'fill'), 'the old key no longer does');
 check((await page.locator('.topbar [aria-label="Fill (Q)"]').count()) === 1, 'tool tips show the new key');
+
+// ---- Hamburger menu ----
 await page.locator('[aria-label="Menu"]').click();
-check((await page.locator('.shortcuts').innerText()).includes('Q Fill'), 'the shortcut list follows');
-await page.screenshot({ path: `${out}/02-light-canvas.png` });
-await page.locator('[aria-label="Menu"]').click();
+const menu = await page.locator('.menu-pop').innerText();
+check(!/finger|shortcut|\bFill\b/i.test(menu) && (await page.locator('.menu-pop .shortcuts').count()) === 0, 'the menu has no finger toggle or shortcut list');
+await page.screenshot({ path: `${out}/03-menu.png` });
+await page.locator('.menu-pop .menu-item', { hasText: 'Preferences' }).click();
+await page.waitForSelector('.modal[aria-label="Preferences"]');
+check(true, 'Preferences opens from the menu');
+await closePrefs();
 
 // ---- Profile card hides the hex ----
 await page.locator('.members-btn').click();
 await page.locator('.member-row').first().click();
 await page.waitForSelector('.modal .fav');
 check((await page.locator('.modal .fav').innerText()).trim() === '' && (await page.locator('.modal .fav-swatch').count()) === 1, 'profile card shows a swatch, not the hex');
+await page.locator('.modal-head .icon-btn').click();
+
+// ---- Premium: custom colour and gradients ----
+if (process.env.DB_PATH) {
+  execSync(`npx tsx server/admin.ts premium Pia${suffix} forever`, { env: process.env, stdio: 'ignore' });
+  await page.reload();
+  await page.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+  await page.locator('[aria-label="Menu"]').click();
+  await page.locator('.menu-pop .menu-item', { hasText: 'Preferences' }).click();
+  await page.waitForSelector('.modal[aria-label="Preferences"]');
+  await page.locator('.theme-swatch[aria-label^="Blueberry"]').click();
+  check(await accent() === '#4f8cff', 'premium unlocks the other themes');
+  await page.locator('.theme-swatch.custom').fill('#2a9d8f');
+  await page.waitForTimeout(500);
+  m = await me();
+  check(await accent() === '#2a9d8f' && m.theme === 'custom:#2a9d8f', 'and a colour of their own, saved to the account');
+  await page.screenshot({ path: `${out}/04-custom-theme.png` });
+  await closePrefs();
+
+  await page.evaluate(() => fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gradient: ['#ff6b6b', '#4f8cff'] }) }));
+  await page.reload();
+  await page.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+  await page.locator('.members-btn').click();
+  await page.locator('.member-row').first().click();
+  await page.waitForSelector('.modal .profile-card-head');
+  check((await page.locator('.modal .fav').count()) === 0 && (await page.locator('.avatar.has-gradient').count()) >= 1, 'a gradient profile shows no plain colour or swatch');
+  await page.screenshot({ path: `${out}/05-gradient-card.png` });
+} else console.log('skip premium checks (set DB_PATH to run the admin script)');
 
 await browser.close();
 if (errors.length) { console.log('page errors:', errors); failed++; }

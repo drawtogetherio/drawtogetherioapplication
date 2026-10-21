@@ -81,8 +81,8 @@ export class Home {
       } catch (ex) { addErr.textContent = (ex as ApiError).message; }
     });
 
-    this.el.append(
-      this.banner,
+    // Popovers anchor to the header, so the banner above can come and go.
+    this.el.append(this.banner, h('div.home-main', {},
       h('header.home-top', {},
         plus,
         h('div.home-brand', { html: brandHtml('/') }),
@@ -103,7 +103,7 @@ export class Home {
       ),
       this.accountPop,
       this.noticesPop,
-    );
+    ));
   }
 
   get visible() { return !this.el.hidden; }

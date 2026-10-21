@@ -1,3 +1,4 @@
+import { pressureMap } from '../shared/prefs';
 import type { Editor } from '../editor';
 import { PointerInfo, Tool } from '../tools/tool';
 
@@ -43,7 +44,7 @@ export class InputController {
       // Some drivers report 0 pressure on the first sample.
       p = e.pressure > 0 ? e.pressure : this.lastPressure;
       this.lastPressure = p;
-      p = Math.pow(Math.min(1, Math.max(0.001, p)), this.ed.prefs.pressureGamma);
+      p = pressureMap(this.ed.prefs, p);
     }
     return { x: d.x, y: d.y, sx, sy, pressure: p, type, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
   }
@@ -69,7 +70,7 @@ export class InputController {
     }
     if (e.button !== 0) return;
     if (e.pointerType === 'pen') {
-      this.ed.settings.fingerDraws = false;
+      if (this.ed.prefs.fingerDraws) { this.ed.prefs.fingerDraws = false; this.ed.emit('prefs'); }
       if (this.toolPointer !== null && this.toolType === 'touch') this.abortTool();
       this.gesture = null;
       this.tap = null;
@@ -99,7 +100,7 @@ export class InputController {
     if (n === 1) this.tap = { t0: performance.now(), max: 1, moved: false };
     else if (this.tap) this.tap.max = Math.max(this.tap.max, n);
 
-    if (n === 1 && this.ed.settings.fingerDraws && !this.ed.readOnly && this.toolPointer === null) {
+    if (n === 1 && this.ed.prefs.fingerDraws && !this.ed.readOnly && this.toolPointer === null) {
       this.startTool(e);
       return;
     }

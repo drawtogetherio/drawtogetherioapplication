@@ -108,7 +108,7 @@ export class LayersPanel {
   folderLabel(f: Folder): { name: string; color: string | null; member?: ReturnType<NonNullable<Editor['room']>['member']> } {
     if (f.props.user && f.props.owner) {
       const m = this.ed.room?.member(f.props.owner);
-      return { name: m?.displayName ?? f.props.name, color: m?.favoriteColor ?? f.props.color ?? null, member: m };
+      return { name: m?.displayName ?? f.props.name, color: m ? (m.gradient ? m.gradient[0] : m.favoriteColor) : f.props.color ?? null, member: m };
     }
     return { name: f.props.name, color: f.props.color ?? null };
   }

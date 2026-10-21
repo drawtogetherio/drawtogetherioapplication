@@ -57,11 +57,11 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Export PNG, JPG and layered PSD (folders become PSD groups)
 
 **Themes**
-- Default **Honey** (soft yellow) accent; switch in Menu → Theme. Saved to the account when logged in,
-  otherwise on the device.
+- Default **Honey** (soft yellow) accent is the free theme. Premium unlocks the other swatches and a
+  custom colour (`custom:#rrggbb`, derived hover/tint/text in `findTheme`). Switch in Preferences →
+  Appearance; saved to the account when logged in, otherwise on the device.
 - Themes live in `src/shared/themes.ts` (accent, hover, tint, text-on-accent). Add one there and it
-  shows up in the menu. Themes flagged `premium` are locked without premium, and the server enforces it.
-  Blueberry (the old blue) is free; Lavender, Mint and Peach are flagged premium as examples.
+  shows up. The server enforces the premium lock.
 
 **Accounts (v0.2)**
 - Discord login creates the account; no passwords stored
@@ -102,10 +102,13 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - A honey banner at the top of the home screen links to Patreon (`PATREON_URL`, default
   patreon.com/doodlehive). It shows once per browser session; its X hides it for good (saved with
   the preferences).
-- **Preferences** (account menu, or the canvas menu): theme colour, Dark / Light / System mode,
-  brush outline on hover, name bubbles, pressure curve, and every single-key shortcut (click a key,
-  press a new one). Saved on the account, so they follow you between devices; offline they stay on
-  the device. Premium name gradients also outline your bubble while you draw.
+- **Preferences** (account menu, or the canvas menu's cog) in four groups: Appearance (theme, Dark /
+  Light / System), Canvas (brush outline on hover, name bubbles, draw with a finger), Pressure (a
+  Simple slider or an Advanced graph: drag points, click to add, drag off to remove; `src/shared/curve.ts`)
+  and Shortcuts (click a key, press a new one). Saved on the account, so they follow you between
+  devices; offline they stay on the device.
+- A premium name gradient replaces the profile colour everywhere: avatar ring, bubble outline while
+  drawing, layer folder, profile card (no swatch), and the colour field in Edit profile.
 - Presence on your card: Online, Away, Do not disturb, Offline (invisible). Friends see changes
   live over `/api/events` (Server-Sent Events).
 - Status message (80 characters) on your card. Premium: name gradient and an animated GIF avatar (≤768 KB, ≤512 px).
@@ -184,7 +187,7 @@ node tests/share.mjs                          # sharing, joining from friends, a
 node tests/spectate.mjs                       # watch links: chat only, no edits or export, removable
 node tests/smudge.mjs                         # smudge: drags paint, undo, selection clip, room sync
 DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
-node tests/prefs.mjs                          # preferences: key binds, light mode, sync, profile swatch
+DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.

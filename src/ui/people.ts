@@ -15,18 +15,20 @@ export function inkOn(hex: string) {
   return l > 150 ? '#141418' : '#ffffff';
 }
 
+/** With a name gradient, the ring and the fallback picture use it instead of the profile colour. */
 export function avatarEl(
-  p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'> & { avatarAnimated?: string | null },
+  p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'> & { avatarAnimated?: string | null; gradient?: [string, string] | null },
   size = 28, animate = false,
 ): HTMLElement {
-  const el = h('span.avatar', { style: `width:${size}px;height:${size}px;--ring:${p.favoriteColor}` });
+  const g = p.gradient;
+  const el = h(`span.avatar${g ? '.has-gradient' : ''}` as 'span', { style: `width:${size}px;height:${size}px;` + (g ? gradientStyle(g) : `--ring:${p.favoriteColor}`) });
   // The GIF only plays where it's showcased.
   const src = animate && p.avatarAnimated ? p.avatarAnimated : p.avatar;
   if (src) el.append(h('img', { src, alt: '', width: size, height: size, loading: 'lazy' }));
   else {
     el.textContent = initials(p.displayName);
-    el.style.background = p.favoriteColor;
-    el.style.color = inkOn(p.favoriteColor);
+    el.style.background = g ? `linear-gradient(135deg, ${g[0]}, ${g[1]})` : p.favoriteColor;
+    el.style.color = inkOn(g ? g[0] : p.favoriteColor);
     el.style.fontSize = Math.round(size * 0.45) + 'px';
   }
   return el;
@@ -76,7 +78,7 @@ export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLEleme
       h('div.profile-card-name', {}, nameText(p, 'card-name'), badges(role, p.premium)),
       h('div.muted', {}, '@' + p.handle),
       p.status ? h('div.profile-status', {}, p.status) : null,
-      h('div.fav', {}, h('span.fav-swatch', { style: p.gradient ? `background:linear-gradient(135deg,${p.gradient[0]},${p.gradient[1]})` : `background:${p.favoriteColor}` }))),
+      p.gradient ? null : h('div.fav', {}, h('span.fav-swatch', { style: `background:${p.favoriteColor}` }))),
   );
   return h('div.modal-body.profile-card', {}, head, extra ?? null,
     links.childElementCount ? links : null);

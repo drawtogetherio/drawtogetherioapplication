@@ -25,7 +25,6 @@ export interface EditorSettings {
   selectMode: SelectMode;
   shape: ShapeKind;
   shapeFill: boolean;
-  fingerDraws: boolean; // when false, one finger pans (set automatically once a pen is used)
   hideOthersFolders: boolean; // layers panel shows only your own folder
 }
 
@@ -52,7 +51,7 @@ export class Editor {
     smudge: { ...SMUDGE_PARAMS },
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
-    fingerDraws: true, hideOthersFolders: false,
+    hideOthersFolders: false,
   };
   private listeners = new Set<Listener>();
   private unsubDoc: () => void = () => {};

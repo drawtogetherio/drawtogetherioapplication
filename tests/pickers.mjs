@@ -87,14 +87,14 @@ const accent = () => page.evaluate(() => getComputedStyle(document.documentEleme
 check(await accent() === '#f4c25b', 'default theme is Honey');
 await page.locator('[aria-label="Menu"]').click();
 await page.screenshot({ path: `${out}/06-menu-honey.png` });
+check((await page.locator('.menu-pop .shortcuts, .menu-pop .theme-row').count()) === 0, 'the menu holds no shortcut list or theme row');
+await page.locator('.menu-pop .menu-item', { hasText: 'Preferences' }).click();
+await page.waitForSelector('.modal[aria-label="Preferences"]');
 await page.locator('.theme-swatch[aria-label^="Lavender"]').click();
-check(await accent() === '#f4c25b', 'premium theme stays locked without premium');
-await page.locator('.theme-swatch[aria-label="Blueberry"]').click();
-check(await accent() === '#4f8cff', 'switching to Blueberry recolours the app');
-await page.reload();
-await page.waitForSelector('.modal');
-check(await accent() === '#4f8cff', 'theme is remembered after reload');
-await page.screenshot({ path: `${out}/07-blueberry.png` });
+check(await accent() === '#f4c25b', 'premium themes stay locked without premium');
+check((await page.locator('.theme-swatch.custom.locked').count()) === 1, 'so does the custom colour');
+await page.screenshot({ path: `${out}/07-prefs.png` });
+await page.locator('.modal-head .icon-btn').click();
 await page.evaluate(() => localStorage.removeItem('doodlehive.theme'));
 
 console.log(errors.length ? 'Errors:\n' + errors.join('\n') : 'No page errors');

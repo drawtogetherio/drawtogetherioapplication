@@ -18,7 +18,7 @@ import {
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/protocol.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
-import { THEMES, canUseTheme } from '../src/shared/themes.ts';
+import { canUseTheme, isTheme } from '../src/shared/themes.ts';
 
 type Req = http.IncomingMessage;
 type Res = http.ServerResponse;
@@ -275,7 +275,7 @@ async function route(req: Req, res: Res) {
     }
     if (b.theme !== undefined) {
       const t = String(b.theme);
-      if (!THEMES.some((x) => x.id === t)) throw new HttpError(400, 'Unknown theme.', 'theme');
+      if (!isTheme(t)) throw new HttpError(400, 'Unknown theme.', 'theme');
       if (!canUseTheme(t, isPremium(u))) throw new HttpError(403, 'That theme is part of premium.', 'theme');
       sets.push('theme = ?'); vals.push(t);
     }

@@ -18,11 +18,11 @@ import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { avatarEl, badges, nameLine } from './people';
-import { THEMES, canUseTheme } from '../shared/themes';
+import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
 import { applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
-import { KEY_ACTIONS, KeyAction, actionFor, keyOf } from '../shared/prefs';
+import { KeyAction, actionFor, keyOf } from '../shared/prefs';
 import { PREFS_KEY } from './session';
 import { Home } from './home';
 import { InvitePanel } from './invitePanel';
@@ -62,7 +62,6 @@ export class App {
   private toolPop = h('div.popover.tool-pop', { hidden: true });
   private toolPopFor: ToolId | null = null;
   private layersBtn: HTMLButtonElement;
-  private shortcutsEl = h('div.shortcuts');
   private prefsTimer = 0;
 
   constructor(root: HTMLElement, doc: DrawDoc) {
@@ -182,15 +181,6 @@ export class App {
     }
     this.layersBtn.title = 'Layers' + key('layers');
     this.layersBtn.setAttribute('aria-label', this.layersBtn.title);
-    const kbd = (a: KeyAction) => `<kbd>${(keyOf(p, a) || '—').toUpperCase()}</kbd>`;
-    this.shortcutsEl.innerHTML = `<strong>Shortcuts</strong>
-<div>${KEY_ACTIONS.slice(0, 8).map((a) => `${kbd(a.id)} ${a.label}`).join(' ')}</div>
-<div><kbd>Ctrl Z</kbd> Undo <kbd>Ctrl Shift Z</kbd> Redo ${kbd('sizeDown')} ${kbd('sizeUp')} Brush size</div>
-<div>${kbd('rotate')} + drag rotate (Shift snaps) · ${kbd('zoomDrag')} + drag zoom · tap a selected tool for its options</div>
-<div><kbd>Space</kbd> drag to pan · <kbd>Ctrl</kbd>+scroll / pinch to zoom · <kbd>Alt</kbd>+scroll zoom</div>
-<div>${kbd('flipH')} / ${kbd('flipV')} Flip view · ${kbd('fit')} Fit · ${kbd('zoomIn')} / ${kbd('zoomOut')} Zoom · <kbd>Ctrl A</kbd> / <kbd>Ctrl D</kbd> Select all / none</div>
-<div><kbd>Enter</kbd> Apply transform · <kbd>Esc</kbd> Cancel · <kbd>Delete</kbd> Clear selection</div>
-<div style="margin-top:6px"><strong>Touch</strong>: two fingers pan / zoom / rotate · two-finger tap undo · three-finger tap redo</div>`;
     this.ed.view.requestRender();
   }
 
@@ -204,30 +194,42 @@ export class App {
     }, 400);
   }
 
+  /** Honey is free; the other swatches and a colour of your own are premium. */
   themeRow(): HTMLElement {
-    const me = this.ed.me;
-    const row = h('div.theme-row', {}, h('div.menu-label', {}, 'Theme'));
-    const swatches: HTMLButtonElement[] = [];
-    const mark = () => { for (const b of swatches) { const on = b.dataset.id === theme().id; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); } };
+    const me = this.ed.me, premium = !!me?.premium;
+    const row = h('div.theme-row');
+    const swatches: HTMLElement[] = [];
+    const custom = h('input.theme-swatch.custom', { type: 'color', title: premium ? 'Custom (premium)' : 'Custom (premium only)', 'aria-label': 'Custom theme colour', 'data-id': 'custom' });
+    const mark = () => {
+      const cur = theme();
+      for (const b of swatches) { const on = b.dataset.id === cur.id || (b === custom && cur.name === 'Custom'); b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); }
+      custom.value = cur.name === 'Custom' ? cur.accent : '#8a7cff';
+      custom.style.setProperty('--sw', custom.value);
+    };
+    let timer = 0;
+    const pick = (id: string) => {
+      applyTheme(id);
+      mark();
+      this.ed.view.requestRender();
+      if (!me) return;
+      clearTimeout(timer);
+      timer = window.setTimeout(async () => { try { this.ed.me = await api.updateMe({ theme: id }); } catch { this.toast('Couldn’t save your theme'); } }, 300);
+    };
     for (const t of THEMES) {
-      const allowed = canUseTheme(t.id, !!me?.premium);
+      const allowed = canUseTheme(t.id, premium);
       const title = t.name + (t.premium ? (allowed ? ' (premium)' : ' (premium only)') : '');
       const b = h(`button.theme-swatch${allowed ? '' : '.locked'}` as 'button', {
-        title, 'aria-label': title, style: `--sw:${t.accent}`, 'data-id': t.id,
-        onclick: async () => {
-          if (!allowed) { this.toast(`${t.name} is a premium theme`); return; }
-          applyTheme(t.id);
-          mark();
-          this.ed.view.requestRender();
-          if (me) {
-            try { this.ed.me = await api.updateMe({ theme: t.id }); } catch { this.toast('Couldn’t save your theme'); }
-          }
-        },
+        type: 'button', title, 'aria-label': title, style: `--sw:${t.accent}`, 'data-id': t.id,
+        onclick: () => { if (allowed) pick(t.id); else this.toast(`${t.name} is a premium theme`); },
       });
       if (t.premium) b.append(badges(undefined, true));
       swatches.push(b);
       row.append(b);
     }
+    if (premium) custom.addEventListener('input', () => pick(customTheme(custom.value)));
+    else { custom.classList.add('locked'); custom.addEventListener('click', (e) => { e.preventDefault(); this.toast('Custom colours are a premium theme'); }); }
+    swatches.push(custom);
+    row.append(custom);
     mark();
     return row;
   }
@@ -342,6 +344,8 @@ export class App {
       this.renderOptions();
     } else if (w === 'brush') {
       this.syncSliders();
+    } else if (w === 'prefs') {
+      this.savePrefs();
     } else if (w.startsWith('toast:')) {
       this.toast(w.slice(6));
     }
@@ -495,20 +499,7 @@ export class App {
   }
 
   private menu(): HTMLElement {
-    const st = this.ed.settings;
-    const finger = h('input', { type: 'checkbox' });
-    const pop = h('div.popover.menu-pop', { hidden: true },
-      h('div.panel', {},
-        this.menuDyn,
-        h('label.check.menu-check', {}, finger, 'Draw with finger'),
-        h('div.menu-sep'),
-        this.shortcutsEl,
-      ),
-    );
-    finger.addEventListener('change', () => { st.fingerDraws = finger.checked; });
-    pop.addEventListener('pointerenter', () => { finger.checked = st.fingerDraws; });
-    new MutationObserver(() => { finger.checked = st.fingerDraws; }).observe(pop, { attributes: true, attributeFilter: ['hidden'] });
-    return pop;
+    return h('div.popover.menu-pop', { hidden: true }, h('div.panel', {}, this.menuDyn));
   }
 
   private renderMenuDyn() {

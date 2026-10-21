@@ -130,6 +130,11 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       const c = normalizeColor(hexIn.value);
       if (c) { colorIn.value = c; showErr('favoriteColor', ''); renderAvatar(); } else showErr('favoriteColor', 'Use 6 hex digits, like #f4c25b.');
     });
+    // A gradient replaces the profile colour everywhere, so the field steps aside.
+    const colorField = h('div.field', {}, h('label.field-label', { for: 'fav-hex' }, 'Profile colour'), h('div.row', {}, colorIn, hexIn), err('favoriteColor'));
+    const syncColorField = () => { colorField.hidden = gradOn.checked; };
+    gradOn.addEventListener('change', syncColorField);
+    syncColorField();
 
     const links: Record<string, string> = { ...me.links };
     const socials = h('div.social-list');
@@ -178,7 +183,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       ),
       h('div.field', {}, h('label.field-label', { for: 'display-name' }, 'Display name ', counter), nameIn, err('displayName')),
       handleField,
-      h('div.field', {}, h('label.field-label', { for: 'fav-hex' }, 'Profile colour'), h('div.row', {}, colorIn, hexIn), err('favoriteColor')),
+      colorField,
       premiumBox,
       h('div.field', {}, h('span.field-label', {}, 'Socials'), socials, picker, err('links')),
       err('form'),

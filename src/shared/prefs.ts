@@ -1,4 +1,5 @@
 // Per-account preferences, saved with the profile so they follow the person across devices.
+import { DEFAULT_CURVE, curveAt, validCurve } from './curve';
 
 export type KeyAction = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper' | 'layers'
   | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag';
@@ -25,11 +26,19 @@ export interface Prefs {
   hoverPreview: boolean;
   showBubbles: boolean;
   pressureGamma: number;
+  /** Advanced pressure: a curve through points instead of the exponent. */
+  pressureMode: 'simple' | 'advanced';
+  pressureCurve: number[];
+  /** One finger draws; otherwise it pans. Turns off by itself once a pen is used. */
+  fingerDraws: boolean;
   /** The Patreon banner on the home screen; false once it has been closed. */
   supportBanner: boolean;
 }
 
-export const DEFAULT_PREFS: Prefs = { keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, supportBanner: true };
+export const DEFAULT_PREFS: Prefs = {
+  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
+  fingerDraws: true, supportBanner: true,
+};
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
 
@@ -48,8 +57,16 @@ export function cleanPrefs(raw: unknown): Prefs {
     hoverPreview: typeof r.hoverPreview === 'boolean' ? r.hoverPreview : DEFAULT_PREFS.hoverPreview,
     showBubbles: typeof r.showBubbles === 'boolean' ? r.showBubbles : DEFAULT_PREFS.showBubbles,
     pressureGamma: gamma >= 0.4 && gamma <= 2.5 ? gamma : DEFAULT_PREFS.pressureGamma,
+    pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
+    pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
+    fingerDraws: r.fingerDraws !== false,
     supportBanner: r.supportBanner !== false,
   };
+}
+
+export function pressureMap(p: Prefs, v: number): number {
+  const x = Math.min(1, Math.max(0.001, v));
+  return p.pressureMode === 'advanced' ? Math.max(0.001, curveAt(p.pressureCurve, x)) : Math.pow(x, p.pressureGamma);
 }
 
 export const keyOf = (p: Prefs, a: KeyAction) => p.keys[a] ?? DEFAULT_KEYS[a];
