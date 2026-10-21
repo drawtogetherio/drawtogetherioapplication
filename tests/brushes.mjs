@@ -4,6 +4,7 @@ import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 
 const url = process.argv[2] ?? 'http://localhost:4180/app.html';
+const EFFECT_NAMES = { glitch: 'Glitch', blur: 'Gaussian blur', chroma: 'Chromatic', motion: 'Motion blur' };
 const out = 'test-results/brushes';
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
@@ -102,19 +103,20 @@ check(await page.locator('.slider-preview').isHidden(), 'it goes away after the 
 
 // ---- Effects: baked, undoable, and replay the same ----
 const before = await ed((e) => e.doc.log.length);
-await page.locator('[aria-label="Menu"]').click();
-await page.locator('.menu-pop .menu-item', { hasText: 'Layer effects' }).click();
+await page.locator('.topbar [aria-label="Effects"]').click();
+check(await page.locator('.effects-pop .menu-item').count() === 7, 'the Effects button by the flip buttons lists 7 effects');
+await page.locator('.effects-pop .menu-item', { hasText: 'Mosaic' }).click();
 await page.waitForSelector('.modal[aria-label="Layer effects"]');
-await page.selectOption('#effect-kind', 'mosaic');
+check(await page.locator('#effect-kind').inputValue() === 'mosaic' && (await page.locator('.effects .muted').textContent()).includes('can’t be undone'), 'picking one opens the preview on it, with the undo warning');
 await page.waitForTimeout(150);
 await page.screenshot({ path: `${out}/03-effects.png` });
 await page.getByRole('button', { name: 'Apply' }).click();
 check(await ed((e, n) => e.doc.log.length === n + 1 && e.doc.log.at(-1).t === 'effect' && e.doc.log.at(-1).effect === 'mosaic', before), 'mosaic baked in as one effect op');
 await page.locator('.layers-pop').count();
 for (const effect of ['glitch', 'blur', 'chroma', 'motion']) {
-  await page.locator('[aria-label="Menu"]').click();
-  await page.locator('.menu-pop .menu-item', { hasText: 'Layer effects' }).click();
-  await page.selectOption('#effect-kind', effect);
+  await page.locator('.topbar [aria-label="Effects"]').click();
+  await page.locator('.effects-pop .menu-item', { hasText: EFFECT_NAMES[effect] }).click();
+  await page.waitForSelector('.modal[aria-label="Layer effects"]');
   await page.getByRole('button', { name: 'Apply' }).click();
 }
 await page.screenshot({ path: `${out}/04-after-effects.png` });

@@ -62,7 +62,7 @@ check(await projects(ren) === 0, 'nothing stored on the server');
 await ren.reload();
 await ren.waitForFunction(() => window.doodlehive?.session.local && window.doodlehive.ed.doc.log.length > 1);
 check(await strokes(ren) === 2, 'reload reopens the canvas with both strokes');
-await ren.locator('button.brand').click();
+await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await ren.waitForSelector('.home:not([hidden]) .project-tile img');
 check(await ren.locator('.tile-meta', { hasText: 'On this device' }).count() === 1, 'home shows it as on this device, with a thumbnail');
 check(await ren.locator('.tile-meta .save-mark.cache').count() === 1, 'the tile carries the cache warning too');
@@ -95,7 +95,7 @@ check(true, 'a member keeps a copy of the room on their device too');
 await bob.screenshot({ path: `${out}/02-member.png` });
 
 // ---- The host leaves: the room closes after the grace period ----
-await ren.locator('button.brand').click();
+await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await ren.waitForSelector('.home:not([hidden])');
 await bob.waitForFunction(() => !window.doodlehive.ed.room && window.doodlehive.session.local, null, { timeout: 8000 });
 check(await bob.locator('.toast', { hasText: 'The host left' }).count() > 0, 'the member is told the host left and the copy stays');
@@ -106,8 +106,8 @@ check(gone === 404, 'the room is gone from the server');
 await ren.locator('.tile-open').click();
 await ren.waitForFunction(() => window.doodlehive.session.local && !window.doodlehive.ed.room && window.doodlehive.ed.doc.log.length > 4);
 check(await strokes(ren) === 4 && !(await dh(ren, (dh) => dh.session.local.meta.room)), 'the host’s copy has everyone’s strokes and no room link');
-await ren.locator('button.brand').click();
-await bob.locator('button.brand').click();
+await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
+await bob.locator('[aria-label=\"Menu\"]').click(); await bob.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await bob.waitForSelector('.home:not([hidden]) .project-tile');
 check(await bob.locator('.tile-name', { hasText: 'Fox study' }).count() === 1, 'the member’s home lists the copy');
 
@@ -138,7 +138,7 @@ await pia.locator('.tile-open').click();
 await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open' && window.doodlehive.session.local);
 await pia.waitForFunction(() => window.doodlehive.ed.room.info.ephemeral);
 check(await projects(pia) === 0 && (await strokes(pia)) === 1, 'opening it moves the drawing to the device');
-await pia.locator('button.brand').click();
+await pia.locator('[aria-label=\"Menu\"]').click(); await pia.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await pia.waitForSelector('.home:not([hidden]) .tile-meta', { hasText: 'On this device' });
 check(true, 'it now shows as on this device');
 await pia.screenshot({ path: `${out}/04-moved.png` });

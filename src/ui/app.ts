@@ -18,6 +18,9 @@ import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { isNativeApp } from '../io/native';
+import { frameBar } from './frame';
+import { EFFECTS } from '../core/model';
+import { EFFECT_INFO } from '../engine/effects';
 import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
@@ -28,7 +31,6 @@ import { PREFS_KEY } from './session';
 import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
-import { LOGO_SVG } from '../site/brand';
 import { BrushTool as BrushToolId, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
 import { effectsDialog } from './effectsDialog';
 
@@ -103,17 +105,22 @@ export class App {
     const menuBtn = btn('menu', 'Menu', () => { menuPop.hidden = !menuPop.hidden; if (!menuPop.hidden) this.renderMenuDyn(); });
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
+    const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {}, ...EFFECTS.map((e) =>
+      h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsDialog(ed, e); } }))));
+    const effectsBtn = btn('sparkle', 'Effects', () => {
+      effectsPop.style.left = `${effectsBtn.getBoundingClientRect().left}px`;
+      effectsPop.hidden = !effectsPop.hidden;
+    }, '.edit-only');
+    dismissOnOutside(effectsPop, [effectsBtn], () => { effectsPop.hidden = true; });
+
     const left = h('div.bar-group', {},
-      h('button.brand', {
-        title: 'Home', 'aria-label': 'Doodlehive home', html: LOGO_SVG + '<span class="brand-word">doodle<span>hive</span></span>',
-        onclick: () => { if (!this.session.offline) this.session.leaveRoom(); },
-      }),
       menuBtn,
       btn('download', 'Export (Ctrl+Shift+E)', () => this.export(), '.edit-only'),
       h('span.sep'),
       btn('flipH', 'Flip canvas horizontally (H)', () => ed.view.viewport.flip(true)),
       btn('flipV', 'Flip canvas vertically (V)', () => ed.view.viewport.flip(false)),
       btn('fit', 'Fit to screen (0)', () => ed.fitView()),
+      effectsBtn,
       this.zoomLabel,
     );
     this.zoomLabel.addEventListener('click', () => ed.fitView());
@@ -145,8 +152,8 @@ export class App {
     right.append(layersBtn, this.colorBtn, h('span.sep'), this.saveBadge);
     this.saveBadge.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a')) return; this.saveBadge.classList.toggle('open'); });
     dismissOnOutside(this.saveBadge, [], () => this.saveBadge.classList.remove('open'));
-
     const topbar = h('header.topbar', {}, left, right);
+    frameBar(topbar, right);
 
     const peek = { onStart: () => this.showSliderPreview(), onEnd: () => this.hideSliderPreview() };
     this.sizeSlider = new Slider({
@@ -161,7 +168,7 @@ export class App {
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const sidebar = h('aside.sidebar', {}, this.sizeSlider.el, this.opacitySlider.el, this.undoBtn, this.redoBtn);
 
-    root.append(topbar, this.options, stage, sidebar, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -583,7 +590,7 @@ export class App {
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
-    if (!ed.readOnly) d.append(item('sparkle', 'Layer effects…', () => effectsDialog(ed)), item('download', 'Export PNG / JPG / PSD…', () => this.export()));
+    if (!ed.readOnly) d.append(item('download', 'Export PNG / JPG / PSD…', () => this.export()));
     d.append(item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
     if (ed.room && !ed.readOnly) {
       const cb = h('input', { type: 'checkbox' });

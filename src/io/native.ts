@@ -9,6 +9,9 @@ export type NativeCanvas = Omit<LocalCanvas, 'thumb'> & { thumb: { type: string;
 export interface NativeBridge {
   platform: 'windows' | 'mac' | 'linux';
   version: string;
+  /** The window has no system title bar: the page draws the controls (Windows) or leaves room for the traffic lights (Mac). */
+  frameless?: boolean;
+  window?: { minimize(): void; maximize(): void; close(): void };
   canvases: {
     list(user: string): Promise<NativeCanvas[]>;
     get(id: string): Promise<NativeCanvas | null>;

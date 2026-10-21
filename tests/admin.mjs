@@ -49,7 +49,7 @@ check(true, 'so is the page: it shows the 404 page');
 execSync(`npx tsx server/admin.ts admin Ada${suffix} on`, { env: process.env, stdio: 'ignore' });
 await ada.reload();
 await ada.waitForSelector('.home:not([hidden])');
-await ada.locator('.account-btn').click();
+await ada.locator('.me-pic').click();
 await ada.locator('.account-pop .menu-item', { hasText: 'Admin' }).click();
 await ada.waitForSelector('.stat-tile');
 check(true, 'admins get an Admin link in the account menu');

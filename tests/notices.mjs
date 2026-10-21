@@ -70,7 +70,8 @@ check((await inviteRow.count()) === 1, 'the invite is listed');
 await inviteRow.locator('.btn', { hasText: 'Join' }).click();
 await noor.waitForFunction(() => window.doodlehive.ed.room?.status === 'open', null, { timeout: 8000 });
 check(true, 'Join from the bell opens the room');
-await noor.locator('.brand').click();
+await noor.locator('[aria-label="Menu"]').click();
+await noor.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await noor.waitForSelector('.home:not([hidden])');
 
 // ---- Premium about to end ----

@@ -30,7 +30,7 @@ const accent = () => page.evaluate(() => getComputedStyle(document.documentEleme
 const me = () => page.evaluate(async () => (await fetch('/api/me')).json());
 const group = (g) => page.locator(`.pref-group[data-group="${g}"]`).click();
 const openPrefs = async () => {
-  await page.locator('.account-btn').click();
+  await page.locator('.me-pic').click();
   await page.locator('.account-pop .menu-item', { hasText: 'Preferences' }).click();
   await page.waitForSelector('.modal[aria-label="Preferences"]');
 };
@@ -132,8 +132,8 @@ await closePrefs();
 // ---- Profile card hides the hex ----
 await page.locator('.members-btn').click();
 await page.locator('.member-row').first().click();
-await page.waitForSelector('.modal .fav');
-check((await page.locator('.modal .fav').innerText()).trim() === '' && (await page.locator('.modal .fav-swatch').count()) === 1, 'profile card shows a swatch, not the hex');
+await page.waitForSelector('.modal .profile-card-head');
+check((await page.locator('.modal .fav, .modal .fav-swatch').count()) === 0, 'profile card shows no colour box or hex');
 await page.locator('.modal-head .icon-btn').click();
 
 // ---- Premium: custom colour and gradients ----

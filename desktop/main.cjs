@@ -17,9 +17,12 @@ for (const name of ['list', 'get', 'put', 'loadOps', 'appendOps', 'replaceOps', 
 }
 
 function createWindow() {
+  const mac = process.platform === 'darwin';
   const win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 720, minHeight: 480,
     backgroundColor: '#1b1b1f', title: 'Doodlehive', show: false,
+    // No system title bar: the page draws the window buttons on Windows; Mac keeps its traffic lights.
+    frame: mac, titleBarStyle: mac ? 'hiddenInset' : 'default', trafficLightPosition: { x: 14, y: 14 },
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.once('ready-to-show', () => win.show());
@@ -28,6 +31,11 @@ function createWindow() {
   win.loadURL(APP_URL);
   return win;
 }
+
+const fromApp = (e) => new URL(e.senderFrame.url).origin === origin;
+ipcMain.on('win:minimize', (e) => { if (fromApp(e)) BrowserWindow.fromWebContents(e.sender)?.minimize(); });
+ipcMain.on('win:maximize', (e) => { const w = fromApp(e) && BrowserWindow.fromWebContents(e.sender); if (w) w.isMaximized() ? w.unmaximize() : w.maximize(); });
+ipcMain.on('win:close', (e) => { if (fromApp(e)) BrowserWindow.fromWebContents(e.sender)?.close(); });
 
 app.whenReady().then(() => {
   process.env.DOODLEHIVE_VERSION = app.getVersion();

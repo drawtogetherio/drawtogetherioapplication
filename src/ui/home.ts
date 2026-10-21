@@ -13,6 +13,7 @@ import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 import { LocalCanvas, deleteCanvas, listCanvases, patchCanvas } from '../io/localStore';
 import { isNativeApp } from '../io/native';
+import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
 
 // Fallback to the live event stream.
@@ -45,7 +46,6 @@ export class Home {
   private requestsEl = h('div.friend-requests');
   private grid = h('div.project-grid');
   private friendCount = h('span.count');
-  private accountBtn = h('button.account-btn', { type: 'button', 'aria-label': 'Your account' });
   private accountPop = h('div.popover.account-pop', { hidden: true });
   private timer = 0;
   private friendsPanel: HTMLElement;
@@ -60,8 +60,7 @@ export class Home {
   private thumbUrls: string[] = [];
 
   constructor(private app: App) {
-    this.accountBtn.addEventListener('click', () => { this.renderAccountMenu(); this.accountPop.hidden = !this.accountPop.hidden; });
-    dismissOnOutside(this.accountPop, [this.accountBtn], () => { this.accountPop.hidden = true; });
+    dismissOnOutside(this.accountPop, [this.meCard], () => { this.accountPop.hidden = true; });
     this.bellBtn.append(this.bellBadge);
     this.bellBtn.addEventListener('click', () => this.toggleNotices());
     dismissOnOutside(this.noticesPop, [this.bellBtn], () => { this.noticesPop.hidden = true; });
@@ -83,10 +82,7 @@ export class Home {
 
     // Popovers anchor to the header, so the banner above can come and go.
     this.el.append(this.banner, h('div.home-main', {},
-      h('header.home-top', {},
-        h('div.home-brand', { html: brandHtml('/') }),
-        h('div.home-top-right', {}, this.bellBtn, this.accountBtn),
-      ),
+      frameBar(h('header.home-top', {}, h('div.home-brand', { html: brandHtml('/') }), h('span.grow'))),
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
           this.meCard,
@@ -112,7 +108,7 @@ export class Home {
     this.renderAccount();
     const guest = !!this.app.ed.me?.guest;
     this.el.classList.toggle('guest', guest);
-    this.friendsPanel.hidden = this.bellBtn.hidden = guest;
+    this.friendsPanel.hidden = guest;
     this.renderBanner();
     if (guest) { this.renderGuest(); return; }
     this.projectsHead.textContent = 'Recent';
@@ -150,11 +146,14 @@ export class Home {
 
   // ---- Account ----
 
-  renderAccount() {
-    const me = this.app.ed.me;
-    clear(this.accountBtn);
-    if (me) this.accountBtn.append(avatarEl(me, 34, true));
-    this.renderMeCard();
+  renderAccount() { this.renderMeCard(); }
+
+  /** Pops `pop` under `anchor`, inside the home screen. */
+  private popUnder(pop: HTMLElement, anchor: HTMLElement) {
+    const r = anchor.getBoundingClientRect(), base = this.el.querySelector('.home-main')!.getBoundingClientRect();
+    pop.style.top = `${Math.round(r.bottom + 6 - base.top)}px`;
+    pop.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.left)) - base.left)}px`;
+    pop.style.right = 'auto';
   }
 
   private renderMeCard(editing = false) {
@@ -190,10 +189,15 @@ export class Home {
     const mode = MODE_CHOICES.find((c) => c.mode === me.presenceMode) ?? MODE_CHOICES[0];
     const presenceBtn = h(`button.me-presence.${mode.shows}` as 'button', { type: 'button', 'aria-label': `Status: ${mode.label}`, html: `<i></i><span>${mode.label}</span>` });
     presenceBtn.addEventListener('click', () => this.presenceMenu(presenceBtn));
+    const pic = h('button.me-pic', { type: 'button', title: 'Account', 'aria-label': 'Your account', onclick: () => {
+      this.noticesPop.hidden = true;
+      this.accountPop.hidden = !this.accountPop.hidden;
+      if (!this.accountPop.hidden) { this.renderAccountMenu(); this.popUnder(this.accountPop, pic); }
+    } }, avatarEl(me, 44, true), h(`span.presence.${mode.shows}` as 'span'));
     this.meCard.append(
-      h('button.me-pic', { type: 'button', title: 'Edit profile', onclick: () => this.app.session.editProfile() },
-        avatarEl(me, 44, true), h(`span.presence.${mode.shows}` as 'span')),
+      pic,
       h('div.me-text', {}, h('strong.me-name', {}, me.displayName), h('span.me-sub', {}, h('small.me-handle', {}, '@' + me.handle), presenceBtn), status),
+      this.bellBtn,
     );
   }
 
@@ -242,9 +246,11 @@ export class Home {
   }
 
   private toggleNotices() {
+    this.accountPop.hidden = true;
     this.noticesPop.hidden = !this.noticesPop.hidden;
     if (this.noticesPop.hidden) return;
     this.renderNotices();
+    this.popUnder(this.noticesPop, this.bellBtn);
     if (this.notices.some((n) => !n.read)) {
       this.bellBadge.hidden = true;
       api.readNotices().catch(() => {});

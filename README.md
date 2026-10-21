@@ -54,9 +54,11 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   brush carry **grain**: a seeded paper texture fixed to the canvas, so every device renders the same
   speckle and strokes line up; the Grain slider in the options bar tunes it. Cube, flat and chisel brushes
   have a square tip. Dragging the Size or Opacity slider shows a preview of the brush at that size.
-- **Layer effects** (canvas menu or the layers panel's ✦): Gaussian blur, motion blur, mosaic, chromatic
+- **Layer effects** (the ✦ button by the flip buttons lists them; the layers panel's ✦ too): Gaussian blur, motion blur, mosaic, chromatic
   aberration, glitch, sharpen and noise. Each is one `effect` op, computed with plain arithmetic in a fixed
   order (`src/engine/effects.ts`) so every client bakes the same pixels; nothing is re-applied per frame.
+  The preview shows the effect on the selection only when there is one; the dialog warns that the
+  bake can be undone only while it is still in the undo history.
 - Selection (rect/ellipse/lasso) with move/rotate/scale/flip; fill bucket; shapes; eyedropper
 - Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
 - R + drag rotates the view (Shift snaps 15°), Z + drag zooms
@@ -118,9 +120,11 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - The dock's link button opens **Share links**: the draw link, the room code (paste it on the home
   screen) and a **watch link** (`?room=code&watch=key`). Watchers see the canvas and chat but get no
   tools, undo, layers or export; they can be removed like anyone else. The key is only sent to hosts.
-- A bell by the account button counts unread notifications: friend requests (accept or decline
+- The bell on your profile card (top of the friends list) counts unread notifications: friend requests (accept or decline
   right there), accepted requests, room invites (Join) and system notices such as premium ending
   within a day. They arrive live over the event stream; the server keeps the last 100 per person.
+  Clicking your picture on that card opens the account menu (profile, preferences, sign out); the
+  drawing screen's topbar has no logo or account button, only the hamburger menu.
 - A honey banner at the top of the home screen links to Patreon (`PATREON_URL`, default
   patreon.com/doodlehive). It shows once per browser session; its X hides it for good (saved with
   the preferences).
@@ -206,7 +210,9 @@ guests a few hours after they leave.
 
 **Platforms (v0.20).** `desktop/` is the Windows and Mac app: an Electron window on doodlehive.net
 whose preload script exposes `window.doodlehiveNative`, a canvas store backed by plain files in the
-app's data folder (`canvases/<id>/meta.json`, `ops.jsonl`, `thumb`). `ipad/` is the Capacitor
+app's data folder (`canvases/<id>/meta.json`, `ops.jsonl`, `thumb`). On Windows the window is
+frameless: the topbar is the drag region and carries its own minimize, maximize and close buttons
+(`native.window`); on Mac the system traffic lights stay, inset into the topbar. `ipad/` is the Capacitor
 project for the same site; there the page uses the Filesystem plugin (`src/io/capacitorStore.ts`).
 `src/io/native.ts` picks the bridge, and `localStore.ts` routes to it instead of IndexedDB, so a
 device canvas in the apps is as permanent as any file. The apps update from the downloads host, not
