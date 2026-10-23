@@ -15,11 +15,14 @@ export interface LiveLayer {
   mask?: boolean;
 }
 
-// Device-sized scratch canvases: the layer group, the clip base, a clipped layer, and the mask.
+// Region-sized scratch canvases: the layer group, the clip base, a clipped layer, and the mask.
+// Drawing a canvas onto another snapshots all of it, so these stay close to the region's size
+// rather than the whole view's.
 const scratch: HTMLCanvasElement[] = [];
 function getScratch(i: number, w: number, h: number) {
   let s = scratch[i];
-  if (!s || s.width < w || s.height < h) scratch[i] = s = makeCanvas(Math.max(w, s?.width ?? 0), Math.max(h, s?.height ?? 0));
+  const big = s && s.width * s.height > Math.max(4 * w * h, 512 * 512);
+  if (!s || s.width < w || s.height < h || big) scratch[i] = s = makeCanvas(big ? w : Math.max(w, s?.width ?? 0), big ? h : Math.max(h, s?.height ?? 0));
   return s;
 }
 
@@ -40,11 +43,12 @@ export function composite(
   const d = transformRect(t, region);
   const bx = Math.max(0, Math.floor(d.x)), by = Math.max(0, Math.floor(d.y));
   const bw = Math.min(W, Math.ceil(d.x + d.w)) - bx, bh = Math.min(H, Math.ceil(d.y + d.h)) - by;
+  // Scratch pixel (0,0) is target pixel (bx,by).
   const fresh = (i: number) => {
-    const sc = ctx2d(getScratch(i, W, H));
+    const sc = ctx2d(getScratch(i, bw, bh));
     sc.setTransform(1, 0, 0, 1, 0, 0);
-    sc.clearRect(bx, by, bw, bh);
-    sc.setTransform(t);
+    sc.clearRect(0, 0, bw, bh);
+    sc.setTransform(t.a, t.b, t.c, t.d, t.e - bx, t.f - by);
     return sc;
   };
   // Layer pixels + uncommitted edits + mask, before opacity and blend.
@@ -59,7 +63,7 @@ export function composite(
     sc.save();
     sc.setTransform(1, 0, 0, 1, 0, 0);
     sc.globalCompositeOperation = 'destination-out';
-    sc.drawImage(mc.canvas, bx, by, bw, bh, bx, by, bw, bh);
+    sc.drawImage(mc.canvas, 0, 0, bw, bh, 0, 0, bw, bh);
     sc.restore();
   };
   const blit = (sc: CanvasRenderingContext2D, alpha: number, op: GlobalCompositeOperation) => {
@@ -67,7 +71,7 @@ export function composite(
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = alpha;
     ctx.globalCompositeOperation = op;
-    ctx.drawImage(sc.canvas, bx, by, bw, bh, bx, by, bw, bh);
+    ctx.drawImage(sc.canvas, 0, 0, bw, bh, bx, by, bw, bh);
     ctx.restore();
   };
 
@@ -87,12 +91,16 @@ export function composite(
     while (i + 1 < layers.length && layers[i + 1].props.clip && layers[i + 1].parent === layer.parent) clipped.push(layers[++i]);
     if (!layer.shown) continue;
     const mine = livesOf(p.id);
-    if (!layer.mask && !clipped.length && !mine.length) {
+    // Painting over a plain layer: source-over is associative, so the stroke can go straight on
+    // top with the layer's opacity, no group needed.
+    const plain = !mine.length || (p.opacity === 1 && p.blend === 'normal' && mine.every((l) => !l.mask && !l.hole && !l.floating && (l.bufferOp ?? 'source-over') === 'source-over'));
+    if (!layer.mask && !clipped.length && plain) {
       ctx.save();
       ctx.globalAlpha = p.opacity;
       ctx.globalCompositeOperation = blendOp(p.blend);
       layer.surface.drawTo(ctx, region);
       ctx.restore();
+      for (const live of mine) drawLive(ctx, live, region);
       continue;
     }
     if (bw <= 0 || bh <= 0) continue;
@@ -101,20 +109,20 @@ export function composite(
     if (clipped.length) {
       const base = fresh(1);
       base.setTransform(1, 0, 0, 1, 0, 0);
-      base.drawImage(group.canvas, bx, by, bw, bh, bx, by, bw, bh);
+      base.drawImage(group.canvas, 0, 0, bw, bh, 0, 0, bw, bh);
       for (const c of clipped) {
         if (!c.props.visible) continue;
         const sc = fresh(2);
         drawRaw(sc, c, livesOf(c.props.id));
         sc.setTransform(1, 0, 0, 1, 0, 0);
         sc.globalCompositeOperation = 'destination-in';
-        sc.drawImage(base.canvas, bx, by, bw, bh, bx, by, bw, bh);
+        sc.drawImage(base.canvas, 0, 0, bw, bh, 0, 0, bw, bh);
         sc.globalCompositeOperation = 'source-over';
         group.save();
         group.setTransform(1, 0, 0, 1, 0, 0);
         group.globalAlpha = c.props.opacity;
         group.globalCompositeOperation = blendOp(c.props.blend);
-        group.drawImage(sc.canvas, bx, by, bw, bh, bx, by, bw, bh);
+        group.drawImage(sc.canvas, 0, 0, bw, bh, 0, 0, bw, bh);
         group.restore();
       }
     }

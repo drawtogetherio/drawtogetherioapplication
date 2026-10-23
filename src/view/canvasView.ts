@@ -5,6 +5,8 @@ import { LiveLayer, composite } from '../engine/compositor';
 import { Viewport } from './viewport';
 
 const MAX_COMPOSITE_PIXELS = 14_000_000;
+/** Dirty rects closer than this merge; past MAX_DIRTY they all collapse into one. */
+const DIRTY_JOIN = 32, MAX_DIRTY = 24;
 
 /** Layers composite into a cached, tile-aligned canvas, which is drawn with the view transform. */
 export class CanvasView {
@@ -17,11 +19,16 @@ export class CanvasView {
 
   private comp = makeCanvas(1, 1);
   private compKey = '';
-  private dirty: Rect | null = null;
+  /** Separate areas waiting to be recomposited, so people drawing far apart don't repaint everything between them. */
+  private dirty: Rect[] = [];
   private dirtyAll = true;
   private frame = 0;
   private checker: CanvasPattern | null = null;
   private workspace = '';
+  private bg = makeCanvas(1, 1);
+  private bgKey = '';
+  private settled = false;
+  private settleTimer = 0;
 
   constructor(public doc: DrawDoc, parent: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -49,8 +56,26 @@ export class CanvasView {
 
   invalidate(r: Rect | null) {
     if (!r) this.dirtyAll = true;
-    else this.dirty = rectUnion(this.dirty, r);
+    else if (r.w > 0 && r.h > 0 && !this.dirtyAll) this.addDirty(r);
     this.requestRender();
+  }
+
+  private addDirty(r: Rect) {
+    let cur = { ...r };
+    // Absorb every rect this one touches (or nearly touches), repeating as it grows.
+    for (let merged = true; merged;) {
+      merged = false;
+      for (let i = this.dirty.length - 1; i >= 0; i--) {
+        const d = this.dirty[i];
+        if (cur.x - DIRTY_JOIN < d.x + d.w && d.x - DIRTY_JOIN < cur.x + cur.w && cur.y - DIRTY_JOIN < d.y + d.h && d.y - DIRTY_JOIN < cur.y + cur.h) {
+          cur = rectUnion(cur, d)!;
+          this.dirty.splice(i, 1);
+          merged = true;
+        }
+      }
+    }
+    this.dirty.push(cur);
+    if (this.dirty.length > MAX_DIRTY) this.dirty = [this.dirty.reduce<Rect | null>((u, d) => rectUnion(u, d), null)!];
   }
 
   requestRender() {
@@ -66,31 +91,12 @@ export class CanvasView {
     const M = vp.matrix();
     const D = new DOMMatrix().scaleSelf(dpr, dpr).multiplySelf(M);
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = this.workspace;
-    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
     const docRect: Rect | null = doc.settings.infinite ? null : { x: 0, y: 0, w: doc.settings.width, h: doc.settings.height };
     let visible: Rect | null = transformRect(M.inverse(), { x: 0, y: 0, w: vp.w, h: vp.h });
     if (docRect) visible = rectIntersect(visible, docRect);
 
-    ctx.setTransform(D);
-    if (docRect) {
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.45)';
-      ctx.shadowBlur = 18 * dpr;
-      ctx.fillStyle = doc.settings.background ?? '#fff';
-      ctx.fillRect(0, 0, docRect.w, docRect.h);
-      ctx.restore();
-    }
-    if (!doc.settings.background) {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (docRect) { ctx.setTransform(D); ctx.beginPath(); ctx.rect(0, 0, docRect.w, docRect.h); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clip(); }
-      ctx.fillStyle = this.checkerPattern(ctx);
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-      ctx.restore();
-    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.background(D, docRect), 0, 0);
 
     if (visible) {
       const zd = vp.zoom * dpr;
@@ -109,12 +115,14 @@ export class CanvasView {
         this.comp.height = ny * k;
         this.dirtyAll = true;
       }
-      let region: Rect | null = this.dirtyAll ? range : this.dirty ? rectIntersect(this.dirty, range) : null;
-      if (region) {
+      const regions = this.dirtyAll ? [range] : this.dirty.map((d) => rectIntersect(d, range)).filter((d): d is Rect => !!d);
+      const lives = [...this.remoteLive.values()];
+      if (this.live) lives.push(this.live);
+      const cc = ctx2d(this.comp);
+      for (let region of regions) {
         const px0 = Math.floor((region.x - ox) * s), py0 = Math.floor((region.y - oy) * s);
         const px1 = Math.ceil((region.x + region.w - ox) * s), py1 = Math.ceil((region.y + region.h - oy) * s);
         region = { x: ox + px0 / s, y: oy + py0 / s, w: (px1 - px0) / s, h: (py1 - py0) / s };
-        const cc = ctx2d(this.comp);
         cc.save();
         cc.setTransform(1, 0, 0, 1, 0, 0);
         cc.clearRect(px0, py0, px1 - px0, py1 - py0);
@@ -125,20 +133,18 @@ export class CanvasView {
         if (docRect) { cc.beginPath(); cc.rect(docRect.x, docRect.y, docRect.w, docRect.h); cc.clip(); }
         cc.imageSmoothingEnabled = true;
         cc.imageSmoothingQuality = 'high';
-        const lives = [...this.remoteLive.values()];
-        if (this.live) lives.push(this.live);
         composite(cc, doc, region, { lives });
         cc.restore();
       }
-      this.dirty = null;
+      this.dirty = [];
       this.dirtyAll = false;
 
       ctx.setTransform(D);
       ctx.imageSmoothingEnabled = zd < 4;
-      ctx.imageSmoothingQuality = 'high';
+      ctx.imageSmoothingQuality = this.blitQuality(zd / s);
       ctx.drawImage(this.comp, 0, 0, this.comp.width, this.comp.height, ox, oy, this.comp.width / s, this.comp.height / s);
     } else {
-      this.dirty = null;
+      this.dirty = [];
       this.dirtyAll = false;
     }
 
@@ -147,6 +153,50 @@ export class CanvasView {
       ctx.imageSmoothingEnabled = true;
       this.overlay(ctx, M);
     }
+  }
+
+  /** Workspace, the paper and its shadow, and the checkerboard; redrawn only when the view moves. */
+  private background(D: DOMMatrix, docRect: Rect | null): HTMLCanvasElement {
+    const doc = this.doc, dpr = this.dpr;
+    const key = [this.canvas.width, this.canvas.height, D.a, D.b, D.c, D.d, D.e, D.f, this.workspace, doc.settings.background, docRect?.w, docRect?.h].join(',');
+    if (key === this.bgKey) return this.bg;
+    this.bgKey = key;
+    const bg = this.bg;
+    bg.width = this.canvas.width;
+    bg.height = this.canvas.height;
+    const ctx = ctx2d(bg);
+    ctx.fillStyle = this.workspace;
+    ctx.fillRect(0, 0, bg.width, bg.height);
+    ctx.setTransform(D);
+    if (docRect) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.45)';
+      ctx.shadowBlur = 18 * dpr;
+      ctx.fillStyle = doc.settings.background ?? '#fff';
+      ctx.fillRect(0, 0, docRect.w, docRect.h);
+      ctx.restore();
+    }
+    if (!doc.settings.background) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (docRect) { ctx.setTransform(D); ctx.beginPath(); ctx.rect(0, 0, docRect.w, docRect.h); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clip(); }
+      ctx.fillStyle = this.checkerPattern(ctx);
+      ctx.fillRect(0, 0, bg.width, bg.height);
+      ctx.restore();
+    }
+    return bg;
+  }
+
+  /**
+   * Resampling the whole view in high quality every frame is slow, so busy frames use bilinear and
+   * one high-quality frame follows once things settle. At about 1:1 the two look the same.
+   */
+  private blitQuality(scale: number): ImageSmoothingQuality {
+    if (Math.abs(scale - 1) < 0.02) return 'low';
+    if (this.settled) { this.settled = false; return 'high'; }
+    clearTimeout(this.settleTimer);
+    this.settleTimer = window.setTimeout(() => { this.settled = true; this.requestRender(); }, 200);
+    return 'low';
   }
 
   private checkerPattern(ctx: CanvasRenderingContext2D) {

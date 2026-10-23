@@ -72,9 +72,13 @@ export class RoomUI {
     this.toggleChat(false);
   }
 
-  private dropStroke(id: string) {
-    if (!this.strokes.delete(id)) return false;
+  /** Stops showing a live stroke; repaints just where it was when `repaint`. */
+  private dropStroke(id: string, repaint = false) {
+    const s = this.strokes.get(id);
+    if (!s) return false;
+    this.strokes.delete(id);
     this.ed.view.remoteLive.delete(id);
+    if (repaint) { const r = s.buffer.tileBounds(); if (r) this.ed.view.invalidate(r); }
     return true;
   }
 
@@ -121,7 +125,7 @@ export class RoomUI {
         return;
       }
       case 'live-end':
-        if (this.dropStroke(e.stroke)) ed.view.invalidate(null);
+        this.dropStroke(e.stroke, true);
         return;
       case 'cursor':
         this.bubbles.set(e.from, { x: e.x, y: e.y, drawing: e.drawing, t: Date.now() });
@@ -136,7 +140,7 @@ export class RoomUI {
   private tick() {
     const now = Date.now();
     for (const [id, s] of this.strokes) {
-      if (now - s.touched > 10_000 && this.dropStroke(id)) this.ed.view.invalidate(null);
+      if (now - s.touched > 10_000) this.dropStroke(id, true);
     }
     if (this.room) {
       let changed = false;
