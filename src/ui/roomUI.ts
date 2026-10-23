@@ -10,7 +10,7 @@ import { icon } from './icons';
 import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, nameText, profileCardBody } from './people';
 import { confirmDialog, exportDialog, modal } from './dialogs';
 
-interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number }
+interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[] }
 interface Bubble { x: number; y: number; drawing: boolean; t: number }
 
 const BUBBLE_LINGER = 1200;
@@ -24,6 +24,7 @@ export class RoomUI {
   private chatInput: HTMLInputElement;
   private chatForm: HTMLFormElement;
   private strokes = new Map<string, RemoteStroke>();
+  private drawFrame = 0;
   private bubbles = new Map<string, Bubble>();
   private unsub: (() => void) | null = null;
   private typingSent = 0;
@@ -54,6 +55,7 @@ export class RoomUI {
       if (op.t !== 'stroke') return undefined;
       const s = this.strokes.get(op.id);
       if (!s || s.count !== op.pts.length) return undefined;
+      this.drawPending(s);
       s.renderer.end();
       return s.buffer;
     };
@@ -70,6 +72,15 @@ export class RoomUI {
     this.ed.view.remoteLive.clear();
     this.chatEl.hidden = true;
     this.toggleChat(false);
+  }
+
+  private drawPending(s: RemoteStroke) {
+    const p = s.pending;
+    for (let i = 0; i + 2 < p.length; i += 3) {
+      const r = s.renderer.add(p[i], p[i + 1], p[i + 2]);
+      if (r) this.ed.view.invalidate(r);
+    }
+    s.pending = [];
   }
 
   /** Stops showing a live stroke; repaints just where it was when `repaint`. */
@@ -105,7 +116,7 @@ export class RoomUI {
         let s = this.strokes.get(l.stroke);
         if (!s) {
           const buffer = new TiledSurface();
-          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), buffer, count: 0, touched: 0 };
+          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), buffer, count: 0, touched: 0, pending: [] };
           this.strokes.set(l.stroke, s);
           const layer = ed.doc.layer(l.layer);
           ed.view.remoteLive.set(l.stroke, {
@@ -116,10 +127,9 @@ export class RoomUI {
         }
         s.touched = Date.now();
         s.count += l.pts.length;
-        for (let i = 0; i + 2 < l.pts.length; i += 3) {
-          const r = s.renderer.add(l.pts[i], l.pts[i + 1], l.pts[i + 2]);
-          if (r) ed.view.invalidate(r);
-        }
+        // Painted on the next frame, together with everyone else's, rather than inside the socket handler.
+        for (const v of l.pts) s.pending.push(v);
+        if (!this.drawFrame) this.drawFrame = requestAnimationFrame(() => { this.drawFrame = 0; for (const x of this.strokes.values()) this.drawPending(x); });
         const n = l.pts.length;
         if (n >= 3) this.bubbles.set(e.from, { x: l.pts[n - 3], y: l.pts[n - 2], drawing: true, t: Date.now() });
         return;

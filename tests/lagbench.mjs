@@ -1,6 +1,7 @@
 // Multi-user lag benchmark: one real browser client draws while N bot users (WebSocket clients that
 // behave like the app: live chunks every 33 ms, cursor every 50 ms, the stroke op on pen-up) draw in
-// the same room. Reports frame times, long tasks, input delay and pen-up cost on the measured client.
+// the same room. Reports frame times, long tasks, pen sample gaps and pen-up cost on the measured client,
+// then long tasks in the quiet few seconds after (saving, thumbnails) and the cost of an undo.
 // Needs the server running with dev login on (npm run build && PUBLIC_URL=http://localhost:8787 npm start).
 // Usage: node tests/lagbench.mjs [--url http://localhost:8787] [--bots 3] [--secs 20] [--fixed] [--label name] [--json out.json]
 import { chromium } from '@playwright/test';
@@ -177,6 +178,18 @@ const result = await page.evaluate(async ([secs, box, bandFrac]) => {
 
 let botStrokes = 0;
 for (const b of bots) botStrokes += await b.stop();
+
+// Afterwards: the quiet moment when saving and thumbnails kick in, then three undos.
+const after = await page.evaluate(async () => {
+  const ed = window.doodlehive.ed, longTasks = [];
+  const po = new PerformanceObserver((l) => { for (const e of l.getEntries()) longTasks.push(e.duration); });
+  try { po.observe({ type: 'longtask', buffered: false }); } catch {}
+  await new Promise((r) => setTimeout(r, 7000));
+  const undos = [];
+  for (let i = 0; i < 3; i++) { const t0 = performance.now(); ed.undo(); undos.push(performance.now() - t0); await new Promise((r) => setTimeout(r, 300)); }
+  po.disconnect();
+  return { longTasks, undos };
+});
 await page.screenshot({ path: `test-results/lagbench-${label}.png` }).catch(() => {});
 await browser.close();
 
@@ -195,6 +208,7 @@ const summary = {
   penSamplesPerSec: r1(result.delays.length / (sum(result.delays) / 1000)),
   renderAvg: r1(avg(result.renders)), renderP95: r1(q(result.renders, 0.95)), renderCount: result.renders.length,
   penUpAvg: r1(avg(result.ups)), penUpMax: r1(Math.max(...result.ups)),
+  quietLongTaskMs: Math.round(sum(after.longTasks)), quietLongTaskMax: r1(Math.max(0, ...after.longTasks)), undoAvg: r1(avg(after.undos)),
   hostStrokes: result.strokes, botStrokes, remoteOps: result.remoteOps, layers: result.layers, tiles: result.tiles,
   errors: errors.length,
 };

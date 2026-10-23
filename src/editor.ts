@@ -1,4 +1,4 @@
-import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost } from './core/document';
+import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, toWire } from './core/document';
 import { Point, Rect, polyPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
 import { BrushPreset, DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
@@ -215,8 +215,7 @@ export class Editor {
       op.author = this.room?.you;
       const inv = this.doc.apply(op, i === 0 ? opts : {});
       if (!inv.length) return;
-      this.room?.sendOp(op);
-      this.onOp?.(op);
+      this.share(op);
       inverse.unshift(...inv);
     });
     if (inverse.length) this.doc.history.record({ label, undo: inverse, redo: [], cost: opsCost(inverse) });
@@ -224,13 +223,20 @@ export class Editor {
 
   apply(op: Op, opts: ApplyOptions = {}) { this.run([op], op.t, opts); }
 
+  /** Send an op to the room and the device copy; undo's tile images are PNG-encoded once for both. */
+  private share(op: Op) {
+    if (!this.room && !this.onOp) return;
+    const wire = toWire(op);
+    this.room?.send({ type: 'op', op: wire });
+    this.onOp?.(wire);
+  }
+
   private replay(ops: Op[]): Op[] {
     const inverse: Op[] = [];
     for (const op of ops) {
       const inv = this.doc.apply(op);
       if (!inv.length) continue;
-      this.room?.sendOp(op);
-      this.onOp?.(op);
+      this.share(op);
       inverse.unshift(...inv);
     }
     return inverse;

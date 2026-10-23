@@ -1,6 +1,7 @@
 import type { DrawDoc } from '../core/document';
 import { ctx2d, makeCanvas } from '../core/geom';
-import { renderRegion } from '../engine/compositor';
+import { TILE } from '../core/tiles';
+import { composite } from '../engine/compositor';
 import { api } from '../net/api';
 import { exportRect } from './export';
 
@@ -10,14 +11,18 @@ export async function makeThumbnail(doc: DrawDoc): Promise<Blob | null> {
   const s = doc.settings;
   const r = s.infinite ? exportRect(doc) : { x: 0, y: 0, w: s.width, h: s.height };
   if (!r || r.w < 1 || r.h < 1) return null;
-  const full = renderRegion(doc, r, { paper: false });
-  const k = Math.min(1, MAX / Math.max(r.w, r.h));
-  const out = makeCanvas(Math.max(1, Math.round(r.w * k)), Math.max(1, Math.round(r.h * k)));
+  // Composite straight at thumbnail size: a full-size render of a big canvas is the slow part.
+  // Tiles land on whole pixels (an integer size each) so no seams show between them.
+  const tp = Math.max(1, Math.floor(TILE * Math.min(1, MAX / Math.max(r.w, r.h)))), k = tp / TILE;
+  const ox = Math.round(r.x * k), oy = Math.round(r.y * k);
+  const out = makeCanvas(Math.max(1, Math.ceil((r.x + r.w) * k) - ox), Math.max(1, Math.ceil((r.y + r.h) * k) - oy));
   const ctx = ctx2d(out);
   ctx.fillStyle = s.background ?? '#ffffff';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(full, 0, 0, out.width, out.height);
+  ctx.setTransform(k, 0, 0, k, -ox, -oy);
+  composite(ctx, doc, r, { paper: false });
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   for (const q of [0.8, 0.6, 0.4]) {
     const b = await new Promise<Blob | null>((res) => out.toBlob(res, 'image/webp', q));
     const blob = b && b.type === 'image/webp' ? b : await new Promise<Blob | null>((res) => out.toBlob(res, 'image/jpeg', q));
