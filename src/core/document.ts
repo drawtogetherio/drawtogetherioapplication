@@ -165,7 +165,7 @@ export class DrawDoc {
             dirty = rectUnion(dirty, { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE });
           }
           return dirty;
-        });
+        }, true, undefined, !!op.erase);
       }
       case 'smudge': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
@@ -393,11 +393,14 @@ export class DrawDoc {
     return inv;
   }
 
-  /** Mutate a layer's pixels (or its mask); returns the `tiles` op that restores them (none when not recording). */
-  private pixelEdit(layer: Layer, surface: TiledSurface, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot): Op[] {
+  /**
+   * Mutate a layer's pixels (or its mask); returns the `tiles` op that restores them (none when not recording).
+   * `canEmpty`: the edit may leave tiles blank, so they are read back and dropped. Painting never does.
+   */
+  private pixelEdit(layer: Layer, surface: TiledSurface, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot, canEmpty = true): Op[] {
     const before: TileSnapshot | null = this.record ? taken ?? surface.snapshot(keys) : null;
     const dirty = mutate();
-    if (before) surface.prune(surface.snapshot(keys));
+    if (before && canEmpty) surface.prune(surface.snapshot(keys));
     if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), pixels: layer.props.id });
     if (!before) return [];
     const inv: TilesOp = { t: 'tiles', id: uid(), layer: layer.props.id, tiles: {}, img: Object.fromEntries(before) };
