@@ -8,7 +8,7 @@ import { config } from './config.ts';
 import {
   SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getSite, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, userByHandle, UserRow,
 } from './db.ts';
-import { Room, cleanShare, createRoom, deleteRoom, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
+import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
 import { validOp } from './validate.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
@@ -618,6 +618,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     for (const ws of wss.clients) ws.close(1012, 'Server restarting');
     closeAllStreams();
+    flushOps();
     flushStats();
     server.close();
     try { db.close(); } catch { /* already closed */ }

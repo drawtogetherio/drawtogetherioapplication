@@ -23,6 +23,35 @@ const randomId = (n: number) => Array.from(crypto.randomBytes(n), (b) => ID_CHAR
 
 const raw = (ws: WebSocket, m: ServerMsg) => { if (ws.readyState === 1) ws.send(JSON.stringify(m)); };
 
+// Room ops are written in batches: one transaction (one disk sync) per OP_FLUSH_MS instead of one per op.
+const OP_FLUSH_MS = 100;
+const insertOp = db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)');
+const updatedAt = db.prepare('UPDATE rooms SET updated_at = ? WHERE id = ?');
+let opQueue: [string, number, string][] = [];
+let opTimer: ReturnType<typeof setTimeout> | null = null;
+
+function queueOp(room: string, seq: number, json: string) {
+  opQueue.push([room, seq, json]);
+  opTimer ??= setTimeout(flushOps, OP_FLUSH_MS);
+}
+
+/** Writes queued room ops now; also called on shutdown and before a room is deleted. */
+export function flushOps() {
+  if (opTimer) clearTimeout(opTimer);
+  opTimer = null;
+  if (!opQueue.length) return;
+  const batch = opQueue;
+  opQueue = [];
+  db.exec('BEGIN');
+  try {
+    for (const [room, seq, json] of batch) insertOp.run(room, seq, json);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    console.error('saving room ops failed:', e);
+  }
+}
+
 export class Room {
   readonly clients = new Set<Client>();
   private ops: string[] = [];
@@ -349,10 +378,11 @@ export class Room {
     const json = JSON.stringify(op);
     this.ops.push(json);
     if (!this.seq) this.seq = (db.prepare('SELECT max(seq) AS s FROM room_ops WHERE room_id = ?').get(this.info.id) as { s: number | null }).s ?? 0;
-    db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)').run(this.info.id, ++this.seq, json);
-    const now = Date.now();
-    if (now - this.savedAt > 5000) { this.savedAt = now; db.prepare('UPDATE rooms SET updated_at = ? WHERE id = ?').run(now, this.info.id); }
+    // Relay first; the write joins a batch that goes to disk in one transaction a moment later.
     this.broadcastRaw(`{"type":"op","op":${json},"from":${JSON.stringify(from?.userId ?? 'server')}}`, from);
+    queueOp(this.info.id, ++this.seq, json);
+    const now = Date.now();
+    if (now - this.savedAt > 5000) { this.savedAt = now; updatedAt.run(now, this.info.id); }
   }
 
   private pushChat(m: ChatMsg) {
@@ -479,6 +509,7 @@ export function resumeEphemeral(ms: number) {
 }
 
 export function deleteRoom(id: string) {
+  flushOps();
   rooms.get(id)?.close();
   rooms.delete(id);
   db.prepare('DELETE FROM room_ops WHERE room_id = ?').run(id);
