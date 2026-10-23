@@ -650,7 +650,7 @@ export class App {
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
-    if (!ed.readOnly) d.append(item('download', 'Export PNG / JPG / PSD…', () => this.export()));
+    if (!ed.readOnly) d.append(item('download', 'Export PNG / PSD / .hivecanvas…', () => this.export()));
     d.append(item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
     if (ed.room && !ed.readOnly) {
       const cb = h('input', { type: 'checkbox' });

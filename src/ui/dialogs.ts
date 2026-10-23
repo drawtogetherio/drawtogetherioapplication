@@ -5,6 +5,7 @@ import type { Editor } from '../editor';
 import { ExportFormat, exportDoc, exportRect } from '../io/export';
 import { h } from './dom';
 import { icon } from './icons';
+import { timelapseDialog } from './timelapse';
 
 export function modal(title: string, body: HTMLElement, actions: HTMLElement[], onClose?: () => void, closable = true) {
   const close = () => { overlay.remove(); onClose?.(); };
@@ -118,19 +119,22 @@ export function exportDialog(ed: Editor) {
     format = f;
     for (const b of seg.children) b.classList.toggle('active', (b as HTMLElement).dataset.f === f);
     qualityRow.hidden = f !== 'jpg';
-    transRow.hidden = f === 'jpg';
+    transRow.hidden = f === 'jpg' || f === 'hivecanvas';
+    sizeNote.textContent = f === 'hivecanvas' ? 'The whole canvas with its layers, to open again in Doodlehive.' : size;
+    go.toggleAttribute('disabled', !r && f !== 'hivecanvas');
   };
-  for (const [f, label] of [['png', 'PNG'], ['jpg', 'JPG'], ['psd', 'PSD (layers)']] as const) {
+  for (const [f, label] of [['png', 'PNG'], ['jpg', 'JPG'], ['psd', 'PSD (layers)'], ['hivecanvas', 'Doodlehive (.hivecanvas)']] as const) {
     seg.append(h('button', { 'data-f': f, onclick: () => setFormat(f) }, label));
   }
   transparent.checked = !ed.doc.settings.background;
   const size = r ? `${r.w} × ${r.h} px${ed.doc.settings.infinite ? ' (cropped to your artwork)' : ''}` : 'The canvas is empty.';
   const err = h('p.error', { role: 'alert' });
-  const body = h('div.modal-body', {}, seg, h('p.muted', {}, size), h('label.row', {}, 'File name', name), qualityRow, transRow, err);
-  setFormat('png');
+  const sizeNote = h('p.muted', {}, size);
+  const body = h('div.modal-body', {}, seg, sizeNote, h('label.row', {}, 'File name', name), qualityRow, transRow, err);
   const go = h('button.btn.primary', { html: icon('download', 18) + '<span>Export</span>' });
-  if (!r) go.setAttribute('disabled', '');
-  const close = modal('Export', body, [go]);
+  setFormat('png');
+  const timelapse = h('button.btn', { html: icon('rotate', 16) + '<span>Timelapse…</span>', onclick: () => { close(); timelapseDialog(); } });
+  const close = modal('Export', body, [timelapse, go]);
   go.addEventListener('click', async () => {
     go.setAttribute('disabled', '');
     try {

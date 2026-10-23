@@ -74,6 +74,22 @@
       "target": [
         "AppImage"
       ]
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": "hivecanvas",
+        "name": "Doodlehive canvas",
+        "description": "Doodlehive canvas",
+        "role": "Editor",
+        "mimeType": "application/x-doodlehive-canvas"
+      },
+      {
+        "ext": "hivelapse",
+        "name": "Doodlehive timelapse",
+        "description": "Doodlehive timelapse",
+        "role": "Viewer",
+        "mimeType": "application/x-doodlehive-timelapse"
+      }
+    ]
   }
 }

@@ -5,8 +5,9 @@ import { Rect, ctx2d, makeCanvas, rectIntersect } from '../core/geom';
 import { BlendMode, FolderProps } from '../core/model';
 import { renderRegion } from '../engine/compositor';
 import { saveFile } from './platform';
+import { hiveCanvasBlob } from './hivecanvas';
 
-export type ExportFormat = 'png' | 'jpg' | 'psd';
+export type ExportFormat = 'png' | 'jpg' | 'psd' | 'hivecanvas';
 
 const PSD_BLEND: Record<BlendMode, PsdBlend> = {
   normal: 'normal', multiply: 'multiply', screen: 'screen', overlay: 'overlay', darken: 'darken', lighten: 'lighten',
@@ -28,6 +29,7 @@ export interface ExportOptions {
 }
 
 export async function exportDoc(doc: DrawDoc, o: ExportOptions) {
+  if (o.format === 'hivecanvas') return saveFile(await hiveCanvasBlob(doc, o.name), `${o.name}.hivecanvas`);
   const r = exportRect(doc);
   if (!r) throw new Error('Nothing to export yet. Draw something first.');
   const paper = !o.transparent || o.format === 'jpg';

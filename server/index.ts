@@ -10,6 +10,7 @@ import {
 } from './db.ts';
 import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
 import { validOp } from './validate.ts';
+import { HiveFileError, canvasOps, unzip } from '../src/shared/hivecanvas.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
@@ -29,6 +30,11 @@ import { canUseTheme, isTheme } from '../src/shared/themes.ts';
 
 const COOKIE = 'dw_session';
 const MINUTE = 60_000, HOUR = 3600_000;
+const HIVECANVAS_MAX_BYTES = 64 * 1024 * 1024;
+/** Only ever reads parts of an uploaded .hivecanvas, never more than they say they hold. */
+const inflateRaw = async (d: Uint8Array, max: number) => {
+  try { return max ? new Uint8Array(zlib.inflateRawSync(d, { maxOutputLength: max })) : new Uint8Array(); } catch { throw new HiveFileError('That file is damaged.'); }
+};
 
 function cookies(req: Req): Record<string, string> {
   const out: Record<string, string> = {};
@@ -465,6 +471,28 @@ async function route(req: Req, res: Res) {
     const share = cleanShare(b.share ?? (b.private ? { visibility: 'private' } : undefined));
     // Free accounts keep canvases on their devices; the server only holds a room while it's live.
     const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, share, !isPremium(u), ops);
+    return json(res, 200, info);
+  }
+  // A .hivecanvas file: the canvas as it looks now, so even long-lived canvases stay a few MB.
+  if (p === '/api/rooms/import' && m === 'POST') {
+    const u = requireMember(req, 'make your own canvases');
+    limit('rooms:' + u.id, 30, HOUR);
+    const buf = await body(req, HIVECANVAS_MAX_BYTES);
+    let parsed: ReturnType<typeof canvasOps>;
+    try {
+      parsed = canvasOps(await unzip(new Uint8Array(buf.buffer, buf.byteOffset, buf.length), inflateRaw), () => 'op_' + crypto.randomBytes(9).toString('base64url'));
+    } catch (e) {
+      if (e instanceof HiveFileError) throw new HttpError(400, e.message);
+      throw e;
+    }
+    const { manifest, ops } = parsed;
+    if (ops.length > 200_000 || !ops.every(validOp)) throw new HttpError(400, 'That canvas can’t be uploaded.');
+    const s = manifest.settings;
+    let shareIn: unknown;
+    try { shareIn = JSON.parse(url.searchParams.get('share') ?? 'null'); } catch { throw new HttpError(400, 'Invalid request.'); }
+    const share = cleanShare(shareIn ?? { visibility: 'private' });
+    const name = sanitizeDisplayName(url.searchParams.get('name') ?? manifest.name).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
+    const info = createRoom(u, name, { id: '', width: s.infinite ? 2048 : s.width, height: s.infinite ? 2048 : s.height, infinite: s.infinite, background: s.background }, share, !isPremium(u), ops);
     return json(res, 200, info);
   }
   if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));

@@ -60,6 +60,9 @@ export const api = {
   deleteAnimatedAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar-animated'),
   createRoom: (name: string, settings: Omit<DocSettings, 'id'>, share: ShareSettings, ops: Op[] = []) =>
     call<RoomInfo>('POST', '/api/rooms', { name, settings, share, ops }),
+  /** A .hivecanvas file becomes a room. */
+  importRoom: (file: Blob, name: string, share: ShareSettings) =>
+    call<RoomInfo>('POST', `/api/rooms/import?name=${encodeURIComponent(name)}&share=${encodeURIComponent(JSON.stringify(share))}`, undefined, file),
   updateRoom: (id: string, patch: { name?: string; share?: ShareSettings; ephemeral?: true }) => call<RoomInfo>('PATCH', '/api/rooms/' + id, patch),
   invite: (roomId: string, userId: string) => call<{ ok: true }>('POST', `/api/rooms/${roomId}/invite`, { user: userId }),
   deleteRoom: (id: string) => call<{ ok: true }>('DELETE', '/api/rooms/' + id),

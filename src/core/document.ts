@@ -2,6 +2,7 @@ import { Rect, ctx2d, makeCanvas, polyPath, rectFromPoints, rectIntersect, rectR
 import { History } from './history';
 import { DocSettings, FolderProps, LayerProps, Op, blendOp } from './model';
 import { TILE, TiledSurface, TileSnapshot } from './tiles';
+import { TILES_PER_OP } from '../shared/hivecanvas';
 import { renderStroke } from '../engine/brush';
 import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
@@ -357,6 +358,31 @@ export class DrawDoc {
       }
     }
     return null;
+  }
+
+  /** Ops that rebuild the canvas as it looks now, without its history; pixels come in room-sized chunks. */
+  snapshot(): Op[] {
+    const out: Op[] = [];
+    for (const id of this.children(null)) {
+      for (const op of this.recreate(this.nodes.get(id)!)) {
+        if (op.t !== 'tiles' || !op.img) { out.push(op); continue; }
+        const keys = Object.keys(op.img);
+        for (let i = 0; i < keys.length; i += TILES_PER_OP) {
+          const img: Record<string, ImageData | null> = {};
+          for (const k of keys.slice(i, i + TILES_PER_OP)) img[k] = op.img[k];
+          out.push({ ...op, id: i ? uid() : op.id, img });
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Swaps the change log for a snapshot of the canvas, so it stops carrying old undo pixels. */
+  compactLog(): Op[] {
+    const snap = this.snapshot();
+    this.log.length = 0;
+    this.log.push(...snap);
+    return snap;
   }
 
   private recreate(n: DocNode): Op[] {

@@ -4,7 +4,8 @@ import type { ShareSettings } from '../shared/protocol';
 import { makeThumbnail } from '../io/thumbnail';
 import { LocalCanvas, appendOps, getCanvas, loadOps, newLocalId, patchCanvas, putCanvas, replaceOps } from '../io/localStore';
 
-const THUMB_DELAY_MS = 5_000;
+const THUMB_DELAY_MS = 5_000, YIELD_MS = 30;
+const HEAVY_TILE_BYTES = 8 * 1024 * 1024, HEAVY_OPS = 20_000;
 type Settings = LocalCanvas['settings'];
 
 /** A canvas kept in this browser, written as ops happen. */
@@ -30,10 +31,22 @@ export class LocalCopy {
     return { copy: new LocalCopy(meta, ops.length), ops };
   }
 
-  async toDoc(ops: Op[]) {
+  async toDoc(ops: Op[], onProgress?: (f: number) => void) {
     const doc = new DrawDoc({ id: 'doc_' + this.meta.id, ...this.meta.settings });
-    for (const op of ops) { await doc.prepare(op); doc.apply(op, { record: false }); }
+    let t = performance.now();
+    for (let i = 0; i < ops.length; i++) {
+      await doc.prepare(ops[i]);
+      doc.apply(ops[i], { record: false });
+      if (performance.now() - t > YIELD_MS) { onProgress?.((i + 1) / ops.length); await new Promise((r) => setTimeout(r)); t = performance.now(); }
+    }
     return doc;
+  }
+
+  /** A log carrying many old undo pixels (or very long) is worth rewriting as a snapshot of the canvas. */
+  static heavy(ops: Op[]) {
+    let bytes = 0;
+    for (const op of ops) if (op.t === 'tiles') for (const v of Object.values(op.tiles)) bytes += v?.length ?? 0;
+    return bytes > HEAVY_TILE_BYTES || ops.length > HEAVY_OPS;
   }
 
   push(op: Op) {
