@@ -30,6 +30,9 @@ export class LayersPanel {
   private thumbs = new Map<string, HTMLCanvasElement>();
   private maskThumbs = new Map<string, HTMLCanvasElement>();
   private thumbTimer = 0;
+  /** Layers whose thumbnails are stale; null means all of them. */
+  private staleThumbs: Set<string> | null = new Set();
+  private thumbArea = '';
   private collapsed = new Set<string>();
   selectedFolder: string | null = null;
   private rows: Row[] = [];
@@ -83,8 +86,13 @@ export class LayersPanel {
       this.folderFooter,
     );
     ed.on((w) => {
-      if (w === 'layers' || w === 'doc' || w === 'members' || w === 'settings') {
+      if (w.startsWith('pixels:')) {
+        // Only that layer's pixels changed: refresh its thumbnail, leave the rows alone.
+        this.staleThumbs?.add(w.slice(7));
+        this.scheduleThumbs();
+      } else if (w === 'layers' || w === 'doc' || w === 'members' || w === 'settings') {
         if (this.selectedFolder && (!this.ed.doc.folder(this.selectedFolder) || this.ed.targetFolder !== this.selectedFolder)) this.selectedFolder = null;
+        if (w === 'layers' || w === 'doc') this.staleThumbs = null;
         this.scheduleThumbs();
         if (this.open) this.render();
       }
@@ -358,24 +366,38 @@ export class LayersPanel {
     return c;
   }
 
+  /** Throttled rather than debounced, so thumbnails keep up while people draw without running per stroke. */
   private scheduleThumbs() {
-    clearTimeout(this.thumbTimer);
+    if (this.thumbTimer) return;
     this.thumbTimer = window.setTimeout(() => {
+      this.thumbTimer = 0;
+      const s = this.ed.doc.settings;
+      const area: Rect | null = s.infinite ? this.ed.doc.bounds() : { x: 0, y: 0, w: s.width, h: s.height };
+      const key = area ? [area.x, area.y, area.w, area.h].join(',') : '';
+      // A new framing redraws every thumbnail; otherwise only the layers that changed.
+      const stale = key === this.thumbArea ? this.staleThumbs : null;
+      this.thumbArea = key;
+      this.staleThumbs = new Set();
       for (const [id, c] of this.thumbs) {
         const l = this.ed.doc.layer(id);
-        if (l) this.drawThumb(l, c); else this.thumbs.delete(id);
+        if (!l) this.thumbs.delete(id);
+        else if (!stale || stale.has(id)) this.drawThumb(l, c, false, area);
       }
       for (const [id, c] of this.maskThumbs) {
         const l = this.ed.doc.layer(id);
-        if (l?.mask) this.drawThumb(l, c, true); else this.maskThumbs.delete(id);
+        if (!l?.mask) this.maskThumbs.delete(id);
+        else if (!stale || stale.has(id)) this.drawThumb(l, c, true, area);
       }
     }, 300);
   }
 
-  /** The layer's pixels, or its mask as black on white (black hides, like other apps show it). */
-  private drawThumb(l: Layer, c: HTMLCanvasElement, mask = false) {
+  private thumbFrame(): Rect | null {
     const s = this.ed.doc.settings;
-    const area: Rect | null = s.infinite ? this.ed.doc.bounds() : { x: 0, y: 0, w: s.width, h: s.height };
+    return s.infinite ? this.ed.doc.bounds() : { x: 0, y: 0, w: s.width, h: s.height };
+  }
+
+  /** The layer's pixels, or its mask as black on white (black hides, like other apps show it). */
+  private drawThumb(l: Layer, c: HTMLCanvasElement, mask = false, area = this.thumbFrame()) {
     const ctx = ctx2d(c);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, THUMB, THUMB);

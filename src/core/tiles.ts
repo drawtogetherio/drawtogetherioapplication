@@ -7,6 +7,8 @@ export type TileSnapshot = Map<string, ImageData | null>;
 /** A sparse raster of 256×256 tiles, created as they are painted. */
 export class TiledSurface {
   readonly tiles = new Map<string, HTMLCanvasElement>();
+  /** Painted bounds of each tile, tile-local; dropped whenever the tile may have been written. */
+  private painted = new Map<string, Rect | null>();
 
   static key(tx: number, ty: number) { return tx + ',' + ty; }
   static parse(k: string): [number, number] {
@@ -16,8 +18,13 @@ export class TiledSurface {
 
   get(tx: number, ty: number) { return this.tiles.get(TiledSurface.key(tx, ty)); }
 
+  /** Callers that draw on a tile they got from `tiles` directly say so here. */
+  touch(k: string) { this.painted.delete(k); }
+
+  /** The tile to draw on, made if missing; its cached bounds are dropped since the caller writes to it. */
   ensure(tx: number, ty: number): HTMLCanvasElement {
     const k = TiledSurface.key(tx, ty);
+    this.painted.delete(k);
     let t = this.tiles.get(k);
     if (!t) { t = makeCanvas(TILE, TILE); this.tiles.set(k, t); }
     return t;
@@ -37,6 +44,7 @@ export class TiledSurface {
       const [tx, ty] = TiledSurface.parse(k);
       const t = create ? this.ensure(tx, ty) : this.get(tx, ty);
       if (!t) continue;
+      this.painted.delete(k);
       const c = ctx2d(t);
       c.save();
       c.translate(-tx * TILE, -ty * TILE);
@@ -56,6 +64,7 @@ export class TiledSurface {
 
   restore(s: TileSnapshot) {
     for (const [k, data] of s) {
+      this.painted.delete(k);
       if (!data) { this.tiles.delete(k); continue; }
       const [tx, ty] = TiledSurface.parse(k);
       ctx2d(this.ensure(tx, ty)).putImageData(data, 0, 0);
@@ -77,22 +86,15 @@ export class TiledSurface {
     return r;
   }
 
+  /** Bounds of the painted pixels. Each tile is read back once and cached until it is drawn on again. */
   contentBounds(): Rect | null {
     let r: Rect | null = null;
     for (const [k, t] of this.tiles) {
+      let b = this.painted.get(k);
+      if (b === undefined) this.painted.set(k, b = paintedIn(t));
+      if (!b) continue;
       const [tx, ty] = TiledSurface.parse(k);
-      const d = ctx2d(t).getImageData(0, 0, TILE, TILE).data;
-      let x0 = TILE, y0 = TILE, x1 = -1, y1 = -1;
-      for (let y = 0; y < TILE; y++) {
-        const row = y * TILE * 4;
-        for (let x = 0; x < TILE; x++) {
-          if (d[row + x * 4 + 3]) {
-            if (x < x0) x0 = x; if (x > x1) x1 = x;
-            if (y < y0) y0 = y; if (y > y1) y1 = y;
-          }
-        }
-      }
-      if (x1 >= 0) r = rectUnion(r, { x: tx * TILE + x0, y: ty * TILE + y0, w: x1 - x0 + 1, h: y1 - y0 + 1 });
+      r = rectUnion(r, { x: tx * TILE + b.x, y: ty * TILE + b.y, w: b.w, h: b.h });
     }
     return r;
   }
@@ -122,10 +124,11 @@ export class TiledSurface {
       ctx2d(c).drawImage(t, 0, 0);
       s.tiles.set(k, c);
     }
+    for (const [k, b] of this.painted) s.painted.set(k, b);
     return s;
   }
 
-  clear() { this.tiles.clear(); }
+  clear() { this.tiles.clear(); this.painted.clear(); }
   get size() { return this.tiles.size; }
 }
 
@@ -133,4 +136,19 @@ function isEmpty(d: ImageData) {
   const a = d.data;
   for (let i = 3; i < a.length; i += 4) if (a[i]) return false;
   return true;
+}
+
+function paintedIn(t: HTMLCanvasElement): Rect | null {
+  const d = ctx2d(t).getImageData(0, 0, TILE, TILE).data;
+  let x0 = TILE, y0 = TILE, x1 = -1, y1 = -1;
+  for (let y = 0; y < TILE; y++) {
+    const row = y * TILE * 4;
+    for (let x = 0; x < TILE; x++) {
+      if (d[row + x * 4 + 3]) {
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+    }
+  }
+  return x1 >= 0 ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : null;
 }

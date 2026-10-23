@@ -17,6 +17,8 @@ export type DocNode = Layer | Folder;
 export interface DocChange {
   rect: Rect | null;
   structure?: boolean;
+  /** The layer whose pixels (or mask) changed, when only pixels did. */
+  pixels?: string;
 }
 
 export interface ApplyOptions {
@@ -247,6 +249,7 @@ export class DrawDoc {
         const inv = this.pixelEdit(layer, layer.surface, keys, () => {
           for (const k of keys) {
             const c = ctx2d(layer.surface.tiles.get(k)!);
+            layer.surface.touch(k);
             c.save();
             c.globalCompositeOperation = 'destination-out';
             c.drawImage(mask.tiles.get(k)!, 0, 0);
@@ -395,7 +398,7 @@ export class DrawDoc {
     const before: TileSnapshot | null = this.record ? taken ?? surface.snapshot(keys) : null;
     const dirty = mutate();
     if (before) surface.prune(surface.snapshot(keys));
-    if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), structure: true });
+    if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), pixels: layer.props.id });
     if (!before) return [];
     const inv: TilesOp = { t: 'tiles', id: uid(), layer: layer.props.id, tiles: {}, img: Object.fromEntries(before) };
     if (surface === layer.mask) inv.mask = true;

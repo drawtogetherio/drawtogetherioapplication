@@ -78,6 +78,7 @@ export class Editor {
       this.view.invalidate(c.rect);
       if (!this.doc.layer(this.activeLayer)) this.pickActiveLayer();
       if (c.structure) this.emit('layers');
+      else if (c.pixels) this.emit('pixels:' + c.pixels);
     });
     this.doc.history.onChange = () => this.emit('history');
   }

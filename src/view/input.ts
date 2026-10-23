@@ -34,8 +34,7 @@ export class InputController {
     }
   }
 
-  private info(e: PointerEvent): PointerInfo {
-    const r = this.el.getBoundingClientRect();
+  private info(e: PointerEvent, r: DOMRect = this.el.getBoundingClientRect()): PointerInfo {
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
     const d = this.ed.view.viewport.toDoc(sx, sy);
     const type = (e.pointerType === 'pen' || e.pointerType === 'touch' ? e.pointerType : 'mouse') as PointerInfo['type'];
@@ -135,8 +134,9 @@ export class InputController {
     }
     if (e.pointerId === this.toolPointer) {
       const events = e.getCoalescedEvents?.() ?? [];
-      for (const ce of events.length ? events : [e]) this.activeTool.move(this.info(ce));
-      const p = this.info(e);
+      const r = this.el.getBoundingClientRect(); // once per event, not per coalesced sample
+      for (const ce of events.length ? events : [e]) this.activeTool.move(this.info(ce, r));
+      const p = this.info(e, r);
       this.ed.sendCursor(p.x, p.y, true);
       return;
     }
