@@ -244,7 +244,11 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
       setup ? null : h('div.field', {}, h('span.field-label', {}, `Pinned canvases (${PINNED_MAX} max)`), pins, pinPicker, err('pinned')),
       err('form'),
     );
-    body.addEventListener('pointerdown', (e) => { const t = e.target as Node; if (!colorPop.contains(t) && !swatches.some((b) => b.contains(t))) { colorPop.hidden = true; renderColor(); } });
+    // Only the pop-up and the swatch highlights change here: re-rendering the picture on pointerdown would swallow its click.
+    body.addEventListener('pointerdown', (e) => {
+      const t = e.target as Node;
+      if (!colorPop.hidden && !colorPop.contains(t) && !swatches.some((b) => b.contains(t))) { colorPop.hidden = true; swatches.forEach((b) => b.classList.remove('active')); }
+    });
     checkName();
     void renderPremium();
 

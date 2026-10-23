@@ -113,6 +113,11 @@ await renPage.goto(`${base}/app`);
 await renPage.locator('.me-pic').click();
 await renPage.getByRole('button', { name: 'Edit profile' }).click();
 check(await renPage.locator('.avatar-edit .pic-overlay').count() === 1 && await renPage.locator('.banner-edit .pic-overlay').count() === 1, 'picture and banner upload from a hover overlay');
+for (const [sel, what] of [['.avatar-edit', 'picture'], ['.banner-edit', 'banner']]) {
+  const chooser = renPage.waitForEvent('filechooser', { timeout: 3000 }).then(() => true, () => false);
+  await renPage.locator(sel).click();
+  check(await chooser, `clicking the ${what} opens the file chooser`);
+}
 await renPage.setInputFiles('#avatar-file', { name: 'b.png', mimeType: 'image/png', buffer: png });
 await renPage.waitForSelector('.crop-stage');
 await renPage.getByRole('button', { name: 'Use picture' }).click();
