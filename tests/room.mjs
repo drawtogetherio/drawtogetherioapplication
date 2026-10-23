@@ -23,7 +23,9 @@ async function person(name, color, target = url) {
   await page.getByRole('button', { name: 'Dev login' }).click();
   await page.waitForSelector('#display-name');
   await page.fill('#display-name', name + ' ✿');
+  await page.locator('.gswatch').first().click();
   await page.fill('#fav-hex', color);
+  await page.locator('.field-label', { hasText: 'Profile colour' }).click({ position: { x: 5, y: 5 } });
   await page.locator('.social-add').click();
   await page.locator('.social-choice[aria-label="Bluesky"]').click();
   await page.fill('#link-bluesky', name.toLowerCase() + '.bsky.social');

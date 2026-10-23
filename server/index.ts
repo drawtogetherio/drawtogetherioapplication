@@ -341,7 +341,8 @@ async function route(req: Req, res: Res) {
       limit('upload:' + u.id, 30, HOUR);
       const buf = await body(req, AVATAR_MAX_BYTES);
       const type = checkAvatar(buf);
-      db.prepare('UPDATE users SET avatar = ?, avatar_type = ?, avatar_version = avatar_version + 1 WHERE id = ?').run(buf, type, u.id);
+      // A new still replaces a GIF too; a GIF upload follows its still.
+      db.prepare('UPDATE users SET avatar = ?, avatar_type = ?, avatar_version = avatar_version + 1, avatar_anim = NULL, avatar_anim_crop = NULL WHERE id = ?').run(buf, type, u.id);
     }
     profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));

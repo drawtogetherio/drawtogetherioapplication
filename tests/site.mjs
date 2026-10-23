@@ -113,6 +113,7 @@ check(px[0] > 200 && px[2] < 60, 'cropped picture keeps the part chosen (' + px.
 
 // ---- Handles ----
 const handleState = () => ren.locator('.handle-state').textContent();
+await ren.locator('[aria-label="Change handle"]').click();
 await ren.fill('#handle', '.nope');
 check(/Periods/.test(await handleState()), 'bad handle explained');
 await ren.fill('#handle', 'ren.draws' + suffix);
@@ -130,6 +131,7 @@ const bob = await newPage('bob');
 await signUp(bob, 'Bob', '');
 await bob.locator('.me-pic').click();
 await bob.getByRole('button', { name: 'Edit profile' }).click();
+await bob.locator('[aria-label="Change handle"]').click();
 await bob.fill('#handle', renHandle2.toUpperCase());
 await bob.waitForFunction(() => /taken/.test(document.querySelector('.handle-state').textContent));
 check(true, 'taken handle is flagged (case-insensitive)');

@@ -550,22 +550,31 @@ button.brand:hover { background: var(--hover); }
 .premium-lock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; text-align: center; font-weight: 600; }
 .premium-box .row.center { justify-content: center; }
 .row.wrap { flex-wrap: wrap; }
-.profile-pics { position: relative; margin-bottom: 30px; }
+.profile-pics { position: relative; margin-bottom: 40px; }
 .banner-edit, .profile-banner { aspect-ratio: 3; border-radius: 12px; background: var(--panel-2) center / cover no-repeat; }
-.banner-edit { border: 1px dashed var(--line); }
+.banner-edit { display: block; width: 100%; border: 1px dashed var(--line); padding: 0; cursor: pointer; position: relative; overflow: hidden; }
 .banner-edit.has-banner { border-style: solid; }
-.profile-pics .avatar-edit { position: absolute; left: 14px; bottom: -24px; }
+.avatar-edit { position: absolute; left: 14px; bottom: -34px; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; overflow: hidden; }
+.pic-overlay { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.55); color: #fff; opacity: 0; transition: opacity 0.12s; border-radius: inherit; }
+.avatar-edit .pic-overlay { border-radius: 50%; }
+.banner-edit:hover .pic-overlay, .avatar-edit:hover .pic-overlay, .banner-edit:focus-visible .pic-overlay, .avatar-edit:focus-visible .pic-overlay { opacity: 1; }
+.pic-hint .link-btn { margin-left: 6px; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font: inherit; font-size: inherit; }
+.link-btn:hover { color: var(--text); }
 .profile-pics .avatar, .profile-card-head.under-banner .avatar { box-shadow: 0 0 0 3px var(--panel); }
+.me-card.has-banner { background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), var(--banner) center / cover no-repeat; animation: none; }
 .profile-card-head.under-banner { margin-top: -34px; padding-left: 12px; }
 .profile-card-head.under-banner > div { padding-top: 30px; }
-.color-field { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.color-field { position: relative; }
+.name-preview { font-size: 17px; font-weight: 700; }
+.swatch-pop { top: 0; left: 0; right: auto; z-index: 30; }
+.swatch-pop .panel { padding: 10px; }
 .hsv-field { display: grid; gap: 8px; width: 200px; }
 .hsv-field .cp-sv { height: 120px; }
 .hsv-field .cp-hex { width: 100%; }
 .gswatches { display: flex; align-items: center; gap: 8px; }
 .gswatch { width: 34px; height: 28px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; box-shadow: 0 0 0 1px var(--line); }
 .gswatch.active { border-color: var(--text); }
-.gswatches .gradient-name { font-size: 16px; font-weight: 700; }
 .field-label .check { margin-left: auto; font-weight: 500; }
 
 /* ---------- Home (/app) ---------- */

@@ -30,41 +30,52 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
     let end: 0 | 1 = 0;
     const gradOn = h('input', { type: 'checkbox', id: 'gradient-on' });
     gradOn.checked = !!me.gradient;
-    const namePreview = h('span.gradient-name');
-    const swatches = [0, 1].map((i) => h('button.gswatch', { type: 'button', 'aria-label': i ? 'Gradient end' : 'Gradient start', onclick: () => { end = i as 0 | 1; picker.set(g[end]); renderColor(); } }));
-    const gradRow = h('div.gswatches', {}, ...swatches, namePreview);
+    const namePreview = h('span.name-preview');
     const picker = new HsvField(color, (hex) => { if (gradOn.checked) g[end] = hex; else color = hex; renderColor(); });
+    const colorPop = h('div.popover.swatch-pop', { hidden: true }, h('div.panel', {}, picker.el));
+    // Click a swatch to open the picker for it.
+    const swatches = [0, 1].map((i) => h('button.gswatch', { type: 'button', 'aria-label': i ? 'Gradient end' : 'Profile colour', onclick: () => {
+      end = i as 0 | 1;
+      colorPop.hidden = !colorPop.hidden && colorPop.dataset.for === String(i);
+      colorPop.dataset.for = String(i);
+      picker.set(gradOn.checked ? g[end] : color);
+      colorPop.style.top = `${swatches[i].offsetTop + swatches[i].offsetHeight + 6}px`;
+      colorPop.style.left = `${swatches[i].offsetLeft}px`;
+      renderColor();
+    } }));
+    const gradient = (): [string, string] | null => (gradOn.checked && premium() ? [...g] as [string, string] : null);
     const renderColor = () => {
-      const on = gradOn.checked && premium();
+      const gr = gradient();
       gradOn.disabled = !premium();
-      gradRow.hidden = !on;
-      swatches.forEach((s, i) => { s.style.background = g[i]; s.classList.toggle('active', end === i); });
+      swatches[1].hidden = !gr;
+      swatches[0].style.background = gr ? g[0] : color;
+      swatches[1].style.background = g[1];
+      swatches.forEach((s, i) => s.classList.toggle('active', !colorPop.hidden && end === i));
       namePreview.textContent = sanitizeDisplayName(nameIn.value) || current.displayName;
-      namePreview.setAttribute('style', gradientStyle(g));
+      namePreview.className = gr ? 'name-preview gradient-name' : 'name-preview';
+      namePreview.setAttribute('style', gr ? gradientStyle(gr) : `color:${color}`);
       renderAvatar();
     };
-    gradOn.addEventListener('change', () => { picker.set(gradOn.checked ? g[end] : color); renderColor(); });
-    const gradient = (): [string, string] | null => (gradOn.checked && premium() ? [...g] as [string, string] : null);
-    const colorField = h('div.field', {},
+    gradOn.addEventListener('change', () => { end = 0; colorPop.hidden = true; renderColor(); });
+    const colorField = h('div.field.color-field', {},
       h('div.field-label', {}, 'Profile colour', h('label.check', { title: premium() ? '' : 'Part of premium' }, gradOn, 'Gradient')),
-      h('div.color-field', {}, picker.el, gradRow), err('favoriteColor'), err('gradient'));
+      namePreview, h('div.gswatches', {}, ...swatches), colorPop, err('favoriteColor'), err('gradient'));
 
     // ---- Picture and banner ----
-    const avatarBox = h('div.avatar-edit');
-    const bannerBox = h('div.banner-edit');
+    const file = h('input', { type: 'file', id: 'avatar-file', hidden: true });
+    const bannerFile = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', id: 'banner-file', hidden: true });
+    const overlay = () => h('span.pic-overlay', { html: icon('camera', 26) });
+    const avatarBox = h('button.avatar-edit', { type: 'button', title: 'Change picture', 'aria-label': 'Change picture', onclick: () => { file.accept = 'image/png,image/jpeg,image/webp' + (premium() ? ',image/gif' : ''); file.click(); } });
+    const bannerBox = h('button.banner-edit', { type: 'button', title: 'Change banner', 'aria-label': 'Change banner', onclick: () => bannerFile.click() }, overlay());
+    const remove = h('button.link-btn', { type: 'button', onclick: async () => { current = await api.deleteAvatar(); renderAvatar(); } }, 'Remove picture');
+    const removeBanner = h('button.link-btn', { type: 'button', onclick: async () => { current = await api.deleteBanner(); renderAvatar(); } }, 'Remove banner');
     const renderAvatar = () => {
-      avatarBox.replaceChildren(avatarEl({ ...current, displayName: nameIn.value || current.displayName, favoriteColor: color, gradient: gradient() }, 72, true));
+      avatarBox.replaceChildren(avatarEl({ ...current, displayName: nameIn.value || current.displayName, favoriteColor: color, gradient: gradient() }, 96, true), overlay());
       bannerBox.style.backgroundImage = current.banner ? `url(${current.banner})` : '';
       bannerBox.classList.toggle('has-banner', !!current.banner);
       removeBanner.hidden = !current.banner;
       remove.hidden = !current.avatar;
     };
-    const file = h('input', { type: 'file', id: 'avatar-file', hidden: true });
-    const bannerFile = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', id: 'banner-file', hidden: true });
-    const upload = h('button.btn', { type: 'button', onclick: () => { file.accept = 'image/png,image/jpeg,image/webp' + (premium() ? ',image/gif' : ''); file.click(); } }, 'Upload picture');
-    const remove = h('button.btn', { type: 'button', onclick: async () => { current = await api.deleteAvatar(); renderAvatar(); } }, 'Remove');
-    const uploadBanner = h('button.btn', { type: 'button', onclick: () => bannerFile.click() }, 'Upload banner');
-    const removeBanner = h('button.btn', { type: 'button', onclick: async () => { current = await api.deleteBanner(); renderAvatar(); } }, 'Remove banner');
     const pick = async (input: HTMLInputElement, key: string, run: (f: File) => Promise<void>) => {
       const f = input.files?.[0];
       input.value = '';
@@ -77,9 +88,9 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
       if (gif && f.size > AVATAR_ANIM_MAX_BYTES) throw new Error(`Keep GIFs under ${Math.round(AVATAR_ANIM_MAX_BYTES / 1048576)} MB.`);
       const crop = await cropImage(f);
       if (!crop) return;
-      // The GIF itself can't be re-encoded here, so it is uploaded whole with its crop; the still is cut from the first frame.
-      if (gif) current = await api.uploadAnimatedAvatar(f, { x: crop.x / crop.w, y: crop.y / crop.w, w: crop.srcW / crop.w, h: crop.srcH / crop.w });
+      // The still goes first (it replaces any GIF); a GIF can't be re-encoded here, so it follows whole with its crop.
       current = await api.uploadAvatar(await makeAvatar(f, crop));
+      if (gif) current = await api.uploadAnimatedAvatar(f, { x: crop.x / crop.w, y: crop.y / crop.w, w: crop.srcW / crop.w, h: crop.srcH / crop.w });
     }));
     bannerFile.addEventListener('change', () => pick(bannerFile, 'avatar', async (f) => {
       const crop = await cropImage(f, 3, 'Crop your banner');
@@ -94,7 +105,7 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
     const checkHandle = () => {
       clearTimeout(checkTimer);
       const v = handleIn.value.trim().replace(/^@/, '');
-      if (v.toLowerCase() === current.handle.toLowerCase()) { setState('ok', v === current.handle ? 'This is your handle.' : 'Available'); return; }
+      if (v.toLowerCase() === current.handle.toLowerCase()) { setState('', ''); return; }
       const bad = handleError(v);
       if (bad) { setState('bad', bad); return; }
       setState('wait', 'Checking…');
@@ -110,15 +121,17 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
     handleIn.addEventListener('input', () => { showErr('handle', ''); checkHandle(); });
     const shuffle = h('button.btn', { type: 'button', html: icon('rotate', 16) + '<span>Shuffle</span>' });
     shuffle.addEventListener('click', async () => { handleIn.value = (await api.randomHandle()).handle; });
-    if (guest) handleIn.readOnly = true;
+    // Locked after setup so it isn't changed by accident; the pencil unlocks it.
+    handleIn.readOnly = guest || !setup;
+    const pencil = h('button.icon-btn', { type: 'button', title: 'Change handle', 'aria-label': 'Change handle', html: icon('pencil', 18), onclick: () => { handleIn.readOnly = false; pencil.hidden = true; handleIn.focus(); } });
+    pencil.hidden = guest || setup;
     const handle = () => handleIn.value.trim().replace(/^@/, '');
     const handleField = h('div.field', {},
       h('label.field-label', { for: 'handle' }, 'Handle'),
-      h('div.row.handle-row', {}, h('span.handle-input', {}, h('span.at', {}, '@'), handleIn), guest ? shuffle : null),
+      h('div.row.handle-row', {}, h('span.handle-input', {}, h('span.at', {}, '@'), handleIn), guest ? shuffle : pencil),
       guest ? h('small.muted', {}, 'Log in with Discord to choose your own handle.') : handleState,
       err('handle'),
     );
-    if (!guest) checkHandle();
 
     const nameIn = h('input', { type: 'text', id: 'display-name', value: me.displayName, maxlength: DISPLAY_NAME_MAX * 2, autocomplete: 'nickname', 'aria-label': 'Display name' });
     const counter = h('span.counter');
@@ -222,8 +235,7 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
     const body = h('form.modal-body.profile-form', {},
       h('div.field', {},
         h('div.profile-pics', {}, bannerBox, avatarBox),
-        h('div.row.wrap', {}, upload, remove, uploadBanner, removeBanner),
-        h('small.muted', {}, 'PNG, JPG or WebP. GIF pictures with premium.'), err('avatar'), file, bannerFile),
+        h('small.muted.pic-hint', {}, 'PNG, JPG or WebP. GIF pictures with premium. ', remove, removeBanner), err('avatar'), file, bannerFile),
       h('div.field', {}, h('label.field-label', { for: 'display-name' }, 'Display name ', counter), nameIn, err('displayName')),
       handleField,
       colorField,
@@ -232,6 +244,7 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
       setup ? null : h('div.field', {}, h('span.field-label', {}, `Pinned canvases (${PINNED_MAX} max)`), pins, pinPicker, err('pinned')),
       err('form'),
     );
+    body.addEventListener('pointerdown', (e) => { const t = e.target as Node; if (!colorPop.contains(t) && !swatches.some((b) => b.contains(t))) { colorPop.hidden = true; renderColor(); } });
     checkName();
     void renderPremium();
 

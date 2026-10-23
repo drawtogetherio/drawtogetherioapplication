@@ -25,6 +25,8 @@ const P: Record<string, string> = {
   clear: '<path d="M4 4l16 16M20 4L4 20"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  pencil: '<path d="M4 20l4-1L19 8l-3-3L5 16z"/><path d="M14 7l3 3"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   file: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/>',
   rotate: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',

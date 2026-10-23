@@ -80,19 +80,27 @@ r = await fetch(base + m.banner);
 check(r.ok && r.headers.get('content-type').startsWith('image/'), 'the banner is stored and served');
 
 // ---- Colour and gradient in one picker ----
+check(await renPage.locator('.swatch-pop').isHidden() && await renPage.locator('.gswatch:visible').count() === 1, 'one colour swatch under the name, picker closed');
 await renPage.locator('#gradient-on').check();
-await renPage.waitForSelector('.gswatches:not([hidden])');
 await renPage.locator('.gswatch[aria-label="Gradient end"]').click();
+await renPage.waitForSelector('.swatch-pop:not([hidden]) #fav-hex');
 await renPage.fill('#fav-hex', '#00ff00');
-check((await renPage.locator('.gswatch[aria-label="Gradient end"]').getAttribute('style')).includes('rgb(0, 255, 0)'), 'the picker edits the chosen gradient end');
-check(await renPage.locator('.gswatches .gradient-name').innerText() === 'Ren' + suffix, 'with the name previewed in the gradient');
+check((await renPage.locator('.gswatch[aria-label="Gradient end"]').getAttribute('style')).includes('rgb(0, 255, 0)'), 'the pop-up picker edits the chosen gradient end');
+check(await renPage.locator('.name-preview.gradient-name').innerText() === 'Ren' + suffix, 'with the name previewed in the gradient');
+await renPage.locator('.name-preview').click();
+check(await renPage.locator('.swatch-pop').isHidden(), 'clicking elsewhere closes the picker');
 await renPage.screenshot({ path: `${out}/02-premium.png` });
+check(await renPage.locator('#handle').evaluate((el) => el.readOnly) && await renPage.locator('.handle-state').innerText() === '', 'the handle is locked and says nothing');
+await renPage.locator('[aria-label="Change handle"]').click();
+check(!(await renPage.locator('#handle').evaluate((el) => el.readOnly)), 'the pencil unlocks it');
 await renPage.getByRole('button', { name: 'Save', exact: true }).click();
 await renPage.waitForSelector('.profile-form', { state: 'detached' });
 m = await me(ren);
 check(m.gradient?.[1] === '#00ff00', 'saving keeps the gradient');
 
 // ---- The card ----
+await renPage.waitForSelector('.me-card.has-banner');
+check((await renPage.locator('.me-card').getAttribute('style')).includes('--banner:url('), 'the home card shows the banner');
 await samPage.goto(`${base}/app`);
 await samPage.locator('.friends-list .friend-row', { hasText: 'Ren' }).click();
 await samPage.waitForSelector('.profile-card .profile-banner');
@@ -100,11 +108,18 @@ check(await samPage.locator('.profile-card-head.under-banner .avatar img[src*="/
 await samPage.screenshot({ path: `${out}/03-card.png` });
 await samPage.keyboard.press('Escape');
 
-// ---- Removing the picture drops the GIF too ----
+// ---- A still replaces the GIF; removing the picture drops both ----
 await renPage.goto(`${base}/app`);
 await renPage.locator('.me-pic').click();
 await renPage.getByRole('button', { name: 'Edit profile' }).click();
-await renPage.getByRole('button', { name: 'Remove', exact: true }).click();
+check(await renPage.locator('.avatar-edit .pic-overlay').count() === 1 && await renPage.locator('.banner-edit .pic-overlay').count() === 1, 'picture and banner upload from a hover overlay');
+await renPage.setInputFiles('#avatar-file', { name: 'b.png', mimeType: 'image/png', buffer: png });
+await renPage.waitForSelector('.crop-stage');
+await renPage.getByRole('button', { name: 'Use picture' }).click();
+await renPage.waitForSelector('.avatar-edit img:not([src*="/anim"])');
+m = await me(ren);
+check(m.avatar && !m.avatarAnimated, 'a still picture replaces a GIF one');
+await renPage.getByRole('button', { name: 'Remove picture' }).click();
 await renPage.waitForSelector('.avatar-edit .avatar:not(:has(img))');
 m = await me(ren);
 check(!m.avatar && !m.avatarAnimated, 'Remove clears the still and the GIF');

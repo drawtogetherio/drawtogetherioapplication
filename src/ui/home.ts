@@ -168,8 +168,8 @@ export class Home {
     const me = this.app.ed.me;
     clear(this.meCard);
     if (!me) return;
-    this.meCard.className = 'me-card' + (me.gradient ? ' has-gradient' : '');
-    this.meCard.setAttribute('style', me.gradient ? gradientStyle(me.gradient) : `--g1:${me.favoriteColor};--g2:${me.favoriteColor}`);
+    this.meCard.className = 'me-card' + (me.gradient ? ' has-gradient' : '') + (me.banner ? ' has-banner' : '');
+    this.meCard.setAttribute('style', (me.gradient ? gradientStyle(me.gradient) : `--g1:${me.favoriteColor};--g2:${me.favoriteColor}`) + (me.banner ? `;--banner:url(${me.banner})` : ''));
     let status: HTMLElement;
     if (editing) {
       const inp = h('input', { type: 'text', id: 'status', value: me.status, maxlength: STATUS_MAX * 2, placeholder: 'What are you up to?', 'aria-label': 'Status' });
