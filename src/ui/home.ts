@@ -12,6 +12,7 @@ import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 import { LocalCanvas, deleteCanvas, listCanvases, patchCanvas } from '../io/localStore';
+import { deleteLapse, roomLapseKey } from '../io/lapse';
 import { isNativeApp, native } from '../io/native';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
@@ -452,6 +453,7 @@ export class Home {
       item('trash', 'Delete', async () => {
         if (!(await confirmDialog('Delete this canvas?', `“${p.name}” will be removed from this device.`, 'Delete'))) return;
         await deleteCanvas(p.id).catch(() => {});
+        await deleteLapse(p.id).catch(() => {});
         this.loadProjects();
       }, '.danger'),
     ));
@@ -478,7 +480,7 @@ export class Home {
       }) : null,
       item('trash', 'Delete', async () => {
         if (!(await confirmDialog('Delete this canvas?', `“${p.name}” will be deleted for everyone.`, 'Delete'))) return;
-        try { await api.deleteRoom(p.id); this.loadProjects(); } catch (e) { this.app.toast((e as Error).message); }
+        try { await api.deleteRoom(p.id); deleteLapse(roomLapseKey(p.id)).catch(() => {}); this.loadProjects(); } catch (e) { this.app.toast((e as Error).message); }
       }, '.danger'),
     ));
     const r = anchor.getBoundingClientRect();

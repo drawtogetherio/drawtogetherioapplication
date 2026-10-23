@@ -285,6 +285,18 @@ from GitHub (see DEPLOY.md). Every canvas shows where it lives at the top right:
 server, a yellow **In Cache** warning in a browser (hover: the browser may clear it, get the app), and
 a device icon in the apps. Home tiles carry the same mark.
 
+**Files (.hivecanvas, .hivelapse).** `src/shared/hivecanvas.ts` reads and writes both, for the app and
+the server. A `.hivecanvas` is a zip of `manifest.json`, `tree.json` (folders and layers) and the
+layers' 256 px tiles as PNGs: the canvas as it looks now, never its undo history. Export saves one,
+**Open a file** on the home screen opens one, and the desktop app opens them from the file manager.
+A device canvas moves to a premium account as a `.hivecanvas` (`POST /api/rooms/import`), so a long
+history full of undo pixels can't block it, and a device log heavy with undo pixels is rewritten as a
+snapshot the first time it is opened (`DrawDoc.compactLog`).
+Timelapses (`src/io/lapse.ts`) are recorded only on the device: every 10 s the composited tiles that
+changed are kept losslessly in their own IndexedDB database, merged in pairs past 2000 frames. **Export →
+Timelapse…** makes a 1080p or 4K video in the browser, or saves the frames as a `.hivelapse`. The server
+never takes a timelapse.
+
 ### Known limits (fine for now, worth revisiting)
 - Two hosts restructuring the same folder at the exact same moment can see different orders until reload.
 - Undoing a stroke restores whole 256px tiles, so it can also undo a host's edit in the same tile of your layer.
@@ -315,6 +327,7 @@ DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, 
 DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
 DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete, site settings
 DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
+DB_PATH=... node tests/hivecanvas.mjs         # .hivecanvas export/open/move to server, log compaction, timelapse + video (HIVE_OPS=ops.jsonl adds a real canvas)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback
 DB_PATH=... node tests/pins.mjs               # pinned canvases: limits, ownership, public thumbnails, picker, lightbox

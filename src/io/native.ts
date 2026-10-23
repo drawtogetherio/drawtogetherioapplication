@@ -12,6 +12,8 @@ export interface NativeBridge {
   /** The window has no system title bar: the page draws the controls (Windows) or leaves room for the traffic lights (Mac). */
   frameless?: boolean;
   window?: { minimize(): void; maximize(): void; close(): void };
+  /** .hivecanvas / .hivelapse files the system opened with the app (desktop 0.23+). */
+  files?: { take(): Promise<{ name: string; bytes: Uint8Array }[]>; onOpen(cb: () => void): void };
   canvases: {
     list(user: string): Promise<NativeCanvas[]>;
     get(id: string): Promise<NativeCanvas | null>;

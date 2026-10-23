@@ -1,4 +1,4 @@
-import { DrawDoc, toWire } from '../core/document';
+import { DrawDoc, opsCost, toWire } from '../core/document';
 import { ServerConfig, api } from '../net/api';
 import { RoomClient } from '../net/roomClient';
 import type { MyProfile } from '../shared/profile';
@@ -10,15 +10,22 @@ import { avatarEl } from './people';
 import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import { deleteCanvas, listCanvases } from '../io/localStore';
+import { HIVE_ACCEPT, hiveCanvasBlob, hiveCanvasOps, readHiveFile } from '../io/hivecanvas';
+import { lapse, lapseFromFiles, moveLapse, roomLapseKey } from '../io/lapse';
+import { timelapseDialog } from './timelapse';
+import { native } from '../io/native';
 import { LocalCopy } from './localCopy';
 import type { LiveEvent } from '../net/api';
-import { PRIVATE_ROOM_MSG, RoomInfo, ShareSettings, WATCH_KEY_RE } from '../shared/protocol';
+import { DEFAULT_SHARE, PRIVATE_ROOM_MSG, RoomInfo, ShareSettings, WATCH_KEY_RE } from '../shared/protocol';
+import type { Op } from '../core/model';
 import { cleanPrefs } from '../shared/prefs';
 
 export const PREFS_KEY = 'doodlehive.prefs';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const THUMB_DELAY_MS = 15_000;
+/** About 6 MB of undo pixels. */
+const HEAVY_UPLOAD_TILES = 200;
 const settingsOf = (info: RoomInfo) => ({ width: info.settings.width, height: info.settings.height, infinite: info.settings.infinite, background: info.settings.background });
 
 export class Session {
@@ -85,6 +92,7 @@ export class Session {
     if (room) this.joinRoom(room.id, room.watch);
     else if (canvas && !this.me?.guest) this.openLocal(canvas);
     else this.showHome();
+    this.nativeFiles();
     if (patreon) {
       this.ed.toast(patreon === 'linked' ? (this.me?.patreon?.active ? 'Patreon linked. Premium is on.' : 'Patreon linked. No active membership yet.')
         : patreon === 'taken' ? 'That Patreon account is linked to another Doodlehive account.' : 'Patreon link failed. Try again.');
@@ -142,6 +150,10 @@ export class Session {
       guest ? null : h('div.preset-grid.home-grid', {},
         card('Draw alone', this.me?.premium ? 'Private, saved to your account' : 'Private, saved on this device', 'brush', true),
         card('Shared room', 'Draw together on one canvas', 'users', false),
+        h('button.preset-card.home-card', {
+          html: `${icon('file', 26)}<strong>Open a file</strong><small>A .hivecanvas or .hivelapse</small>`,
+          onclick: () => { close(); this.pickFile(); },
+        }),
       ),
       this.joinSection(() => close()),
     );
@@ -205,9 +217,20 @@ export class Session {
     this.setUrl({ canvas: copy.meta.id });
     this.ed.setDoc(doc);
     this.attachCopy(copy);
+    lapse.attach(doc, copy.meta.id, copy.meta.name);
     if (!copy.meta.thumb && doc.log.length > 1) copy.thumb(doc);
     this.app.refreshRoom();
     this.booted();
+  }
+
+  /** Builds the canvas from its log; a log heavy with old undo pixels is rewritten as a snapshot. */
+  private async loadCopy(copy: LocalCopy, ops: Op[]) {
+    this.booted('Opening…');
+    const heavy = LocalCopy.heavy(ops);
+    if (heavy && !document.getElementById('boot')) this.app.toast('Opening a big canvas. It gets smaller after this first time.');
+    const doc = await copy.toDoc(ops, (f) => this.booted(`Opening… ${Math.round(f * 100)}%`));
+    if (heavy) await copy.replaceWith(doc.compactLog());
+    return doc;
   }
 
   async openLocal(id: string) {
@@ -219,20 +242,59 @@ export class Session {
       if (live?.joinable) { this.joinRoom(live.id, null, { copy }); return; }
       await copy.patch({ room: null });
     }
-    this.startLocal(copy, await copy.toDoc(ops));
+    this.startLocal(copy, await this.loadCopy(copy, ops));
   }
 
-  /** Premium accounts keep canvases on the server; one made while free moves there when opened. */
+  /** Premium accounts keep canvases on the server; one made while free moves there when opened, as a .hivecanvas. */
   async moveLocalToServer(id: string) {
     const opened = await LocalCopy.open(id).catch(() => null);
     if (!opened) return;
-    const m = opened.copy.meta;
-    if (m.room && (await api.room(m.room).catch(() => null))?.joinable) { this.joinRoom(m.room, null, { copy: opened.copy }); return; }
+    const { copy } = opened, m = copy.meta;
+    if (m.room && (await api.room(m.room).catch(() => null))?.joinable) { this.joinRoom(m.room, null, { copy }); return; }
+    const doc = await this.loadCopy(copy, opened.ops);
     try {
-      const info = await api.createRoom(m.name, m.settings, { ...m.share, visibility: 'private' }, opened.ops);
+      const info = await api.importRoom(await hiveCanvasBlob(doc, m.name), m.name, { ...m.share, visibility: 'private' });
+      await moveLapse(id, roomLapseKey(info.id)).catch(() => {});
       await deleteCanvas(id);
       this.joinRoom(info.id);
-    } catch (e) { this.app.toast((e as Error).message); }
+    } catch (e) {
+      // Still drawable here; it moves on a later open.
+      this.app.toast(`${(e as Error).message} The canvas stays on this device for now.`);
+      this.startLocal(copy, doc);
+    }
+  }
+
+  // ---- Files ----
+
+  /** Files double-clicked in the desktop app's file manager. */
+  private nativeFiles() {
+    const files = native?.files;
+    if (!files || this.me?.guest) return;
+    const take = async () => { for (const f of await files.take().catch(() => [])) await this.openFile(Object.assign(new Blob([f.bytes as BlobPart]), { name: f.name })); };
+    files.onOpen(take);
+    take();
+  }
+
+  pickFile() {
+    const input = h('input', { type: 'file', accept: HIVE_ACCEPT }) as HTMLInputElement;
+    input.addEventListener('change', () => { const f = input.files?.[0]; if (f) this.openFile(f); });
+    input.click();
+  }
+
+  /** A .hivecanvas becomes a canvas of your own (on the server for premium, here otherwise); a .hivelapse opens its timelapse. */
+  async openFile(file: Blob & { name?: string }) {
+    if (!this.me || this.me.guest) { this.app.toast('Log in to open files.'); return; }
+    try {
+      const { format, files } = await readHiveFile(file);
+      if (format === 'hivelapse') { timelapseDialog(lapseFromFiles(files)); return; }
+      const { manifest, ops } = hiveCanvasOps(files);
+      const name = manifest.name || (file.name ?? '').replace(/\.hivecanvas$/i, '') || 'Opened canvas';
+      if (this.me.premium) { this.joinRoom((await api.importRoom(file, name, { ...DEFAULT_SHARE, visibility: 'private' })).id); return; }
+      const copy = await LocalCopy.create(this.me.id, name, manifest.settings, { ...DEFAULT_SHARE, visibility: 'private' });
+      const doc = await copy.toDoc(ops);
+      await copy.replaceWith(doc.log);
+      this.startLocal(copy, doc);
+    } catch (e) { this.app.toast((e as Error).message || 'That file couldn’t be opened.'); }
   }
 
   /** Opens a live-only room seeded with this canvas; it closes a little after we leave. */
@@ -241,7 +303,11 @@ export class Session {
     if (!copy) return;
     if (share.visibility === 'private') { await copy.patch({ share }); return; }
     await copy.flush();
-    const info = await api.createRoom(copy.meta.name, copy.meta.settings, share, this.ed.doc.log.map(toWire));
+    // A long history goes up as a .hivecanvas of how the canvas looks now; a short one as it is.
+    const doc = this.ed.doc, heavy = opsCost(doc.log) > HEAVY_UPLOAD_TILES || doc.log.length > 20_000;
+    const info = heavy
+      ? await api.importRoom(await hiveCanvasBlob(doc, copy.meta.name), copy.meta.name, share)
+      : await api.createRoom(copy.meta.name, copy.meta.settings, share, doc.log.map(toWire));
     await copy.patch({ room: info.id, share });
     this.joinRoom(info.id, null, { copy });
     await this.app.copyInvite();
@@ -310,6 +376,7 @@ export class Session {
       if (e.kind === 'ready') {
         this.ed.setDoc(e.doc, !e.first);
         this.ed.ensureOwnLayer();
+        if (!room.spectator) lapse.attach(e.doc, opts.copy?.meta.id ?? this.local?.meta.id ?? roomLapseKey(id), room.info?.name ?? '');
         this.app.refreshRoom();
         this.booted();
         if (e.first && (room.spectator || !room.info?.private)) this.app.toast(`${room.spectator ? 'Watching' : 'Joined'} ${room.info?.name ?? 'room'}`);
@@ -354,6 +421,7 @@ export class Session {
   /** Leaves the room and ends the device copy, except `keep`. */
   private closeAll(keep: LocalCopy | null) {
     const room = this.ed.room, saving = this.flushThumb();
+    lapse.detach();
     if (room) {
       room.close();
       this.ed.room = null;
