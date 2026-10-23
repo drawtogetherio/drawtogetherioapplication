@@ -30,6 +30,7 @@
   },
   "private": true,
   "type": "module",
+  "packageManager": "npm@10.9.4",
   "engines": {
     "node": ">=22.12"
   }
