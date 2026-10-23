@@ -1,17 +1,17 @@
 import { ApiError, api } from '../net/api';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, DISPLAY_NAME_MAX, HANDLE_MAX, LINK_PLATFORMS, MyProfile,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, DISPLAY_NAME_MAX, HANDLE_MAX, LINK_PLATFORMS, MyProfile, PINNED_MAX, PinnedCanvas,
   graphemeCount, handleError, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../shared/profile';
 import { cropAvatar, makeAvatar } from './avatarCrop';
 import { h } from './dom';
 import { icon } from './icons';
-import { avatarEl, badges, gradientStyle } from './people';
+import { avatarEl, badges, gradientStyle, pinImage, pinTile } from './people';
 import { modal } from './dialogs';
 import { socialLogo } from './socials';
 
 /** Profile setup and editing. Resolves with the saved profile, or null. */
-export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile | null> {
+export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false): Promise<MyProfile | null> {
   return new Promise((resolve) => {
     let current = me;
     let saved: MyProfile | null = null;
@@ -123,6 +123,21 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       err('gradient'), err('gif'), gif,
     );
 
+    // Patreon: active patrons get premium for as long as the link holds.
+    const patreonText = h('span.muted.small');
+    const patreonBtns = h('div.row');
+    const renderPatreon = () => {
+      const pt = current.patreon;
+      patreonText.textContent = pt ? `Linked as ${pt.name} · ${pt.active ? 'active patron, premium is on' : 'not an active patron'}` : 'Active patrons get premium.';
+      patreonBtns.replaceChildren(...(pt ? [
+        h('button.btn', { type: 'button', onclick: async () => { current = await api.checkPatreon(); renderPatreon(); } }, 'Check again'),
+        h('button.btn', { type: 'button', onclick: async () => { current = await api.unlinkPatreon(); renderPatreon(); } }, 'Unlink'),
+      ] : [h('a.btn', { href: '/auth/patreon?next=' + encodeURIComponent(location.pathname + location.search) }, 'Link Patreon')]));
+    };
+    renderPatreon();
+    const patreonBox = h('div.field', {}, h('span.field-label', {}, 'Patreon'), patreonText, patreonBtns);
+    patreonBox.hidden = !patreonLink || guest || setup;
+
     const colorIn = h('input', { type: 'color', id: 'fav-color', value: me.favoriteColor, 'aria-label': 'Profile colour' });
     const hexIn = h('input', { type: 'text', id: 'fav-hex', value: me.favoriteColor, maxlength: 7, spellcheck: 'false', 'aria-label': 'Profile colour hex' });
     colorIn.addEventListener('input', () => { hexIn.value = colorIn.value; showErr('favoriteColor', ''); renderAvatar(); });
@@ -174,6 +189,28 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
     });
     renderSocials();
 
+    // Pinned canvases: up to PINNED_MAX of the person's own saved canvases, shown on their card.
+    const known = new Map<string, PinnedCanvas>(me.pinned.map((c) => [c.id, c]));
+    let pinned = me.pinned.map((c) => c.id);
+    const pins = h('div.pin-list');
+    const pinPicker = h('div.pin-picker', { hidden: true });
+    const addPin = h('button.social-add', { type: 'button', title: 'Pin a canvas', 'aria-label': 'Pin a canvas', html: icon('plus', 18) });
+    const renderPins = () => {
+      pins.replaceChildren(...pinned.map((id) => { const c = known.get(id)!; return h('span.pin-chip', { title: c.name }, pinImage(c),
+        h('button.icon-btn', { type: 'button', title: `Unpin ${c.name}`, 'aria-label': `Unpin ${c.name}`, html: icon('x', 14), onclick: () => { pinned = pinned.filter((x) => x !== id); renderPins(); } })); }), addPin);
+      addPin.hidden = pinned.length >= PINNED_MAX;
+      pinPicker.hidden = true;
+    };
+    addPin.addEventListener('click', async () => {
+      if (!pinPicker.hidden) { pinPicker.hidden = true; return; }
+      const choices = (await api.projects()).filter((c) => !c.private && !pinned.includes(c.id)).map((c): PinnedCanvas => ({ id: c.id, name: c.name, thumb: c.thumb }));
+      for (const c of choices) known.set(c.id, c);
+      pinPicker.replaceChildren(choices.length ? h('div.pin-choices', {}, ...choices.map((c) => pinTile(c, () => { pinned.push(c.id); renderPins(); })))
+        : h('small.muted', {}, 'Canvases saved to your account can be pinned. Private ones stay off your card.'));
+      pinPicker.hidden = false;
+    });
+    renderPins();
+
     const body = h('form.modal-body.profile-form', {},
       h('div.profile-top', {},
         avatarBox,
@@ -185,7 +222,9 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       handleField,
       colorField,
       premiumBox,
+      patreonBox,
       h('div.field', {}, h('span.field-label', {}, 'Socials'), socials, picker, err('links')),
+      setup ? null : h('div.field', {}, h('span.field-label', {}, `Pinned canvases (${PINNED_MAX} max)`), pins, pinPicker, err('pinned')),
       err('form'),
     );
     checkName();
@@ -200,7 +239,7 @@ export function profileDialog(me: MyProfile, setup: boolean): Promise<MyProfile 
       try {
         saved = await api.updateMe({
           displayName: sanitizeDisplayName(nameIn.value), handle: handle(), favoriteColor: normalizeColor(hexIn.value) ?? colorIn.value,
-          links: Object.fromEntries(LINK_PLATFORMS.map((p) => [p.id, links[p.id] ?? ''])), done: true,
+          links: Object.fromEntries(LINK_PLATFORMS.map((p) => [p.id, links[p.id] ?? ''])), done: true, ...(setup ? {} : { pinned }),
           ...(premium ? { gradient: gradOn.checked ? [g1.value, g2.value] as [string, string] : null } : {}),
         });
         close();

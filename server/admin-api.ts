@@ -53,7 +53,7 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
       users: {
         total: count(`SELECT count(*) AS n FROM users WHERE provider <> 'guest'`),
         guests: count(`SELECT count(*) AS n FROM users WHERE provider = 'guest'`),
-        premium: count('SELECT count(*) AS n FROM users WHERE premium = 1 AND (premium_until IS NULL OR premium_until > ?)', now),
+        premium: count('SELECT count(*) AS n FROM users WHERE (premium = 1 AND (premium_until IS NULL OR premium_until > ?)) OR patreon_active = 1', now),
         today: count('SELECT count(*) AS n FROM users WHERE created_at > ?', now - DAY),
         banned: count('SELECT count(*) AS n FROM users WHERE banned = 1'),
       },

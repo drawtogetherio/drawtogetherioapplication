@@ -36,6 +36,9 @@ log ever says `WARNING: no volume attached`, the volume is missing.
 | `DOWNLOAD_MAC_URL` | optional, later: link to the Mac app download (the landing page shows "soon" until set) |
 | `DOWNLOAD_WINDOWS_URL` | optional, later: link to the Windows app download |
 | `PATREON_URL` | optional: where the home-screen support banner links (default `https://www.patreon.com/doodlehive`) |
+| `PATREON_CLIENT_ID` | optional: from the Patreon client (step 6). Turns on Link Patreon in Edit profile |
+| `PATREON_CLIENT_SECRET` | optional: from the same client (keep it only here) |
+| `PATREON_CAMPAIGN_ID` | optional: only memberships to this campaign count as premium (without it, any active membership does) |
 | `ADMIN_HANDLES` | your @handle (without the @; several separated by commas). Those accounts get the admin dashboard at `/admin` on their next login |
 | `EPHEMERAL_GRACE_MS` | optional: how long a free host's live-only room waits for them to come back before it closes (default 120000, 2 minutes) |
 
@@ -59,6 +62,17 @@ https://doodlehive.net/auth/discord/callback
 ```
 
 Keep the `http://localhost:8787/auth/discord/callback` redirect too, so login keeps working locally.
+
+### 6. Patreon (optional)
+In https://www.patreon.com/portal/registration/register-clients create a client with the redirect URI:
+
+```
+https://doodlehive.net/auth/patreon/callback
+```
+
+Copy its Client ID and Client Secret into the variables above. The campaign id is in the Patreon API's
+`/api/oauth2/v2/campaigns` response for your creator token, or leave `PATREON_CAMPAIGN_ID` unset.
+Active patrons who link their account in Edit profile get premium for as long as they stay patrons.
 
 ## Everyday use
 - **Update the site:** push to `main` (or merge a pull request). Railway builds and deploys it.

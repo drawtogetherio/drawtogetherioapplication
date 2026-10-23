@@ -18,8 +18,9 @@ import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import { HttpError, Req, Res, body, json, jsonBody } from './http.ts';
 import { adminRoute, bannedIp, lastIp } from './admin-api.ts';
 import { flushStats } from './stats.ts';
+import { authorizeUrl, linkPatreon, patreonEnabled, refreshPatreon, unlinkPatreon } from './patreon.ts';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, STATUS_MAX, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, PINNED_MAX, STATUS_MAX, cleanPinned, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/protocol.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
@@ -151,7 +152,7 @@ async function route(req: Req, res: Res) {
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
     const site = getSite();
-    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, notice: site.notice.on ? site.notice : null });
+    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), notice: site.notice.on ? site.notice : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });
@@ -191,6 +192,32 @@ async function route(req: Req, res: Res) {
     setCookie(res, 'dw_oauth', '', 0);
     return redirect(res, config.clientUrl + next);
   }
+  // ---- Patreon linking (for a logged-in account) ----
+  if (p === '/auth/patreon' && m === 'GET') {
+    const u = requireUser(req);
+    if (!patreonEnabled()) return json(res, 503, { error: 'Patreon linking isn’t set up on this server yet.' });
+    if (u.provider === 'guest') throw new HttpError(403, 'Log in with Discord to link Patreon.');
+    const state = crypto.randomBytes(16).toString('base64url');
+    setCookie(res, 'dw_oauth', state + '|' + safeNext(url.searchParams.get('next')), 600);
+    return redirect(res, authorizeUrl(state));
+  }
+  if (p === '/auth/patreon/callback' && m === 'GET') {
+    const u = requireUser(req);
+    const [state, rawNext] = (cookies(req).dw_oauth ?? '').split('|');
+    const next = safeNext(rawNext);
+    const code = url.searchParams.get('code');
+    const result = patreonEnabled() && code && state && state === url.searchParams.get('state') ? await linkPatreon(u, code) : 'failed';
+    setCookie(res, 'dw_oauth', '', 0);
+    return redirect(res, config.clientUrl + next + (next.includes('?') ? '&' : '?') + 'patreon=' + result);
+  }
+  if (p === '/api/me/patreon' && (m === 'POST' || m === 'DELETE')) {
+    const u = requireUser(req);
+    limit('patreon:' + u.id, 20, HOUR);
+    if (m === 'DELETE') unlinkPatreon(u.id);
+    const fresh = m === 'POST' ? await refreshPatreon(u, true) : getUser(u.id)!;
+    profileChanged(u.id);
+    return json(res, 200, myProfile(fresh));
+  }
   if (p === '/auth/dev' && m === 'POST') {
     if (!config.devLogin) return json(res, 404, { error: 'Not available.' });
     limit('login:' + clientIp(req), 60, 10 * MINUTE);
@@ -221,7 +248,12 @@ async function route(req: Req, res: Res) {
   }
 
   // ---- Profile ----
-  if (p === '/api/me' && m === 'GET') return json(res, 200, myProfile(requireUser(req)));
+  if (p === '/api/me' && m === 'GET') {
+    const u = requireUser(req);
+    // A stale patron status is refreshed in the background; the next load shows it.
+    void refreshPatreon(u).then((f) => { if (f !== u) profileChanged(u.id); });
+    return json(res, 200, myProfile(u));
+  }
   if (p === '/api/me' && m === 'PATCH') {
     const u = requireUser(req);
     limit('me:' + u.id, 120, 10 * MINUTE);
@@ -288,6 +320,13 @@ async function route(req: Req, res: Res) {
     if (b.prefs !== undefined) {
       if (!b.prefs || typeof b.prefs !== 'object') throw new HttpError(400, 'Invalid preferences.', 'prefs');
       sets.push('prefs = ?'); vals.push(JSON.stringify(cleanPrefs(b.prefs)));
+    }
+    if (b.pinned !== undefined) {
+      if (!Array.isArray(b.pinned) || b.pinned.length > PINNED_MAX) throw new HttpError(400, `Pin up to ${PINNED_MAX} canvases.`, 'pinned');
+      const ids = cleanPinned(b.pinned);
+      const owned = (db.prepare(`SELECT id FROM rooms WHERE owner_id = ? AND ephemeral = 0`).all(u.id) as { id: string }[]).map((r) => r.id);
+      if (ids.length !== b.pinned.length || ids.some((id) => !owned.includes(id))) throw new HttpError(400, 'You can only pin your own canvases.', 'pinned');
+      sets.push('pinned = ?'); vals.push(JSON.stringify(ids));
     }
     if (b.done === true) sets.push('needs_setup = 0');
     if (sets.length) db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, u.id);
@@ -425,6 +464,13 @@ async function route(req: Req, res: Res) {
     ownRoom(req, mm[1]);
     const row = db.prepare('SELECT thumb FROM rooms WHERE id = ?').get(mm[1]) as { thumb: Uint8Array | null };
     return sendImage(res, row.thumb, row.thumb ? checkThumb(Buffer.from(row.thumb)) : '', 'private');
+  }
+  // A canvas pinned to its owner's profile shows its thumbnail to everyone.
+  mm = /^\/pins\/([a-z0-9]+)$/.exec(p);
+  if (mm && m === 'GET') {
+    const row = db.prepare(`SELECT r.thumb FROM rooms r JOIN users u ON u.id = r.owner_id
+      WHERE r.id = ? AND r.visibility <> 'private' AND EXISTS (SELECT 1 FROM json_each(u.pinned) WHERE value = r.id)`).get(mm[1]) as { thumb: Uint8Array | null } | undefined;
+    return sendImage(res, row?.thumb, row?.thumb ? checkThumb(Buffer.from(row.thumb)) : '', 'public');
   }
   // The picture on an invite link's embed: the canvas, unless the room is private.
   mm = /^\/og\/([a-z0-9]+)$/.exec(p);

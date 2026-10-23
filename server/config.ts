@@ -24,6 +24,8 @@ const env = process.env;
 const port = Number(env.PORT || 8787);
 const discordId = env.DISCORD_CLIENT_ID || '';
 const discordSecret = env.DISCORD_CLIENT_SECRET || '';
+const patreonId = env.PATREON_CLIENT_ID || '';
+const patreonSecret = env.PATREON_CLIENT_SECRET || '';
 const onRailway = !!(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
 const production = env.NODE_ENV === 'production' || onRailway;
 const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
@@ -50,6 +52,8 @@ export const config = {
   persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
+  /** OAuth client for linking Patreon accounts; PATREON_CAMPAIGN_ID limits which memberships count. PATREON_API is for tests. */
+  patreonApp: patreonId && patreonSecret ? { clientId: patreonId, clientSecret: patreonSecret, campaignId: env.PATREON_CAMPAIGN_ID || '', api: (env.PATREON_API || 'https://www.patreon.com').replace(/\/$/, '') } : null,
   /** Handles made admin at startup, comma separated. */
   adminHandles: (env.ADMIN_HANDLES || '').split(',').map((h) => h.trim()).filter(Boolean),
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),

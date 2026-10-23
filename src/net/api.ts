@@ -21,7 +21,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; notice?: SiteNotice | null }
+export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; notice?: SiteNotice | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 
@@ -46,8 +46,10 @@ export const api = {
   guestLogin: (name: string) => call<MyProfile>('POST', '/auth/guest', { name }),
   logout: () => call('POST', '/auth/logout'),
   discordUrl: (next: string) => '/auth/discord?next=' + encodeURIComponent(next),
-  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; done: boolean; theme: string; status: string; gradient: [string, string] | null; presenceMode: PresenceMode; prefs: Prefs }>) =>
+  updateMe: (patch: Partial<{ displayName: string; handle: string; favoriteColor: string; links: Record<string, string>; pinned: string[]; done: boolean; theme: string; status: string; gradient: [string, string] | null; presenceMode: PresenceMode; prefs: Prefs }>) =>
     call<MyProfile>('PATCH', '/api/me', patch),
+  checkPatreon: () => call<MyProfile>('POST', '/api/me/patreon'),
+  unlinkPatreon: () => call<MyProfile>('DELETE', '/api/me/patreon'),
   uploadAvatar: (img: Blob) => call<MyProfile>('PUT', '/api/me/avatar', undefined, img),
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),
   randomHandle: () => call<{ handle: string }>('GET', '/api/handle/random'),

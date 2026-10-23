@@ -7,7 +7,7 @@ import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isVal
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
 import { SiteSettings, cleanSite } from '../src/shared/site.ts';
-import { cleanBadges } from '../src/shared/profile.ts';
+import { PinnedCanvas, cleanBadges, cleanPinned } from '../src/shared/profile.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 export const db = new DatabaseSync(config.dbPath);
@@ -77,6 +77,12 @@ addColumn('rooms', 'ephemeral', 'INTEGER NOT NULL DEFAULT 0'); // free hosts' ro
 addColumn('users', 'admin', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'banned', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'badges', `TEXT NOT NULL DEFAULT '[]'`);
+addColumn('users', 'pinned', `TEXT NOT NULL DEFAULT '[]'`); // room ids shown on the profile
+addColumn('users', 'patreon_id', 'TEXT');
+addColumn('users', 'patreon_name', 'TEXT');
+addColumn('users', 'patreon_active', 'INTEGER NOT NULL DEFAULT 0'); // active patron at the last check
+addColumn('users', 'patreon_tokens', 'TEXT'); // never leaves the server
+addColumn('users', 'patreon_checked', 'INTEGER');
 db.exec('CREATE TABLE IF NOT EXISTS site (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
 /** Dashboard settings; one JSON row. */
@@ -112,12 +118,14 @@ export interface UserRow {
   favorite_color: string; links: string; has_avatar: number; avatar_type: string | null;
   avatar_version: number; premium: number; premium_until: number | null; needs_setup: number; created_at: number; theme: string;
   status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string; premium_warned: number | null; prefs: string;
-  admin: number; banned: number; badges: string;
+  admin: number; banned: number; badges: string; pinned: string;
+  patreon_id: string | null; patreon_name: string | null; patreon_active: number; patreon_tokens: string | null; patreon_checked: number | null;
 }
 
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
-  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs, admin, banned, badges`;
+  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs, admin, banned, badges, pinned,
+  patreon_id, patreon_name, patreon_active, patreon_tokens, patreon_checked`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
@@ -126,8 +134,9 @@ const PALETTE = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#00acc1', '#1e88e5
 /** Guests can never be admins, whatever the row says. */
 export const isAdmin = (u: UserRow) => !!u.admin && u.provider !== 'guest';
 
+/** Granted by an admin, or by being an active patron of the linked Patreon. */
 export function isPremium(u: UserRow) {
-  return !!u.premium && (u.premium_until == null || u.premium_until > Date.now());
+  return (!!u.premium && (u.premium_until == null || u.premium_until > Date.now())) || !!u.patreon_active;
 }
 
 export function publicProfile(u: UserRow): PublicProfile {
@@ -139,7 +148,17 @@ export function publicProfile(u: UserRow): PublicProfile {
     avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
     guest: u.provider === 'guest',
     badges: cleanBadges(safeJson(u.badges)),
+    pinned: pinnedCanvases(u),
   };
+}
+
+/** Pinned rooms the person still owns and hasn't made private, in pin order. */
+export function pinnedCanvases(u: UserRow): PinnedCanvas[] {
+  const ids = cleanPinned(safeJson(u.pinned));
+  if (!ids.length) return [];
+  const rows = db.prepare(`SELECT id, name, thumb_version, thumb IS NOT NULL AS has_thumb FROM rooms
+    WHERE owner_id = ? AND visibility <> 'private' AND id IN (${ids.map(() => '?').join(',')})`).all(u.id, ...ids) as { id: string; name: string; thumb_version: number; has_thumb: number }[];
+  return ids.flatMap((id) => rows.filter((r) => r.id === id)).map((r) => ({ id: r.id, name: r.name, thumb: r.has_thumb ? `/pins/${r.id}?v=${r.thumb_version}` : null }));
 }
 
 export function myProfile(u: UserRow): MyProfile {
@@ -147,6 +166,7 @@ export function myProfile(u: UserRow): MyProfile {
   return {
     ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme,
     presenceMode: u.presence_mode as MyProfile['presenceMode'], prefs: cleanPrefs(safeJson(u.prefs)), admin: isAdmin(u),
+    patreon: u.patreon_id ? { name: u.patreon_name ?? 'Patreon', active: !!u.patreon_active } : null,
   };
 }
 

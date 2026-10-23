@@ -1,8 +1,8 @@
-import { Badge, LINK_PLATFORMS, PublicProfile } from '../shared/profile';
+import { Badge, LINK_PLATFORMS, PinnedCanvas, PublicProfile } from '../shared/profile';
 import type { Role } from '../shared/protocol';
 import { socialLogo } from './socials';
 import { h } from './dom';
-import { BADGE_SVGS, CROWN_SVG, HOST_SVG, STAR_SVG } from './icons';
+import { BADGE_SVGS, CROWN_SVG, HOST_SVG, STAR_SVG, icon } from './icons';
 
 export function initials(name: string) {
   const parts = [...name.trim()].filter((c) => /[\p{L}\p{N}]/u.test(c));
@@ -80,5 +80,24 @@ export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLEleme
       p.status ? h('div.profile-status', {}, p.status) : null),
   );
   return h('div.modal-body.profile-card', {}, head, extra ?? null,
-    links.childElementCount ? links : null);
+    links.childElementCount ? links : null,
+    p.pinned.length ? h('div.profile-pins', {}, ...p.pinned.map((c) => pinTile(c, () => lightbox(c)))) : null);
+}
+
+export const pinImage = (c: PinnedCanvas, size = 22) => c.thumb ? h('img', { src: c.thumb, alt: c.name, loading: 'lazy' }) : h('span.tile-blank', { html: icon('brush', size) });
+
+export function pinTile(c: PinnedCanvas, onclick: () => void) {
+  return h('button.profile-pin', { type: 'button', title: c.name, 'aria-label': c.name, onclick }, pinImage(c), h('span.pin-name', {}, c.name));
+}
+
+/** Shows a pinned canvas at full size over whatever is open. */
+export function lightbox(c: PinnedCanvas) {
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey, true); };
+  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+  const box = h('div.lightbox', { role: 'dialog', 'aria-label': c.name },
+    pinImage(c, 48), h('div.lightbox-name', {}, c.name),
+    h('button.icon-btn.lightbox-close', { type: 'button', title: 'Close', 'aria-label': 'Close', html: icon('x', 22), onclick: close }));
+  box.addEventListener('pointerdown', (e) => { if (e.target === box) close(); });
+  document.addEventListener('keydown', onKey, true);
+  document.body.append(box);
 }

@@ -90,7 +90,11 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
   const onDraw = (e: PointerEvent) => { if (!bar.contains(e.target as Node)) close(); };
   document.addEventListener('keydown', onKey, true);
   view.canvas.addEventListener('pointerdown', onDraw, true);
-  const unsub = ed.on((w) => { if (w === 'doc' || w === 'layers') close(); });
+  // Strokes landing on this layer (other people's too) re-render the preview; the bar only closes when the layer or document goes.
+  const unsub = ed.on((w) => {
+    if (w === 'doc' || (w === 'layers' && !ed.doc.layer(layer.props.id))) close();
+    else if (w === 'pixels:' + layer.props.id) render();
+  });
   const close = () => {
     clearTimeout(timer);
     document.removeEventListener('keydown', onKey, true);

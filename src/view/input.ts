@@ -10,6 +10,7 @@ export class InputController {
   private toolStart = 0;
   private toolType: PointerInfo['type'] = 'mouse';
   private lastPressure = 0.5;
+  private pendingDown: PointerEvent | null = null;
   private touches = new Map<number, Touch>();
   private gesture: { m0: DOMMatrix; ids: number[]; pts: { x: number; y: number }[] } | null = null;
   private tap: { t0: number; max: number; moved: boolean } | null = null;
@@ -83,12 +84,25 @@ export class InputController {
     this.toolStart = performance.now();
     this.toolType = e.pointerType as PointerInfo['type'];
     this.activeTool = this.tool;
-    this.activeTool.down(this.info(e));
     this.ed.hover = null;
+    // A pen that reports no pressure yet (iPad) would start with a dot of the last stroke's size: wait for the next sample.
+    if (e.pointerType === 'pen' && e.pressure === 0) { this.pendingDown = e; return; }
+    this.activeTool.down(this.info(e));
+  }
+
+  /** True once the tool has started; a pending pen down waits for a sample that carries pressure. */
+  private started(e: PointerEvent) {
+    const d = this.pendingDown;
+    if (!d) return true;
+    if (e.pressure === 0 && e.type !== 'pointerup') return false;
+    this.pendingDown = null;
+    this.activeTool.down({ ...this.info(d), pressure: this.info(e).pressure });
+    return true;
   }
 
   private abortTool() {
     if (this.toolPointer === null) return;
+    this.pendingDown = null;
     this.activeTool.cancel();
     this.toolPointer = null;
   }
@@ -135,7 +149,7 @@ export class InputController {
     if (e.pointerId === this.toolPointer) {
       const events = e.getCoalescedEvents?.() ?? [];
       const r = this.el.getBoundingClientRect(); // once per event, not per coalesced sample
-      for (const ce of events.length ? events : [e]) this.activeTool.move(this.info(ce, r));
+      for (const ce of events.length ? events : [e]) if (this.started(ce)) this.activeTool.move(this.info(ce, r));
       const p = this.info(e, r);
       this.ed.sendCursor(p.x, p.y, true);
       return;
@@ -197,6 +211,7 @@ export class InputController {
     if (this.pan && e.pointerId === this.pan.id) { this.pan = null; return; }
     if (e.pointerId === this.toolPointer) {
       this.toolPointer = null;
+      this.started(e);
       const p = this.info(e);
       this.activeTool.up(p);
       this.ed.sendCursor(p.x, p.y, false);

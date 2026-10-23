@@ -107,6 +107,15 @@ await alice.keyboard.press('Control+z');
 await bob.waitForFunction((n) => window.doodlehive.ed.doc.log.length > n, before);
 check(true, 'Alice’s undo reached Bob');
 
+// ---- Effects bar survives other people's strokes ----
+await bob.locator('[aria-label="Effects"]').click();
+await bob.locator('.effects-pop .menu-item', { hasText: 'Gaussian blur' }).click();
+await bob.waitForSelector('.effect-bar');
+await stroke(alice, line(400, 560, 700, 580));
+await bob.waitForTimeout(400);
+check(await bob.locator('.effect-bar').count() === 1, 'Bob’s effects bar stays open while Alice draws');
+await bob.locator('.effect-bar [aria-label="Cancel"]').click();
+
 // ---- Chat + typing ----
 await alice.locator('canvas.stage').hover();
 await alice.keyboard.press('Enter');
@@ -122,7 +131,7 @@ await alice.keyboard.press('Escape');
 await bob.locator('.members-btn').click();
 await bob.waitForSelector('.member-row');
 const crown = await bob.locator('.member-row', { hasText: 'Alice' }).locator('.badges svg').count();
-check(crown === 2, 'premium owner shows crown and star (' + crown + ')');
+check(crown === 3, 'premium owner shows crown, star and Early bee (' + crown + ')');
 await bob.screenshot({ path: `${out}/04-members.png` });
 await bob.keyboard.press('Escape');
 

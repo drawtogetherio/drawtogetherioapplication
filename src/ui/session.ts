@@ -43,9 +43,9 @@ export class Session {
     return id && /^[a-z0-9]{4,16}$/.test(id) ? { id, watch: watch && WATCH_KEY_RE.test(watch) ? watch : null } : null;
   }
 
-  private setUrl(p: { room?: string; watch?: string | null; canvas?: string; by?: undefined } = {}) {
+  private setUrl(p: { room?: string; watch?: string | null; canvas?: string; by?: undefined; patreon?: undefined } = {}) {
     const u = new URL(location.href);
-    for (const k of ['room', 'watch', 'canvas', 'by'] as const) { const v = p[k]; if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
+    for (const k of ['room', 'watch', 'canvas', 'by', 'patreon'] as const) { const v = p[k]; if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
     history.replaceState(null, '', u);
   }
 
@@ -81,10 +81,15 @@ export class Session {
       if (saved) this.ed.me = saved;
       this.app.refreshAccount();
     }
-    const room = this.roomFromUrl(), canvas = new URLSearchParams(location.search).get('canvas');
+    const q = new URLSearchParams(location.search), room = this.roomFromUrl(), canvas = q.get('canvas'), patreon = q.get('patreon');
     if (room) this.joinRoom(room.id, room.watch);
     else if (canvas && !this.me?.guest) this.openLocal(canvas);
     else this.showHome();
+    if (patreon) {
+      this.ed.toast(patreon === 'linked' ? (this.me?.patreon?.active ? 'Patreon linked. Premium is on.' : 'Patreon linked. No active membership yet.')
+        : patreon === 'taken' ? 'That Patreon account is linked to another Doodlehive account.' : 'Patreon link failed. Try again.');
+      this.setUrl({ room: room?.id, watch: room?.watch, canvas: canvas ?? undefined });
+    }
   }
 
   /** Friends' presence and invites, pushed by the server. */
@@ -372,7 +377,7 @@ export class Session {
 
   async editProfile() {
     if (!this.me) return;
-    const saved = await profileDialog(this.me, false);
+    const saved = await profileDialog(this.me, false, !!this.server?.patreonLink);
     if (saved) { this.ed.me = saved as MyProfile; this.app.refreshAccount(); }
   }
 

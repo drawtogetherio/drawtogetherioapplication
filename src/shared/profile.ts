@@ -119,7 +119,13 @@ export interface PublicProfile {
   avatarAnimated: string | null;
   guest: boolean;
   badges: Badge[];
+  pinned: PinnedCanvas[];
 }
+
+/** A canvas shown on its owner's profile; the thumbnail is public. */
+export interface PinnedCanvas { id: string; name: string; thumb: string | null }
+export const PINNED_MAX = 5;
+export const cleanPinned = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && /^[a-z0-9]{1,16}$/.test(x)))].slice(0, PINNED_MAX) : []);
 
 /** Badges an admin can hand out, shown next to the name. */
 export const BADGES = { staff: 'Staff', supporter: 'Supporter', artist: 'Featured artist', early: 'Early bee' } as const;
@@ -138,6 +144,8 @@ export interface MyProfile extends PublicProfile {
   theme: string;
   prefs: Prefs;
   admin: boolean;
+  /** Linked Patreon account; `active` patrons have premium. */
+  patreon: { name: string; active: boolean } | null;
 }
 
 export const AVATAR_SIZE = 128;

@@ -88,6 +88,20 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   room's thumbnail (owners now upload one for live-only rooms too, and flush it before copying the
   link), versioned by `thumb_version` so chat apps refetch it. Private and unknown rooms get
   `public/og.png`, the Doodlehive card, which the landing page also uses as its `og:image`.
+- **Pinned canvases (v0.25)**: Edit profile → Pinned canvases picks up to `PINNED_MAX` (5) of your own
+  saved, non-private canvases; their thumbnails sit on your profile card and open full size in a
+  lightbox. The server keeps the room ids in `users.pinned`, checks ownership on save, drops private
+  or deleted rooms from the card, and serves the pictures from `/pins/ID`, the only public thumbnail
+  route besides `/og/ID`.
+- **Patreon linking (v0.25)**: with `PATREON_CLIENT_ID` and `PATREON_CLIENT_SECRET` set, Edit profile
+  shows a Patreon field: Link Patreon runs OAuth (`/auth/patreon`, `server/patreon.ts`), stores the
+  Patreon id and tokens on the user (never sent to the browser) and reads the memberships. An active
+  patron (of `PATREON_CAMPAIGN_ID`, if set) counts as premium through `isPremium`; the status is
+  re-read every 12 hours when the app loads, with Check again, and drops when the link is revoked.
+  Unlink removes the link and that premium. Admin-granted premium is separate and unaffected.
+- **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the
+  first sample) starts the stroke on the first sample that has pressure, instead of dotting the canvas
+  with the previous stroke's size (`pendingDown` in `src/view/input.ts`).
 - **Layer effects** (the ✦ button by the flip buttons lists them; the layers panel's ✦ too): Gaussian blur, motion blur, mosaic, chromatic
   aberration, glitch, sharpen and noise. Each is one `effect` op, computed with plain arithmetic in a fixed
   order (`src/engine/effects.ts`) so every client bakes the same pixels; nothing is re-applied per frame.
@@ -278,6 +292,7 @@ node tests/pickers.mjs http://localhost:4180/app.html   # brush library, mode dr
 node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, square tips, custom brushes and codes, slider preview, effects
 node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer masks, replay
 node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to classic
+node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev
@@ -292,6 +307,8 @@ DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/ba
 DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback
+DB_PATH=... node tests/pins.mjs               # pinned canvases: limits, ownership, public thumbnails, picker, lightbox
+node tests/patreon.mjs                        # Patreon linking against a mock (server needs PATREON_CLIENT_ID=test-client PATREON_CLIENT_SECRET=test-secret PATREON_CAMPAIGN_ID=c1 PATREON_API=http://localhost:8799)
 ```
 
 Performance with several people drawing (built app served by the server, so it measures production code):
