@@ -293,4 +293,16 @@ DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback
 ```
+
+Performance with several people drawing (built app served by the server, so it measures production code):
+
+```bash
+npm run build && PUBLIC_URL=http://localhost:8787 DEV_LOGIN=1 DB_PATH=/tmp/dw-bench.db npm start
+node tests/lagbench.mjs --bots 3              # you + 3 bots drawing: fps, long tasks, pen sample gaps, render, pen-up, quiet-time hitches, undo
+node tests/lagbench.mjs --bots 3 --fixed      # same on a fixed 2400×1600 canvas (zoomed out to fit)
+node tests/relaybench.mjs --bots 4            # server relay latency for ops and live chunks
+```
+`lagbench` bots are WebSocket members that behave like the app (live chunks every 33 ms, cursors every
+50 ms, the stroke op on pen-up), each in its own band of the view; the measured client uses the studio
+layout so the layers panel is open. Add `--json file` to collect runs.
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.
