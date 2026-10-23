@@ -1,7 +1,7 @@
 {
   "name": "doodlehive-desktop",
   "productName": "Doodlehive",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "description": "Drawing together with friends",
   "author": "Doodlehive",
   "main": "main.cjs",
