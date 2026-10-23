@@ -99,6 +99,16 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   patron (of `PATREON_CAMPAIGN_ID`, if set) counts as premium through `isPremium`; the status is
   re-read every 12 hours when the app loads, with Check again, and drops when the link is revoked.
   Unlink removes the link and that premium. Admin-granted premium is separate and unaffected.
+- **Profile dialog (v0.25)**: picture and banner share one strip at the top (`cropImage` in
+  `src/ui/avatarCrop.ts` crops both, round for pictures, 3:1 for banners; banners are stored at
+  1200 × 400 and shown on profile cards). GIF pictures go through the same Upload picture button for
+  premium accounts, up to 4 MB and 1024 px; since a browser can't re-encode a GIF, the file is
+  stored as uploaded with its crop (`avatarCrop`, fractions of the crop square) and `avatarEl`
+  applies the crop on display, while the still is cut from the first frame. The profile colour is an
+  embedded picker (`src/ui/hsvField.ts`, sharing `drawSV` with the canvas picker); the Gradient
+  toggle swaps it to two swatches with the name previewed. The Premium section has three states:
+  blurred perks behind a Patreon prompt (with Link Patreon and a link to the page), "not an active
+  patron" with Check again and Unlink, or the perks list with the link status.
 - **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the
   first sample) starts the stroke on the first sample that has pressure, instead of dotting the canvas
   with the previous stroke's size (`pendingDown` in `src/view/input.ts`).
@@ -308,6 +318,7 @@ DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback
 DB_PATH=... node tests/pins.mjs               # pinned canvases: limits, ownership, public thumbnails, picker, lightbox
+DB_PATH=... node tests/profile.mjs            # profile dialog: premium states, GIF picture with crop, banner, colour/gradient picker
 node tests/patreon.mjs                        # Patreon linking against a mock (server needs PATREON_CLIENT_ID=test-client PATREON_CLIENT_SECRET=test-secret PATREON_CAMPAIGN_ID=c1 PATREON_API=http://localhost:8799)
 ```
 

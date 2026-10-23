@@ -1,4 +1,4 @@
-import { Badge, LINK_PLATFORMS, PinnedCanvas, PublicProfile } from '../shared/profile';
+import { Badge, ImageCrop, LINK_PLATFORMS, PinnedCanvas, PublicProfile } from '../shared/profile';
 import type { Role } from '../shared/protocol';
 import { socialLogo } from './socials';
 import { h } from './dom';
@@ -17,14 +17,14 @@ export function inkOn(hex: string) {
 
 /** With a name gradient, the ring and the fallback picture use it instead of the profile colour. */
 export function avatarEl(
-  p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'> & { avatarAnimated?: string | null; gradient?: [string, string] | null },
+  p: Pick<PublicProfile, 'avatar' | 'displayName' | 'favoriteColor'> & { avatarAnimated?: string | null; avatarCrop?: ImageCrop | null; gradient?: [string, string] | null },
   size = 28, animate = false,
 ): HTMLElement {
   const g = p.gradient;
   const el = h(`span.avatar${g ? '.has-gradient' : ''}` as 'span', { style: `width:${size}px;height:${size}px;` + (g ? gradientStyle(g) : `--ring:${p.favoriteColor}`) });
-  // The GIF only plays where it's showcased.
-  const src = animate && p.avatarAnimated ? p.avatarAnimated : p.avatar;
-  if (src) el.append(h('img', { src, alt: '', width: size, height: size, loading: 'lazy' }));
+  // The GIF only plays where it's showcased, and is cropped on display since it is stored as uploaded.
+  const gif = animate && p.avatarAnimated, src = gif ? p.avatarAnimated : p.avatar, c = gif ? p.avatarCrop : null;
+  if (src) el.append(h('img', { src, alt: '', width: size, height: size, loading: 'lazy', style: c ? `position:absolute;left:${-c.x * 100}%;top:${-c.y * 100}%;width:${c.w * 100}%;height:${c.h * 100}%` : '' }));
   else {
     el.textContent = initials(p.displayName);
     el.style.background = g ? `linear-gradient(135deg, ${g[0]}, ${g[1]})` : p.favoriteColor;
@@ -72,14 +72,14 @@ export function profileCardBody(p: PublicProfile, role?: Role, extra?: HTMLEleme
     const u = p.links[pl.id];
     if (u) links.append(h('a.profile-link', { href: pl.url(u), target: '_blank', rel: 'noopener noreferrer', title: pl.label }, socialLogo(pl.id, 22), h('span', {}, (pl.id === 'pixiv' ? '#' : '@') + u)));
   }
-  const head = h(`div.profile-card-head${p.gradient ? '.has-gradient' : ''}` as 'div', { style: gradientStyle(p.gradient) },
+  const head = h(`div.profile-card-head${p.gradient ? '.has-gradient' : ''}${p.banner ? '.under-banner' : ''}` as 'div', { style: gradientStyle(p.gradient) },
     avatarEl(p, 64, true),
     h('div', {},
       h('div.profile-card-name', {}, nameText(p, 'card-name'), badges(role, p.premium, p.badges)),
       h('div.muted', {}, '@' + p.handle),
       p.status ? h('div.profile-status', {}, p.status) : null),
   );
-  return h('div.modal-body.profile-card', {}, head, extra ?? null,
+  return h('div.modal-body.profile-card', {}, p.banner ? h('div.profile-banner', { style: `background-image:url(${p.banner})` }) : null, head, extra ?? null,
     links.childElementCount ? links : null,
     p.pinned.length ? h('div.profile-pins', {}, ...p.pinned.map((c) => pinTile(c, () => lightbox(c)))) : null);
 }

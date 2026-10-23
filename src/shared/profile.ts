@@ -117,6 +117,9 @@ export interface PublicProfile {
   gradient: [string, string] | null;
   /** Premium GIF; `avatar` is its still. */
   avatarAnimated: string | null;
+  /** How the GIF is cropped on display, as fractions of the crop square (see `cleanCrop`). */
+  avatarCrop: ImageCrop | null;
+  banner: string | null;
   guest: boolean;
   badges: Badge[];
   pinned: PinnedCanvas[];
@@ -150,5 +153,17 @@ export interface MyProfile extends PublicProfile {
 
 export const AVATAR_SIZE = 128;
 export const AVATAR_MAX_BYTES = 48 * 1024;
-export const AVATAR_ANIM_MAX_BYTES = 768 * 1024;
-export const AVATAR_ANIM_MAX_SIZE = 512;
+export const AVATAR_ANIM_MAX_BYTES = 4 * 1024 * 1024;
+export const AVATAR_ANIM_MAX_SIZE = 1024;
+export const BANNER_W = 1200;
+export const BANNER_H = 400;
+export const BANNER_MAX_BYTES = 400 * 1024;
+
+/** GIFs can't be re-encoded in the browser, so the crop is applied on display: the picture's offset and size relative to the crop square. */
+export interface ImageCrop { x: number; y: number; w: number; h: number }
+export function cleanCrop(raw: unknown): ImageCrop | null {
+  const c = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const n = (k: string) => (typeof c[k] === 'number' && Number.isFinite(c[k]) ? Math.round((c[k] as number) * 1e4) / 1e4 : NaN);
+  const r = { x: n('x'), y: n('y'), w: n('w'), h: n('h') };
+  return r.w >= 1 && r.h >= 1 && r.w <= 50 && r.h <= 50 && r.x >= 0 && r.y >= 0 && r.x + 1 <= r.w + 1e-3 && r.y + 1 <= r.h + 1e-3 ? r : null;
+}

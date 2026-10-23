@@ -1,9 +1,9 @@
-import { siArtstation, siBluesky, siDeviantart, siInstagram, siPixiv, siTiktok, siTumblr, siTwitch, siX, siYoutube } from 'simple-icons';
+import { siArtstation, siBluesky, siDeviantart, siInstagram, siPatreon, siPixiv, siTiktok, siTumblr, siTwitch, siX, siYoutube } from 'simple-icons';
 import { h } from './dom';
 
 const LOGOS: Record<string, { path: string; hex: string }> = {
   twitter: siX, instagram: siInstagram, youtube: siYoutube, deviantart: siDeviantart, bluesky: siBluesky,
-  twitch: siTwitch, artstation: siArtstation, tiktok: siTiktok, tumblr: siTumblr, pixiv: siPixiv,
+  twitch: siTwitch, artstation: siArtstation, tiktok: siTiktok, tumblr: siTumblr, pixiv: siPixiv, patreon: siPatreon,
 };
 
 export function socialLogo(platform: string, size = 28): HTMLElement {

@@ -20,7 +20,7 @@ import { adminRoute, bannedIp, lastIp } from './admin-api.ts';
 import { flushStats } from './stats.ts';
 import { authorizeUrl, linkPatreon, patreonEnabled, refreshPatreon, unlinkPatreon } from './patreon.ts';
 import {
-  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, LINK_PLATFORMS, PINNED_MAX, STATUS_MAX, cleanPinned, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
+  AVATAR_ANIM_MAX_BYTES, AVATAR_ANIM_MAX_SIZE, AVATAR_MAX_BYTES, BANNER_MAX_BYTES, LINK_PLATFORMS, PINNED_MAX, cleanCrop, STATUS_MAX, cleanPinned, cleanStatus, handleError, PRESENCE_MODES, type PresenceMode, isRandomHandle, normalizeColor, normalizeLink, sanitizeDisplayName, validateDisplayName,
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/protocol.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
@@ -88,8 +88,9 @@ function checkThumb(buf: Buffer): string {
   throw new HttpError(400, 'Thumbnails must be WebP, PNG or JPEG.');
 }
 
-function checkAvatar(buf: Buffer): string {
-  if (buf.length > AVATAR_MAX_BYTES) throw new HttpError(413, 'That image is too large.');
+/** A still PNG, JPEG or WebP within `max` bytes; returns its type. */
+function checkAvatar(buf: Buffer, max = AVATAR_MAX_BYTES): string {
+  if (buf.length > max) throw new HttpError(413, 'That image is too large.');
   if (isWebp(buf)) {
     if (buf.includes(Buffer.from('ANIM'))) throw new HttpError(400, 'Animated images aren’t supported.');
     return 'image/webp';
@@ -335,7 +336,7 @@ async function route(req: Req, res: Res) {
   }
   if (p === '/api/me/avatar' && (m === 'PUT' || m === 'DELETE')) {
     const u = requireUser(req);
-    if (m === 'DELETE') db.prepare('UPDATE users SET avatar = NULL, avatar_type = NULL WHERE id = ?').run(u.id);
+    if (m === 'DELETE') db.prepare('UPDATE users SET avatar = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_anim_crop = NULL WHERE id = ?').run(u.id);
     else {
       limit('upload:' + u.id, 30, HOUR);
       const buf = await body(req, AVATAR_MAX_BYTES);
@@ -355,7 +356,19 @@ async function route(req: Req, res: Res) {
       const size = gifSize(buf);
       if (!size) throw new HttpError(400, 'Animated pictures need to be GIFs.');
       if (size.w > AVATAR_ANIM_MAX_SIZE || size.h > AVATAR_ANIM_MAX_SIZE) throw new HttpError(400, `Use a GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} pixels.`);
-      db.prepare('UPDATE users SET avatar_anim = ?, avatar_anim_version = avatar_anim_version + 1 WHERE id = ?').run(buf, u.id);
+      const crop = cleanCrop(Object.fromEntries(['x', 'y', 'w', 'h'].map((k) => [k, Number(url.searchParams.get(k))])));
+      db.prepare('UPDATE users SET avatar_anim = ?, avatar_anim_crop = ?, avatar_anim_version = avatar_anim_version + 1 WHERE id = ?').run(buf, crop ? JSON.stringify(crop) : null, u.id);
+    }
+    profileChanged(u.id);
+    return json(res, 200, myProfile(getUser(u.id)!));
+  }
+  if (p === '/api/me/banner' && (m === 'PUT' || m === 'DELETE')) {
+    const u = requireUser(req);
+    if (m === 'DELETE') db.prepare('UPDATE users SET banner = NULL, banner_type = NULL WHERE id = ?').run(u.id);
+    else {
+      limit('upload:' + u.id, 30, HOUR);
+      const buf = await body(req, BANNER_MAX_BYTES);
+      db.prepare('UPDATE users SET banner = ?, banner_type = ?, banner_version = banner_version + 1 WHERE id = ?').run(buf, checkAvatar(buf, BANNER_MAX_BYTES), u.id);
     }
     profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
@@ -376,6 +389,11 @@ async function route(req: Req, res: Res) {
   if (mm && m === 'GET') {
     const row = db.prepare('SELECT avatar, avatar_type FROM users WHERE id = ?').get(mm[1]) as { avatar: Uint8Array | null; avatar_type: string } | undefined;
     return sendImage(res, row?.avatar, row?.avatar_type ?? '', 'public');
+  }
+  mm = /^\/avatars\/([\w-]+)\/banner$/.exec(p);
+  if (mm && m === 'GET') {
+    const row = db.prepare('SELECT banner, banner_type FROM users WHERE id = ?').get(mm[1]) as { banner: Uint8Array | null; banner_type: string } | undefined;
+    return sendImage(res, row?.banner, row?.banner_type ?? '', 'public');
   }
   mm = /^\/avatars\/([\w-]+)\/anim$/.exec(p);
   if (mm && m === 'GET') {

@@ -377,7 +377,7 @@ export class Session {
 
   async editProfile() {
     if (!this.me) return;
-    const saved = await profileDialog(this.me, false, !!this.server?.patreonLink);
+    const saved = await profileDialog(this.me, false, !!this.server?.patreonLink, this.server?.patreon);
     if (saved) { this.ed.me = saved as MyProfile; this.app.refreshAccount(); }
   }
 

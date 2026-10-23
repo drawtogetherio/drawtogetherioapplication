@@ -286,7 +286,7 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 
 /* Avatars and badges */
 .avatar {
-  display: inline-grid; place-items: center; border-radius: 50%; overflow: hidden; flex: none; font-weight: 700;
+  display: inline-grid; place-items: center; border-radius: 50%; overflow: hidden; flex: none; font-weight: 700; position: relative;
   box-shadow: 0 0 0 2px var(--ring, transparent); background: var(--panel-2); line-height: 1;
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -542,10 +542,31 @@ button.brand:hover { background: var(--hover); }
 @media (prefers-reduced-motion: reduce) { .gradient-name { animation: none; } }
 .profile-card-head.has-gradient { padding: 12px; border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--g1) 22%, transparent), color-mix(in srgb, var(--g2) 22%, transparent)); }
 .profile-status { margin-top: 4px; font-size: 13.5px; }
-.premium-box { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(124, 92, 255, 0.06); }
-.premium-box.locked > :not(.field-label):not(small) { opacity: 0.5; }
-.premium-box input[type="color"] { width: 34px; height: 28px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
-.gradient-preview { margin-left: 6px; font-size: 15px; }
+.premium-box { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(124, 92, 255, 0.06); position: relative; overflow: hidden; }
+.premium-box .perks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.premium-box .perks li { display: flex; align-items: center; gap: 6px; }
+.premium-box .perks svg { display: block; color: var(--accent); }
+.premium-box.locked .perks { filter: blur(3px); opacity: 0.45; pointer-events: none; }
+.premium-lock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; text-align: center; font-weight: 600; }
+.premium-box .row.center { justify-content: center; }
+.row.wrap { flex-wrap: wrap; }
+.profile-pics { position: relative; margin-bottom: 30px; }
+.banner-edit, .profile-banner { aspect-ratio: 3; border-radius: 12px; background: var(--panel-2) center / cover no-repeat; }
+.banner-edit { border: 1px dashed var(--line); }
+.banner-edit.has-banner { border-style: solid; }
+.profile-pics .avatar-edit { position: absolute; left: 14px; bottom: -24px; }
+.profile-pics .avatar, .profile-card-head.under-banner .avatar { box-shadow: 0 0 0 3px var(--panel); }
+.profile-card-head.under-banner { margin-top: -34px; padding-left: 12px; }
+.profile-card-head.under-banner > div { padding-top: 30px; }
+.color-field { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.hsv-field { display: grid; gap: 8px; width: 200px; }
+.hsv-field .cp-sv { height: 120px; }
+.hsv-field .cp-hex { width: 100%; }
+.gswatches { display: flex; align-items: center; gap: 8px; }
+.gswatch { width: 34px; height: 28px; border-radius: 6px; border: 2px solid transparent; cursor: pointer; box-shadow: 0 0 0 1px var(--line); }
+.gswatch.active { border-color: var(--text); }
+.gswatches .gradient-name { font-size: 16px; font-weight: 700; }
+.field-label .check { margin-left: auto; font-weight: 500; }
 
 /* ---------- Home (/app) ---------- */
 .home {

@@ -1,5 +1,5 @@
 import type { DocSettings, Op } from '../core/model';
-import type { MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
+import type { ImageCrop, MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
 import type { ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
 import type { SiteNotice } from '../shared/site';
@@ -54,7 +54,9 @@ export const api = {
   deleteAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar'),
   randomHandle: () => call<{ handle: string }>('GET', '/api/handle/random'),
   checkHandle: (h: string) => call<{ valid: boolean; available: boolean; error: string | null }>('GET', '/api/handle/check?h=' + encodeURIComponent(h)),
-  uploadAnimatedAvatar: (gif: Blob) => call<MyProfile>('PUT', '/api/me/avatar-animated', undefined, gif),
+  uploadAnimatedAvatar: (gif: Blob, crop: ImageCrop) => call<MyProfile>('PUT', '/api/me/avatar-animated?' + new URLSearchParams(Object.entries(crop).map(([k, v]) => [k, String(v)])), undefined, gif),
+  uploadBanner: (img: Blob) => call<MyProfile>('PUT', '/api/me/banner', undefined, img),
+  deleteBanner: () => call<MyProfile>('DELETE', '/api/me/banner'),
   deleteAnimatedAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar-animated'),
   createRoom: (name: string, settings: Omit<DocSettings, 'id'>, share: ShareSettings, ops: Op[] = []) =>
     call<RoomInfo>('POST', '/api/rooms', { name, settings, share, ops }),

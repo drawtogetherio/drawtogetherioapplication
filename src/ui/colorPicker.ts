@@ -180,16 +180,19 @@ export class ColorPicker {
     if (document.activeElement !== this.hex) this.hex.value = this.ed.color;
   }
 
-  private drawSV() {
-    const c = this.sv.getContext('2d')!;
-    const { width: w, height: hh } = this.sv;
-    c.fillStyle = hsvToHex(this.hue, 1, 1);
-    c.fillRect(0, 0, w, hh);
-    const white = c.createLinearGradient(0, 0, w, 0);
-    white.addColorStop(0, '#fff'); white.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = white; c.fillRect(0, 0, w, hh);
-    const black = c.createLinearGradient(0, 0, 0, hh);
-    black.addColorStop(0, 'rgba(0,0,0,0)'); black.addColorStop(1, '#000');
-    c.fillStyle = black; c.fillRect(0, 0, w, hh);
-  }
+  private drawSV() { drawSV(this.sv, this.hue); }
+}
+
+/** Paints the saturation/value square for a hue. */
+export function drawSV(canvas: HTMLCanvasElement, hue: number) {
+  const c = canvas.getContext('2d')!;
+  const { width: w, height: hh } = canvas;
+  c.fillStyle = hsvToHex(hue, 1, 1);
+  c.fillRect(0, 0, w, hh);
+  const white = c.createLinearGradient(0, 0, w, 0);
+  white.addColorStop(0, '#fff'); white.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = white; c.fillRect(0, 0, w, hh);
+  const black = c.createLinearGradient(0, 0, 0, hh);
+  black.addColorStop(0, 'rgba(0,0,0,0)'); black.addColorStop(1, '#000');
+  c.fillStyle = black; c.fillRect(0, 0, w, hh);
 }

@@ -7,7 +7,7 @@ import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isVal
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
 import { SiteSettings, cleanSite } from '../src/shared/site.ts';
-import { PinnedCanvas, cleanBadges, cleanPinned } from '../src/shared/profile.ts';
+import { PinnedCanvas, cleanBadges, cleanCrop, cleanPinned } from '../src/shared/profile.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 export const db = new DatabaseSync(config.dbPath);
@@ -83,6 +83,10 @@ addColumn('users', 'patreon_name', 'TEXT');
 addColumn('users', 'patreon_active', 'INTEGER NOT NULL DEFAULT 0'); // active patron at the last check
 addColumn('users', 'patreon_tokens', 'TEXT'); // never leaves the server
 addColumn('users', 'patreon_checked', 'INTEGER');
+addColumn('users', 'avatar_anim_crop', 'TEXT');
+addColumn('users', 'banner', 'BLOB');
+addColumn('users', 'banner_type', 'TEXT');
+addColumn('users', 'banner_version', 'INTEGER NOT NULL DEFAULT 0');
 db.exec('CREATE TABLE IF NOT EXISTS site (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
 /** Dashboard settings; one JSON row. */
@@ -120,12 +124,13 @@ export interface UserRow {
   status: string; gradient: string | null; has_anim: number; avatar_anim_version: number; presence_mode: string; premium_warned: number | null; prefs: string;
   admin: number; banned: number; badges: string; pinned: string;
   patreon_id: string | null; patreon_name: string | null; patreon_active: number; patreon_tokens: string | null; patreon_checked: number | null;
+  avatar_anim_crop: string | null; has_banner: number; banner_version: number;
 }
 
 export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
   avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs, admin, banned, badges, pinned,
-  patreon_id, patreon_name, patreon_active, patreon_tokens, patreon_checked`;
+  patreon_id, patreon_name, patreon_active, patreon_tokens, patreon_checked, avatar_anim_crop, banner IS NOT NULL AS has_banner, banner_version`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
@@ -146,6 +151,8 @@ export function publicProfile(u: UserRow): PublicProfile {
     links: JSON.parse(u.links), premium: isPremium(u), premiumUntil: u.premium_until, status: u.status,
     gradient: isPremium(u) && u.gradient ? (u.gradient.split(',') as [string, string]) : null,
     avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
+    avatarCrop: isPremium(u) && u.has_anim ? cleanCrop(safeJson(u.avatar_anim_crop ?? '')) : null,
+    banner: u.has_banner ? `/avatars/${u.id}/banner?v=${u.banner_version}` : null,
     guest: u.provider === 'guest',
     badges: cleanBadges(safeJson(u.badges)),
     pinned: pinnedCanvases(u),
