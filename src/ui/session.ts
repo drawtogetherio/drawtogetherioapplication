@@ -43,17 +43,18 @@ export class Session {
     return id && /^[a-z0-9]{4,16}$/.test(id) ? { id, watch: watch && WATCH_KEY_RE.test(watch) ? watch : null } : null;
   }
 
-  private setUrl(p: { room?: string; watch?: string | null; canvas?: string } = {}) {
+  private setUrl(p: { room?: string; watch?: string | null; canvas?: string; by?: undefined } = {}) {
     const u = new URL(location.href);
-    for (const k of ['room', 'watch', 'canvas'] as const) { const v = p[k]; if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
+    for (const k of ['room', 'watch', 'canvas', 'by'] as const) { const v = p[k]; if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
     history.replaceState(null, '', u);
   }
 
-  inviteLinkFor(id: string) { return `${location.origin}/app?room=${id}`; }
+  /** `by` names who shared it, for the link's embed. */
+  inviteLinkFor(id: string, extra = '') { return `${location.origin}/app?room=${id}${extra}${this.me ? `&by=${encodeURIComponent(this.me.handle)}` : ''}`; }
   inviteLink() { return this.ed.room ? this.inviteLinkFor(this.ed.room.id) : ''; }
   watchLink() {
     const room = this.ed.room, key = room?.info?.watchKey ?? this.watch;
-    return room && key ? `${this.inviteLinkFor(room.id)}&watch=${key}` : '';
+    return room && key ? this.inviteLinkFor(room.id, `&watch=${key}`) : '';
   }
 
   async start() {
@@ -331,13 +332,13 @@ export class Session {
   /** Server thumbnails, for canvases kept there. */
   scheduleThumb() {
     const room = this.ed.room;
-    if (!room || room.info?.ownerId !== room.you || room.info.ephemeral) return;
+    if (!room || room.info?.ownerId !== room.you) return;
     this.thumbDirty = true;
     clearTimeout(this.thumbTimer);
     this.thumbTimer = window.setTimeout(() => this.flushThumb(), THUMB_DELAY_MS);
   }
 
-  private flushThumb() {
+  flushThumb() {
     clearTimeout(this.thumbTimer);
     const room = this.ed.room;
     if (!this.thumbDirty || !room) return Promise.resolve();

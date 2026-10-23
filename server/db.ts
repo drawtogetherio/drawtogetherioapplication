@@ -143,6 +143,10 @@ export function getUser(id: string): UserRow | undefined {
   return db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as UserRow | undefined;
 }
 
+export function userByHandle(handle: string): UserRow | undefined {
+  return db.prepare(`SELECT ${USER_COLS} FROM users WHERE lower(handle) = lower(?)`).get(handle) as UserRow | undefined;
+}
+
 export function handleTaken(handle: string, exceptUser?: string) {
   const row = db.prepare('SELECT id FROM users WHERE lower(handle) = lower(?)').get(handle) as { id: string } | undefined;
   return !!row && row.id !== exceptUser;

@@ -6,9 +6,9 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, UserRow,
+  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, userByHandle, UserRow,
 } from './db.ts';
-import { cleanShare, createRoom, deleteRoom, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
+import { Room, cleanShare, createRoom, deleteRoom, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
 import { validOp } from './validate.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
@@ -425,6 +425,14 @@ async function route(req: Req, res: Res) {
     const row = db.prepare('SELECT thumb FROM rooms WHERE id = ?').get(mm[1]) as { thumb: Uint8Array | null };
     return sendImage(res, row.thumb, row.thumb ? checkThumb(Buffer.from(row.thumb)) : '', 'private');
   }
+  // The picture on an invite link's embed: the canvas, unless the room is private.
+  mm = /^\/og\/([a-z0-9]+)$/.exec(p);
+  if (mm && (m === 'GET' || m === 'HEAD')) {
+    const room = getRoom(mm[1]);
+    const row = room && !room.info.private ? db.prepare('SELECT thumb FROM rooms WHERE id = ?').get(mm[1]) as { thumb: Uint8Array | null } | undefined : undefined;
+    if (row?.thumb) { res.writeHead(200, { 'Content-Type': checkThumb(Buffer.from(row.thumb)), 'Cache-Control': 'public, max-age=600' }); return res.end(m === 'HEAD' ? undefined : Buffer.from(row.thumb)); }
+    return serveStatic(req, res, '/og.png', m);
+  }
   mm = /^\/api\/rooms\/([a-z0-9]+)\/invite$/.exec(p);
   if (mm && m === 'POST') {
     const u = requireMember(req, 'invite friends');
@@ -484,6 +492,7 @@ async function route(req: Req, res: Res) {
     const u = sessionUser(cookies(req)[COOKIE]);
     // Logged-out visitors go on to the login page; a private room reads as missing to anyone not let in.
     if (!room || (u && !room.visibleTo(u))) return serveStatic(req, res, '/404', m);
+    if (m === 'GET' || m === 'HEAD') return serveInvite(req, res, room, url.searchParams.get('by'), url.searchParams.has('watch'), m);
   }
   if ((m === 'GET' || m === 'HEAD') && !api && fs.existsSync(config.staticDir)) return serveStatic(req, res, p, m);
   json(res, 404, { error: 'Not found.' });
@@ -510,6 +519,26 @@ function loadFile(file: string): Cached | null {
   if (fileCache.size > 200) fileCache.clear();
   fileCache.set(file, c);
   return c;
+}
+
+const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+
+/** The app page with Open Graph tags, so a pasted invite link embeds as "<name> has invited you to draw!" with the canvas. */
+function serveInvite(req: Req, res: Res, room: Room, by: string | null, watch: boolean, m: string) {
+  const c = loadFile(path.join(config.staticDir, 'app.html'));
+  if (!c) return serveStatic(req, res, '/app', m);
+  const name = (by ? userByHandle(by) : undefined)?.display_name ?? getUser(room.info.ownerId)?.display_name ?? 'A friend';
+  const v = (db.prepare('SELECT thumb_version FROM rooms WHERE id = ?').get(room.info.id) as { thumb_version: number } | undefined)?.thumb_version ?? 0;
+  const tags = {
+    'og:type': 'website', 'og:site_name': 'DoodleHive', 'og:url': `${config.publicUrl}/app?room=${room.info.id}`,
+    'og:title': `${name} has invited you to ${watch ? 'watch them draw' : 'draw'}!`,
+    'og:description': `${name} has invited you to ${watch ? 'watch them draw' : 'draw'} on DoodleHive! No account needed just click to join!`,
+    'og:image': `${config.publicUrl}/og/${room.info.id}?v=${v}`, 'twitter:card': 'summary_large_image',
+  };
+  const head = Object.entries(tags).map(([k, val]) => `<meta property="${k}" content="${escapeHtml(val)}" />`).join('\n  ');
+  const html = c.raw.toString('utf8').replace('</head>', `  ${head}\n</head>`);
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
+  res.end(m === 'HEAD' ? undefined : html);
 }
 
 function serveStatic(req: Req, res: Res, p: string, m: string) {

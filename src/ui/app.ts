@@ -375,7 +375,7 @@ export class App {
     catch { this.toast(text); }
   }
 
-  copyInvite() { return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
+  async copyInvite() { await this.session.flushThumb(); return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
 
   private export() { if (!this.ed.readOnly) exportDialog(this.ed); }
 

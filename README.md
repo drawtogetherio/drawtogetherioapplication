@@ -80,6 +80,14 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   and clicking either picks what the tools edit. Apply bakes the mask into the pixels; delete and undo
   restore it. Ops carry `mask: true` when they target the mask, so rooms and replay stay exact; PSD
   export writes masks and clipping.
+- **Invite link embeds (v0.24)**: an invite link (`/app?room=ID&by=handle`) is served with Open Graph
+  tags, so Discord and friends show "<name> has invited you to draw!", the description, and the canvas
+  as a large image (`serveInvite` in `server/index.ts`). `by` is the sharer's handle, added by the app
+  when it copies the link and dropped from the address bar once the room opens; an unknown handle
+  falls back to the room's owner. The image comes from `/og/ID`, a public route that serves the
+  room's thumbnail (owners now upload one for live-only rooms too, and flush it before copying the
+  link), versioned by `thumb_version` so chat apps refetch it. Private and unknown rooms get
+  `public/og.png`, the Doodlehive card, which the landing page also uses as its `og:image`.
 - **Layer effects** (the ✦ button by the flip buttons lists them; the layers panel's ✦ too): Gaussian blur, motion blur, mosaic, chromatic
   aberration, glitch, sharpen and noise. Each is one `effect` op, computed with plain arithmetic in a fixed
   order (`src/engine/effects.ts`) so every client bakes the same pixels; nothing is re-applied per frame.
@@ -279,5 +287,6 @@ DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pre
 DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete
 DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
+node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback
 ```
 Set `CHROMIUM=/path/to/chrome` if Playwright's bundled browser isn't installed.
