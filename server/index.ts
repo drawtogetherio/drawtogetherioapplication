@@ -6,7 +6,7 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, userByHandle, UserRow,
+  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getSite, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, userByHandle, UserRow,
 } from './db.ts';
 import { Room, cleanShare, createRoom, deleteRoom, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
 import { validOp } from './validate.ts';
@@ -150,7 +150,8 @@ async function route(req: Req, res: Res) {
 
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
-    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon });
+    const site = getSite();
+    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, notice: site.notice.on ? site.notice : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });

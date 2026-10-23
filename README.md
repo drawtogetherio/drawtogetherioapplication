@@ -186,6 +186,10 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Users: search and filter, then manage: premium (30 days, a year, forever, off), badges (Staff,
   Supporter, Featured artist, Early bee, shown next to the name), rename, clear status, remove avatar,
   sign out everywhere, make admin, ban/unban, ban their address, delete the account and its canvases.
+- Site: whether every new account starts with the Early bee badge (on by default; guests never get
+  it), and a home screen message with background and text colours, previewed as you type. Settings are
+  one JSON row in the `site` table (`src/shared/site.ts` cleans them); `/api/config` carries the
+  message while it is on, and the home screen shows it above the Patreon banner.
 - IP bans: a banned address gets a plain 403 everywhere, sockets included. Every action is in the Log.
 - Addresses: each signed-in person's current address is kept in memory only (never stored) so an
   admin can ban it; only admins see it. The ban list itself is stored.
@@ -284,7 +288,7 @@ node tests/spectate.mjs                       # watch links: chat only, no edits
 node tests/smudge.mjs                         # smudge: drags paint, undo, selection clip, room sync
 DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
 DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
-DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete
+DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete, site settings
 DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback

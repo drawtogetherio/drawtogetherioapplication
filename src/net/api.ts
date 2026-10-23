@@ -2,6 +2,7 @@ import type { DocSettings, Op } from '../core/model';
 import type { MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
 import type { ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
+import type { SiteNotice } from '../shared/site';
 import type { Prefs } from '../shared/prefs';
 
 export class ApiError extends Error {
@@ -20,7 +21,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string }
+export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; notice?: SiteNotice | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 

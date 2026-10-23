@@ -6,6 +6,7 @@ import { config } from './config.ts';
 import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isValidHandle, suggestHandle } from '../src/shared/profile.ts';
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
+import { SiteSettings, cleanSite } from '../src/shared/site.ts';
 import { cleanBadges } from '../src/shared/profile.ts';
 
 fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
@@ -76,6 +77,18 @@ addColumn('rooms', 'ephemeral', 'INTEGER NOT NULL DEFAULT 0'); // free hosts' ro
 addColumn('users', 'admin', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'banned', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('users', 'badges', `TEXT NOT NULL DEFAULT '[]'`);
+db.exec('CREATE TABLE IF NOT EXISTS site (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+
+/** Dashboard settings; one JSON row. */
+export function getSite(): SiteSettings {
+  const row = db.prepare(`SELECT value FROM site WHERE key = 'settings'`).get() as { value: string } | undefined;
+  return cleanSite(row ? safeJson(row.value) : {});
+}
+export function setSite(patch: unknown): SiteSettings {
+  const next = cleanSite({ ...getSite(), ...(patch && typeof patch === 'object' ? patch : {}) });
+  db.prepare(`INSERT INTO site (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify(next));
+  return next;
+}
 db.exec(`UPDATE rooms SET visibility = 'private' WHERE private = 1 AND visibility <> 'private'`);
 db.exec(`
   -- One row per pair, with user_a < user_b. Pending until the other person accepts.
@@ -174,8 +187,8 @@ export function findOrCreateUser(provider: 'discord' | 'dev', providerId: string
   let u = db.prepare(`SELECT ${USER_COLS} FROM users WHERE provider = ? AND provider_id = ?`).get(provider, providerId) as UserRow | undefined;
   if (!u) {
     const id = newId('u_');
-    db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, provider, providerId, freeHandleLike(handleHint), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now());
+    db.prepare(`INSERT INTO users (id, provider, provider_id, handle, display_name, favorite_color, created_at, badges)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(id, provider, providerId, freeHandleLike(handleHint), displayName, PALETTE[crypto.randomInt(PALETTE.length)], Date.now(), getSite().earlyBadge ? '["early"]' : '[]');
     u = getUser(id)!;
   }
   // ADMIN_HANDLES names the first admins; the rest are made in the dashboard.

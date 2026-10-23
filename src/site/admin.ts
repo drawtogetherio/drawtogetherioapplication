@@ -1,6 +1,7 @@
 import './site.css';
 import { ApiError, api } from '../net/api';
 import { BADGES, type Badge, type PublicProfile } from '../shared/profile';
+import { NOTICE_MAX, type SiteSettings } from '../shared/site';
 import { initTheme } from '../ui/theme';
 import { brandHtml } from './brand';
 import { esc } from './common';
@@ -20,7 +21,7 @@ interface Stats {
 interface IpBan { ip: string; reason: string; createdAt: number }
 interface LogRow { action: string; target: string; at: number; admin: string | null }
 
-const SECTIONS = ['Overview', 'Users', 'IP bans', 'Log'] as const;
+const SECTIONS = ['Overview', 'Site', 'Users', 'IP bans', 'Log'] as const;
 type Section = (typeof SECTIONS)[number];
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -161,6 +162,42 @@ function drawer(id: string) {
   });
 }
 
+// ---- Site: signup badge and the home screen message ----
+async function sitePage() {
+  const site = await call<SiteSettings>('GET', '/api/admin/site');
+  if (stale('Site')) return;
+  const nt = site.notice;
+  page.innerHTML = `
+    <h2>New accounts</h2>
+    <label class="site-row"><input type="checkbox" id="early-badge" ${site.earlyBadge ? 'checked' : ''}> Every new account gets the ${esc(BADGES.early)} badge</label>
+    <h2>Home screen message</h2>
+    <form class="site-form" id="notice-form">
+      <input name="text" placeholder="What everyone sees at the top of the home screen" maxlength="${NOTICE_MAX}" value="${esc(nt.text)}" autocomplete="off">
+      <div class="site-row"><label>Background <input type="color" name="bg" value="${nt.bg}"></label><label>Text <input type="color" name="fg" value="${nt.fg}"></label>
+        <label><input type="checkbox" name="on" ${nt.on ? 'checked' : ''}> Show it</label></div>
+      <p class="fine">Preview</p>
+      <div class="notice-preview"><div class="site-notice"></div><div class="fake-home"><span></span><span></span></div></div>
+      <button class="btn small primary" type="submit">Save</button>
+    </form>`;
+  page.querySelector('#early-badge')!.addEventListener('change', async (e) => {
+    try { await call('PATCH', '/api/admin/site', { earlyBadge: (e.target as HTMLInputElement).checked }); say('Saved'); } catch (ex) { failing(ex); }
+  });
+  const form = page.querySelector<HTMLFormElement>('#notice-form')!, bar = page.querySelector<HTMLElement>('.notice-preview .site-notice')!;
+  const read = () => { const f = new FormData(form); return { text: String(f.get('text')), bg: String(f.get('bg')), fg: String(f.get('fg')), on: f.get('on') === 'on' }; };
+  const preview = () => {
+    const n = read();
+    bar.textContent = n.text || 'Your message';
+    bar.style.background = n.bg; bar.style.color = n.fg;
+    bar.style.opacity = n.on && n.text ? '1' : '0.45';
+  };
+  form.addEventListener('input', preview);
+  preview();
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await call('PATCH', '/api/admin/site', { notice: read() }); say('Saved'); } catch (ex) { failing(ex); }
+  });
+}
+
 // ---- IP bans ----
 async function ipBans() {
   const list = await call<IpBan[]>('GET', '/api/admin/ip-bans');
@@ -187,7 +224,7 @@ async function logPage() {
     ${rows.map((r) => `<tr><td>${when(r.at)}</td><td>@${esc(r.admin ?? '?')}</td><td>${esc(r.action)}</td><td>${esc(r.target)}</td></tr>`).join('')}</table>` : '<p class="fine">Nothing yet.</p>';
 }
 
-const PAGES: Record<Section, () => Promise<void>> = { Overview: overview, Users: usersPage, 'IP bans': ipBans, Log: logPage };
+const PAGES: Record<Section, () => Promise<void>> = { Overview: overview, Site: sitePage, Users: usersPage, 'IP bans': ipBans, Log: logPage };
 
 function show(s: Section) {
   clearTimeout(timer);

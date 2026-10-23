@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { db, getUser, isAdmin, publicProfile, USER_COLS, UserRow } from './db.ts';
+import { db, getSite, getUser, isAdmin, publicProfile, setSite, USER_COLS, UserRow } from './db.ts';
 import { HttpError, Req, Res, json, jsonBody } from './http.ts';
 import { deleteRoom, disconnectUser, liveRooms } from './rooms.ts';
 import { closeStreams } from './live.ts';
@@ -146,6 +146,13 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
     return json(res, 200, { ok: true });
   }
 
+  if (p === '/api/admin/site' && m === 'GET') return json(res, 200, getSite());
+  if (p === '/api/admin/site' && m === 'PATCH') {
+    const b = await jsonBody(req);
+    const site = setSite(b);
+    log(me, `site: early badge ${site.earlyBadge ? 'on' : 'off'}, notice ${site.notice.on ? 'on' : 'off'}`);
+    return json(res, 200, site);
+  }
   if (p === '/api/admin/sweep' && m === 'POST') { const r = sweep(); log(me, `sweep: ${r.guests} guests`); return json(res, 200, r); }
 
   if (p === '/api/admin/log' && m === 'GET') {

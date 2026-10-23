@@ -57,6 +57,7 @@ export class Home {
   private noticesPop = h('div.popover.notices-pop', { hidden: true });
   private notices: Notice[] = [];
   private banner = h('div.support-banner', { hidden: true });
+  private notice = h('div.site-notice', { hidden: true, role: 'status' });
   private thumbUrls: string[] = [];
 
   constructor(private app: App) {
@@ -83,10 +84,10 @@ export class Home {
     // Popovers anchor to the header, so the banner above can come and go. In the frameless app the
     // header is the window's top strip, so the banner goes under it, clear of the resize border.
     const under = !!native?.frameless;
-    if (!under) this.el.append(this.banner);
+    if (!under) this.el.append(this.notice, this.banner);
     this.el.append(h('div.home-main', {},
       frameBar(h('header.home-top', {}, h('div.home-brand', { html: brandHtml('/') }), h('span.grow'))),
-      under ? this.banner : null,
+      under ? this.notice : null, under ? this.banner : null,
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
           this.meCard,
@@ -129,8 +130,11 @@ export class Home {
     clearInterval(this.timer);
   }
 
-  /** Once per browser session, until it is closed for good. */
+  /** The admin's announcement, then the Patreon banner once per browser session until it is closed for good. */
   private renderBanner() {
+    const n = this.app.session.server?.notice;
+    this.notice.hidden = !n;
+    if (n) { this.notice.textContent = n.text; this.notice.style.background = n.bg; this.notice.style.color = n.fg; }
     const url = this.app.session.server?.patreon;
     const b = this.banner;
     let seen = false;
