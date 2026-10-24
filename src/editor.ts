@@ -38,6 +38,8 @@ export class Editor {
   readonly view: CanvasView;
   tools = {} as Record<ToolId, Tool>;
   toolId: ToolId = 'brush';
+  /** The tool before the current one, for the Pencil's "previous tool" and eraser toggle. */
+  prevToolId: ToolId = 'brush';
   activeLayer = '';
   color = '#1b1b1f';
   recentColors: string[] = [];
@@ -111,6 +113,7 @@ export class Editor {
   setTool(id: ToolId) {
     if (id === this.toolId) return;
     this.currentTool.deactivate?.();
+    this.prevToolId = this.toolId;
     this.toolId = id;
     this.currentTool.activate?.();
     this.emit('tool');

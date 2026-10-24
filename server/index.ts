@@ -14,6 +14,7 @@ import { HiveFileError, canvasOps, unzip } from '../src/shared/hivecanvas.ts';
 import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
+import { addDevice, closePush, pushEnabled, removeDevice } from './push.ts';
 import { sweep } from './sweep.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import { HttpError, Req, Res, body, json, jsonBody } from './http.ts';
@@ -159,7 +160,7 @@ async function route(req: Req, res: Res) {
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
     const site = getSite();
-    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), notice: site.notice.on ? site.notice : null });
+    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), push: pushEnabled(), notice: site.notice.on ? site.notice : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });
@@ -432,6 +433,16 @@ async function route(req: Req, res: Res) {
     premiumWarning(u);
     return json(res, 200, listNotices(u.id));
   }
+  // The iPad app's push token; one per device, moved to whoever logs in on it.
+  if (p === '/api/me/devices' && m === 'POST') {
+    const u = requireMember(req, 'get notifications');
+    limit('device:' + u.id, 20, 10 * MINUTE);
+    const b = await jsonBody(req);
+    if (!addDevice(u.id, String(b.token ?? '').toLowerCase(), b.env)) throw new HttpError(400, 'Invalid device token.');
+    return json(res, 200, { ok: true, push: pushEnabled() });
+  }
+  mm = /^\/api\/me\/devices\/([0-9a-fA-F]{1,200})$/.exec(p);
+  if (mm && m === 'DELETE') { removeDevice(requireUser(req).id, mm[1].toLowerCase()); return json(res, 200, { ok: true }); }
   if (p === '/api/notices/read' && m === 'POST') { readNotices(requireUser(req).id); return json(res, 200, { ok: true }); }
   if (p === '/api/notices' && m === 'DELETE') { clearNotices(requireUser(req).id); return json(res, 200, { ok: true }); }
   if (p === '/api/events' && m === 'GET') {
@@ -711,6 +722,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     for (const ws of wss.clients) ws.close(1012, 'Server restarting');
     closeAllStreams();
+    closePush();
     flushOps();
     flushStats();
     server.close();

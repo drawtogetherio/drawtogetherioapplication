@@ -1,0 +1,8 @@
+{
+  "name": "doodlehive-native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The iPad app's own native bits: Apple Pencil double-tap and squeeze, the push environment and the app badge.",
+  "files": ["ios/Sources", "Package.swift"],
+  "capacitor": { "ios": { "src": "ios" } }
+}

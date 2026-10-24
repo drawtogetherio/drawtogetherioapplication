@@ -19,6 +19,7 @@ import type { LiveEvent } from '../net/api';
 import { DEFAULT_SHARE, PRIVATE_ROOM_MSG, RoomInfo, ShareSettings, WATCH_KEY_RE } from '../shared/protocol';
 import type { Op } from '../core/model';
 import { cleanPrefs } from '../shared/prefs';
+import { forgetPush, registerPush } from './ipadApp';
 
 export const PREFS_KEY = 'doodlehive.prefs';
 
@@ -82,6 +83,7 @@ export class Session {
     this.ed.prefs = this.ed.me.prefs;
     this.app.refreshAccount();
     this.listen();
+    if (this.server.push && !this.me?.guest) void registerPush(this.app).catch(() => {});
     addEventListener('pagehide', () => this.local?.close());
     if (this.me?.needsSetup) {
       const saved = await profileDialog(this.me, true);
@@ -450,6 +452,7 @@ export class Session {
   }
 
   async logout(then = '/') {
+    await forgetPush();
     await api.logout().catch(() => {});
     location.href = then;
   }

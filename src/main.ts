@@ -4,6 +4,7 @@ import { App } from './ui/app';
 import { initTheme } from './ui/theme';
 import { setSaveHandler } from './io/platform';
 import { zipSingle } from './io/zip';
+import { startIpad } from './ui/ipadApp';
 
 initTheme();
 const root = document.getElementById('app')!;
@@ -11,6 +12,7 @@ const app = new App(root, DrawDoc.create({ width: 2048, height: 2048, infinite: 
 app.session.start();
 
 (window as unknown as { doodlehive: App }).doodlehive = app;
+startIpad(app);
 
 // Inside an Artifact preview, downloads go through the host's save prompt.
 type Downloads = { save(r: { filename: string; data: Blob }): Promise<unknown> };

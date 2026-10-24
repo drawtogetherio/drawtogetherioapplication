@@ -120,14 +120,42 @@ add a certificate (SmartScreen warns on the first runs of a new unsigned app).
 
 ## iPad app
 
-`ipad/` is a Capacitor project that shows doodlehive.net inside a native shell and keeps canvases in
-the app's own storage. It needs a Mac with Xcode and an Apple Developer account:
+`ipad/` is a Capacitor 8 project: a native iPad shell that shows doodlehive.net, keeps canvases in the
+app's own storage, and adds what the website can't do (see README → iPad app). The Xcode project is
+in the repo (`ipad/ios`) and uses Swift Package Manager, so there is no CocoaPods step.
 
-```bash
-cd ipad && npm install && npx cap add ios && npx cap open ios
-```
+**Build it on a Mac and put it on your iPad**
 
-Set your team in Xcode, run on an iPad, and archive for TestFlight / the App Store from there.
-App Review can push back on apps that are "just a website"; features that only the app has (Pencil
-double-tap, sharing to Photos, the permanent storage) are the answer, and are the next step here.
+1. Install Xcode from the App Store (open it once) and Node 22+.
+2. In the repo: `cd ipad && npm install && npx cap sync ios && npx cap open ios`.
+   Run `npx cap sync ios` again whenever `ipad/package.json` or `capacitor.config.ts` changes.
+3. In Xcode, select the **App** target → **Signing & Capabilities** → pick your **Team**. Keep the bundle
+   id `net.doodlehive.app` (push is sent to that id).
+   - With a paid Apple Developer Program membership, push works as is.
+   - With a free Apple ID ("Personal Team"), Apple doesn't allow push: delete the **Push
+     Notifications** capability there (the × on it) and everything else still works. Free builds
+     expire after 7 days; run again from Xcode to renew.
+4. Plug in the iPad, tap **Trust**, turn on **Settings → Privacy & Security → Developer Mode**, pick the
+   iPad in Xcode's toolbar and press ▶.
 
+The app loads the live site, so web changes (Pencil gestures, push registration) reach it when they
+are deployed to Railway; only changes under `ipad/` need a new build. To try unmerged web changes,
+run `npm run dev` on the Mac and build the app against it:
+`DOODLEHIVE_URL=http://<your-mac>.local:5173/app npx cap sync ios`, then ▶ (sync again without the
+variable before archiving).
+
+**Push notifications (one-time)**
+
+1. developer.apple.com → Certificates, IDs & Profiles → **Keys** → + → tick **Apple Push Notifications
+   service (APNs)** → download the `.p8` file (only offered once) and note its **Key ID**. Your **Team
+   ID** is under Membership.
+2. Railway → the service → Variables: `APNS_KEY` (the .p8 file's contents; pasted with its line breaks
+   or with `\n`), `APNS_KEY_ID`, `APNS_TEAM_ID`. `APNS_TOPIC` defaults to `net.doodlehive.app`.
+   Without them the server simply sends no pushes, and `/api/config` reports `push: false`.
+
+Builds run from Xcode get sandbox tokens and TestFlight/App Store builds production ones; the server
+tracks which per device and tries the other APNs server once if Apple says a token is wrong.
+
+**TestFlight / App Store**: Product → Archive → Distribute App → App Store Connect. App Review can push
+back on apps that are "just a website"; the Pencil gestures, share-sheet export, push and the
+permanent storage are the native features to point to.

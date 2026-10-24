@@ -1,4 +1,5 @@
-import { DEFAULT_KEYS, KEY_ACTIONS, KeyAction, MODES, Mode, PANELS, actionFor, keyOf } from '../shared/prefs';
+import { DEFAULT_KEYS, KEY_ACTIONS, KeyAction, MODES, Mode, PANELS, PENCIL_ACTIONS, PencilAction, actionFor, keyOf } from '../shared/prefs';
+import { ipad } from '../io/ipad';
 import { DEFAULT_CURVE } from '../shared/curve';
 import type { App } from './app';
 import { curveEditor } from './curveEditor';
@@ -7,7 +8,7 @@ import { clear, h } from './dom';
 import { Slider } from './slider';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
-const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Shortcuts'] as const;
+const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Apple Pencil', 'Shortcuts'] as const;
 
 export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'Appearance') {
   const ed = app.ed, p = ed.prefs;
@@ -109,14 +110,29 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       h('button.btn.small', { type: 'button', onclick: () => { p.keys = {}; changed(); renderKeys(); } }, 'Reset'))];
   };
 
-  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Shortcuts: shortcuts };
+  // Only the iPad app hears double-taps and squeezes.
+  const pencil = () => {
+    const pick = (label: string, get: () => PencilAction, set: (v: PencilAction) => void) => {
+      const sel = h('select', { 'aria-label': label });
+      for (const a of PENCIL_ACTIONS) sel.append(h('option', { value: a.id, selected: a.id === get() }, a.label));
+      sel.addEventListener('change', () => { set(sel.value as PencilAction); changed(); });
+      return row(label, sel);
+    };
+    return [
+      pick('Double-tap', () => p.pencilTap, (v) => { p.pencilTap = v; }),
+      pick('Squeeze', () => p.pencilSqueeze, (v) => { p.pencilSqueeze = v; }),
+      h('small.muted', {}, 'Squeeze needs Apple Pencil Pro. Hover the Pencil to open the quick palette under its tip.'),
+    ];
+  };
+
+  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, 'Apple Pencil': pencil, Shortcuts: shortcuts };
   const page = h('div.pref-page');
   const nav = h('nav.pref-nav', { 'aria-label': 'Preference groups' });
   const show = (g: (typeof GROUPS)[number]) => {
     for (const b of nav.children) b.classList.toggle('active', (b as HTMLElement).dataset.group === g);
     page.replaceChildren(h('h3', {}, g), ...pages[g]());
   };
-  for (const g of GROUPS) nav.append(h('button.pref-group', { type: 'button', 'data-group': g, onclick: () => show(g) }, g));
+  for (const g of GROUPS) if (g !== 'Apple Pencil' || ipad.app) nav.append(h('button.pref-group', { type: 'button', 'data-group': g, onclick: () => show(g) }, g));
   show(open);
   modal('Preferences', h('div.modal-body.prefs', {}, nav, page), []);
 }
