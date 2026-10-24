@@ -59,7 +59,7 @@ export class BrushTool implements Tool {
 
   private add(p: PointerInfo) {
     // A very long stroke is committed in pieces, so none grows past what the room accepts.
-    if (this.pts.length >= MAX_STROKE_PTS) { this.up(p); this.down(p); return; }
+    if (this.pts.length >= MAX_STROKE_PTS) { this.up(); this.down(p); return; }
     // Rounded samples are what gets rendered, so a replay matches exactly.
     const x = round(p.x), y = round(p.y), pr = round(p.pressure);
     this.pts.push(x, y, pr);
@@ -80,15 +80,10 @@ export class BrushTool implements Tool {
     this.sent = this.pts.length;
   }
 
-  up(p?: PointerInfo) {
+  up() {
     if (!this.buffer) return;
-    const t = this.tether;
-    if (t && p) {
-      // Lifting lets the rope snap: the brush finishes the line to the cursor.
-      const n = Math.ceil(Math.hypot(p.x - t.bx, p.y - t.by) / 4);
-      for (let i = 1; i <= n; i++) this.add({ ...p, x: t.bx + ((p.x - t.bx) * i) / n, y: t.by + ((p.y - t.by) * i) / n });
-      this.tether = null;
-    }
+    // The line ends where the brush is, not where the cursor was.
+    this.tether = null;
     const r = this.renderer!.end();
     if (r) this.ed.view.invalidate(r);
     this.flush();

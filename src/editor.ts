@@ -34,6 +34,9 @@ export interface EditorSettings {
 
 type Listener = (what: string) => void;
 
+/** Rotation and flips of the view. */
+export interface ViewTurn { rot: number; flipX: number; flipY: number }
+
 /** Per-user state around a document: tool, layer, colour, selection, room. */
 export class Editor {
   doc: DrawDoc;
@@ -318,18 +321,22 @@ export class Editor {
     return { x: Math.floor(Math.min(...xs)), y: Math.floor(Math.min(...ys)), w: Math.ceil(Math.max(...xs) - Math.min(...xs)), h: Math.ceil(Math.max(...ys) - Math.min(...ys)) };
   }
 
-  fitView() {
+  /** Fits the canvas on screen; `turn` restores how it was last held (rotation and flips). */
+  fitView(turn: ViewTurn = { rot: 0, flipX: 1, flipY: 1 }) {
     const s = this.doc.settings;
     const vp = this.view.viewport;
-    vp.flipX = 1; vp.flipY = 1;
-    if (!s.infinite) vp.fit({ x: 0, y: 0, w: s.width, h: s.height });
+    vp.flipX = turn.flipX; vp.flipY = turn.flipY;
+    if (!s.infinite) vp.fit({ x: 0, y: 0, w: s.width, h: s.height }, 40, turn.rot);
     else {
       const b = this.doc.bounds();
-      if (b) vp.fit(b, 80);
-      else { vp.rot = 0; vp.zoom = 1; vp.cx = 0; vp.cy = 0; vp.onChange(); }
+      if (b) vp.fit(b, 80, turn.rot);
+      else { vp.rot = turn.rot; vp.zoom = 1; vp.cx = 0; vp.cy = 0; vp.onChange(); }
     }
     this.emit('view');
   }
+
+  /** How the canvas is held now, for `fitView` next time. */
+  get turn(): ViewTurn { const vp = this.view.viewport; return { rot: vp.rot, flipX: vp.flipX, flipY: vp.flipY }; }
 
   toast(msg: string) { this.emit('toast:' + msg); }
 

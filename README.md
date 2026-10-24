@@ -118,7 +118,10 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   holes, so a selection now carries `holes` and every clip uses the even-odd rule.
 - **Brush stabilizer (v0.26)**: the Stabilizer slider in the brush options puts the brush on a rope
   behind the cursor (`pull` in `src/tools/brushTool.ts`, up to 160 screen px); the overlay draws the
-  rope and the cursor, and lifting finishes the line to the cursor. Saved with the preferences.
+  rope and the cursor, and the line ends where the brush is when you lift. Saved with the preferences.
+- **Canvases remember how they were held (v0.26)**: the view's rotation and flips are kept per canvas
+  on the device (`src/view/turns.ts`, localStorage) and restored on the next open, fitted so the
+  turned canvas still fits the screen. Per device, so nobody's rotation turns anyone else's room.
 - **Long strokes (v0.26)**: a stroke that outgrows `MAX_STROKE_PTS` (40k samples) is committed and
   continued as a new one, instead of being rejected as "Unknown edit".
 - **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the

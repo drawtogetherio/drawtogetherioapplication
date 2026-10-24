@@ -59,9 +59,14 @@ await ren.mouse.move(400, 400);
 await stroke(ren, 300);
 await stroke(ren, 360);
 check(await projects(ren) === 0, 'nothing stored on the server');
+// Turn the canvas sideways; it should come back that way.
+await dh(ren, (dh) => { const vp = dh.ed.view.viewport; vp.setFromMatrix(new DOMMatrix().translateSelf(vp.w / 2, vp.h / 2).rotateSelf(90).translateSelf(-vp.w / 2, -vp.h / 2).multiplySelf(vp.matrix())); });
 await ren.reload();
 await ren.waitForFunction(() => window.doodlehive?.session.local && window.doodlehive.ed.doc.log.length > 1);
 check(await strokes(ren) === 2, 'reload reopens the canvas with both strokes');
+const rot = await dh(ren, (dh) => dh.ed.view.viewport.rot * 180 / Math.PI);
+check(Math.abs(rot - 90) < 1, `and holds it the way it was left (${rot.toFixed(1)}°)`);
+await dh(ren, (dh) => dh.ed.fitView());
 await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await ren.waitForSelector('.home:not([hidden]) .project-tile img');
 check(await ren.locator('.tile-meta', { hasText: 'On this device' }).count() === 1, 'home shows it as on this device, with a thumbnail');

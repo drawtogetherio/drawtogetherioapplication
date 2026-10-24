@@ -96,8 +96,7 @@ await page.screenshot({ path: `${out}/03-rope.png` });
 await m.up();
 await page.waitForTimeout(200);
 const end = await ed((e) => { const op = e.doc.log.at(-1); return [op.t, op.pts.at(-3), e.tools.brush.tether]; });
-const endDoc = await ed((e, p) => e.view.viewport.toDoc(p[0], p[1]).x, [400, 500]);
-check(end[0] === 'stroke' && Math.abs(end[1] - endDoc) < 2 && !end[2], `lifting finishes the line at the cursor (${Math.round(end[1])} vs ${Math.round(endDoc)})`);
+check(end[0] === 'stroke' && Math.abs(end[1] - tether.bx) < 2 && !end[2], `lifting ends the line where the brush was (${Math.round(end[1])} vs ${Math.round(tether.bx)})`);
 await ed((e) => { e.prefs.stabilizer = 0; });
 
 // ---- Very long strokes split instead of failing ----

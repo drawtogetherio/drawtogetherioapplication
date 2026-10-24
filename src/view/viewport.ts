@@ -48,10 +48,13 @@ export class Viewport {
     this.setFromMatrix(new DOMMatrix().translateSelf(dx, dy).multiplySelf(this.matrix()));
   }
 
-  fit(r: Rect, margin = 40) {
-    this.rot = 0;
+  /** Fits `r` on screen, turned by `rot`: the rotated box is what has to fit. */
+  fit(r: Rect, margin = 40, rot = 0) {
+    this.rot = rot;
     this.cx = r.x + r.w / 2; this.cy = r.y + r.h / 2;
-    this.zoom = clamp(Math.min((this.w - margin * 2) / r.w, (this.h - margin * 2) / r.h), MIN_ZOOM, 1);
+    const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+    const w = r.w * c + r.h * s, h = r.w * s + r.h * c;
+    this.zoom = clamp(Math.min((this.w - margin * 2) / w, (this.h - margin * 2) / h), MIN_ZOOM, 1);
     this.onChange();
   }
 

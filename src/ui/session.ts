@@ -16,6 +16,7 @@ import { lapse, lapseFromFiles, moveLapse, roomLapseKey } from '../io/lapse';
 import { timelapseDialog } from './timelapse';
 import { native } from '../io/native';
 import { LocalCopy } from './localCopy';
+import { saveTurn, savedTurn } from '../view/turns';
 import type { LiveEvent } from '../net/api';
 import { DEFAULT_SHARE, PRIVATE_ROOM_MSG, RoomInfo, ShareSettings, WATCH_KEY_RE } from '../shared/protocol';
 import type { Op } from '../core/model';
@@ -83,7 +84,7 @@ export class Session {
     this.ed.prefs = this.ed.me.prefs;
     this.app.refreshAccount();
     this.listen();
-    addEventListener('pagehide', () => this.local?.close());
+    addEventListener('pagehide', () => { this.rememberTurn(); this.local?.close(); });
     if (this.me?.needsSetup) {
       const saved = await profileDialog(this.me, true);
       if (saved) this.ed.me = saved;
@@ -217,6 +218,7 @@ export class Session {
     this.app.home.hide();
     this.setUrl({ canvas: copy.meta.id });
     this.ed.setDoc(doc);
+    this.ed.fitView(savedTurn(copy.meta.id));
     this.attachCopy(copy);
     lapse.attach(doc, copy.meta.id, copy.meta.name);
     if (!copy.meta.thumb && doc.log.length > 1) copy.thumb(doc);
@@ -386,6 +388,7 @@ export class Session {
       }
       if (e.kind === 'ready') {
         this.ed.setDoc(e.doc, !e.first);
+        if (e.first) this.ed.fitView(savedTurn(id));
         this.ed.ensureOwnLayer();
         if (!room.spectator) lapse.attach(e.doc, opts.copy?.meta.id ?? this.local?.meta.id ?? roomLapseKey(id), room.info?.name ?? '');
         this.app.refreshRoom();
@@ -430,7 +433,12 @@ export class Session {
   }
 
   /** Leaves the room and ends the device copy, except `keep`. */
+  /** The canvas's id for things kept per device: the room, or the copy here. */
+  private get canvasKey() { return this.ed.room?.id ?? this.local?.meta.id ?? null; }
+  rememberTurn() { if (this.canvasKey) saveTurn(this.canvasKey, this.ed.turn); }
+
   private closeAll(keep: LocalCopy | null) {
+    this.rememberTurn();
     const room = this.ed.room, saving = this.flushThumb();
     lapse.detach();
     if (room) {
