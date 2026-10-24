@@ -1,8 +1,19 @@
-import { rectContains, rectIntersect, rectUnion, uid } from '../core/geom';
+import { Rect, rectContains, rectIntersect, rectUnion, uid } from '../core/geom';
 import type { Editor } from '../editor';
 import { PointerInfo, Tool } from './tool';
 
 const MAX_FILL = 8192;
+
+/** Where a fill around (x, y) may reach: the canvas, or on an unlimited one the view plus the artwork, capped in size. */
+export function fillRegion(ed: Editor, x: number, y: number): Rect {
+  let region = ed.workArea();
+  if (ed.doc.settings.infinite) {
+    region = rectUnion(region, ed.doc.bounds())!;
+    const cap = { x: Math.floor(x - MAX_FILL / 2), y: Math.floor(y - MAX_FILL / 2), w: MAX_FILL, h: MAX_FILL };
+    region = rectIntersect(region, cap) ?? region;
+  }
+  return region;
+}
 
 export class FillTool implements Tool {
   constructor(private ed: Editor) {}
@@ -12,15 +23,9 @@ export class FillTool implements Tool {
   cancel() {}
 
   up(p: PointerInfo) {
-    const ed = this.ed, doc = ed.doc, st = ed.settings;
+    const ed = this.ed, st = ed.settings;
     if (!ed.paintableLayer()) return;
-    let region = ed.workArea();
-    if (doc.settings.infinite) {
-      // Unlimited canvas: fill within the visible area plus existing artwork, capped in size.
-      region = rectUnion(region, doc.bounds())!;
-      const cap = { x: Math.floor(p.x - MAX_FILL / 2), y: Math.floor(p.y - MAX_FILL / 2), w: MAX_FILL, h: MAX_FILL };
-      region = rectIntersect(region, cap) ?? region;
-    }
+    const region = fillRegion(ed, p.x, p.y);
     if (!rectContains(region, p.x, p.y)) return;
     ed.pushRecent(ed.color);
     ed.apply({

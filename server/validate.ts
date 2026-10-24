@@ -1,12 +1,12 @@
 import { BLEND_MODES, EFFECTS, type Op } from '../src/core/model.ts';
 import type { LiveStroke } from '../src/shared/protocol.ts';
-import { validBrush } from '../src/shared/brush.ts';
+import { MAX_STROKE_PTS, validBrush } from '../src/shared/brush.ts';
 
 // Shape and size checks for everything clients send into a room. Anything that fails is dropped
 // before it reaches the op log or other people's browsers.
 
 const MAX_ID = 48, MAX_NAME = 64, MAX_INDEX = 10_000;
-const MAX_STROKE_PTS = 30_000, MAX_LIVE_PTS = 3_000, MAX_CLIP_PTS = 20_000;
+const MAX_LIVE_PTS = 3_000, MAX_CLIP_PTS = 20_000, MAX_HOLES = 256;
 const MAX_BRUSH = 500, MAX_COORD = 4e6, MAX_REGION_PX = 100e6;
 const MAX_TILES = 512, MAX_TILE_CHARS = 400_000;
 
@@ -26,7 +26,9 @@ function nums(v: unknown, max: number, stride: number, min = stride): v is numbe
   return true;
 }
 
-const isClip = (v: unknown) => v === undefined || (obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6));
+const isSel = (v: unknown) => obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6)
+  && (v.holes === undefined || (Array.isArray(v.holes) && v.holes.length <= MAX_HOLES && v.holes.every((h) => nums(h, MAX_CLIP_PTS, 2, 6))));
+const isClip = (v: unknown) => v === undefined || isSel(v);
 const isMask = (v: unknown) => v === undefined || v === true;
 
 
@@ -63,8 +65,13 @@ export function validOp(op: unknown): op is Op {
       return isId(op.layer) && nums([op.x, op.y], 2, 2) && isColor(op.color) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && inRange(op.expand, 0, 16)
         && obj(r) && nums([r.x, r.y], 2, 2) && inRange(r.w, 1, 16384) && inRange(r.h, 1, 16384) && (r.w as number) * (r.h as number) <= MAX_REGION_PX && isClip(op.clip);
     }
+    case 'fillPoly': {
+      const r = op.region;
+      return isId(op.layer) && nums(op.pts, MAX_CLIP_PTS, 2, 6) && isColor(op.color) && isBool(op.inside) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll)
+        && inRange(op.expand, 0, 16) && obj(r) && nums([r.x, r.y], 2, 2) && inRange(r.w, 1, 16384) && inRange(r.h, 1, 16384) && (r.w as number) * (r.h as number) <= MAX_REGION_PX && isClip(op.clip);
+    }
     case 'transform':
-      return isId(op.layer) && obj(op.sel) && nums(op.sel.pts, MAX_CLIP_PTS, 2, 6) && nums(op.m, 6, 6);
+      return isId(op.layer) && isSel(op.sel) && nums(op.m, 6, 6);
     case 'tiles': {
       if (!isId(op.layer) || !obj(op.tiles) || 'img' in op) return false;
       const entries = Object.entries(op.tiles);

@@ -134,12 +134,12 @@ function drawLive(sc: CanvasRenderingContext2D, live: LiveLayer, region: Rect) {
   if (live.hole) {
     sc.save();
     sc.globalCompositeOperation = 'destination-out';
-    sc.fill(live.hole);
+    sc.fill(live.hole, 'evenodd');
     sc.restore();
   }
   if (live.buffer) {
     sc.save();
-    if (live.clip) sc.clip(live.clip);
+    if (live.clip) sc.clip(live.clip, 'evenodd');
     sc.globalAlpha = live.bufferAlpha ?? 1;
     sc.globalCompositeOperation = live.bufferOp ?? 'source-over';
     live.buffer.drawTo(sc, region);

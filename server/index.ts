@@ -11,7 +11,7 @@ import {
 import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
 import { validOp } from './validate.ts';
 import { HiveFileError, canvasOps, unzip } from '../src/shared/hivecanvas.ts';
-import { FriendError, acceptFriend, areFriends, forget, listFriends, notifyFriends, removeFriend, requestFriend, touch } from './social.ts';
+import { FriendError, acceptFriend, areFriends, blockUser, forget, listBlocked, listFriends, notifyFriends, removeFriend, requestFriend, touch, unblockUser } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
 import { sweep } from './sweep.ts';
@@ -427,6 +427,15 @@ async function route(req: Req, res: Res) {
     } catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message); throw e; }
     return json(res, 200, listFriends(u.id));
   }
+  if (p === '/api/blocks' && m === 'GET') return json(res, 200, listBlocked(requireUser(req).id));
+  if (p === '/api/blocks' && m === 'POST') {
+    const u = requireMember(req, 'block people');
+    const b = await jsonBody(req);
+    try { blockUser(u, String(b.user ?? '')); } catch (e) { if (e instanceof FriendError) throw new HttpError(e.status, e.message); throw e; }
+    return json(res, 200, listBlocked(u.id));
+  }
+  mm = /^\/api\/blocks\/([\w-]+)$/.exec(p);
+  if (mm && m === 'DELETE') { const u = requireUser(req); unblockUser(u.id, mm[1]); return json(res, 200, listBlocked(u.id)); }
   if (p === '/api/notices' && m === 'GET') {
     const u = requireUser(req);
     premiumWarning(u);
@@ -573,7 +582,7 @@ async function route(req: Req, res: Res) {
     const r = getRoom(mm[1]);
     if (!r || !r.visibleTo(u)) return json(res, 404, { error: 'Unable to find room' });
     const owner = getUser(r.info.ownerId);
-    return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length, joinable: r.canJoin(u) });
+    return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length, joinable: r.canJoin(u), invited: r.isHost(u.id) ? r.invitedProfiles() : undefined });
   }
 
   if (p === '/admin' || p.startsWith('/admin/')) {

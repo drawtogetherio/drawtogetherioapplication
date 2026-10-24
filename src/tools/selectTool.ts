@@ -1,6 +1,10 @@
-import { Point, Rect, dist, pointInPoly, polyPath, rectFromPoints, uid } from '../core/geom';
+import { Point, Rect, ctx2d, dist, pointInSel, rectContains, rectFromPoints, selPath, uid } from '../core/geom';
+import { renderRegion } from '../engine/compositor';
+import { maskToSelection } from '../engine/contour';
+import { regionMask } from '../engine/fill';
+import { fillRegion } from './fillTool';
 import { Selection } from '../core/model';
-import { Floating, liftSelection, transformPoly } from '../engine/transform';
+import { Floating, liftSelection, transformSel } from '../engine/transform';
 import type { Editor } from '../editor';
 import { accentColor } from '../ui/theme';
 import { PointerInfo, Tool } from './tool';
@@ -47,9 +51,9 @@ export class SelectTool implements Tool {
     return new DOMMatrix().translateSelf(x.T.x, x.T.y).rotateSelf((x.rot * 180) / Math.PI).scaleSelf(x.sx, x.sy).translateSelf(-cx, -cy);
   }
 
-  outline(): number[] | null {
-    if (this.xf) return transformPoly(this.xf.sel.pts, this.matrix());
-    return this.ed.selection?.pts ?? null;
+  outline(): Selection | null {
+    if (this.xf) return transformSel(this.xf.sel, this.matrix());
+    return this.ed.selection;
   }
 
   private handles(): { pos: Point; local: Point; kind: 'corner' | 'edge' | 'rotate' }[] {
@@ -96,7 +100,7 @@ export class SelectTool implements Tool {
   private updateLive() {
     const x = this.xf!;
     this.ed.view.live = {
-      layerId: x.layerId, hole: polyPath(x.sel.pts), mask: x.mask,
+      layerId: x.layerId, hole: selPath(x.sel), mask: x.mask,
       floating: { canvas: x.float.canvas, x: x.float.x, y: x.float.y, m: this.matrix() },
     };
     this.ed.view.invalidate(null);
@@ -123,8 +127,7 @@ export class SelectTool implements Tool {
         }
         return;
       }
-      const outline = this.outline()!;
-      if (pointInPoly(outline, p.x, p.y)) {
+      if (this.ed.settings.selectMode !== 'wand' && pointInSel(this.outline()!, p.x, p.y)) {
         const x = this.ensureXform();
         if (!x) return;
         this.drag = { kind: 'move', p0: { x: p.x, y: p.y }, T0: { ...x.T } };
@@ -139,6 +142,7 @@ export class SelectTool implements Tool {
     const d = this.drag;
     if (!d) return;
     if (d.kind === 'select') {
+      if (this.ed.settings.selectMode === 'wand') return;
       if (this.ed.settings.selectMode === 'lasso') {
         const n = d.pts.length;
         if (dist(d.pts[n - 2], d.pts[n - 1], p.x, p.y) * this.ed.view.viewport.zoom > 2) d.pts.push(p.x, p.y);
@@ -189,11 +193,23 @@ export class SelectTool implements Tool {
     this.drag = null;
     if (!d) return;
     if (d.kind === 'select') {
-      const sel = this.buildSelection(d.pts);
+      const sel = this.ed.settings.selectMode === 'wand' ? this.wand(d.x0, d.y0) : this.buildSelection(d.pts);
       this.ed.selection = sel;
       this.ed.emit('selection');
       this.ed.view.requestRender();
     }
+  }
+
+  /** The connected area of similar colour under the point, on this layer or everything visible. */
+  private wand(x: number, y: number): Selection | null {
+    const ed = this.ed, st = ed.settings, layer = ed.layer;
+    const region = fillRegion(ed, x, y);
+    if (!layer || !rectContains(region, x, y)) return null;
+    const src = ed.onMask && layer.mask ? layer.mask.extract(region)
+      : renderRegion(ed.doc, region, { paper: false, only: st.fillSampleAll ? undefined : layer.props.id, raw: !st.fillSampleAll });
+    const data = ctx2d(src, true).getImageData(0, 0, region.w, region.h);
+    const m = regionMask(data, region, x, y, st.fillTolerance);
+    return m && maskToSelection(m, region.w, region.h, region.x, region.y);
   }
 
   private buildSelection(pts: number[]): Selection | null {
@@ -228,7 +244,7 @@ export class SelectTool implements Tool {
     const m = this.matrix(x);
     if (!m.isIdentity && !isNearIdentity(m)) {
       this.ed.apply({ t: 'transform', id: uid(), layer: x.layerId, sel: x.sel, m: [m.a, m.b, m.c, m.d, m.e, m.f], mask: x.mask });
-      this.ed.selection = { pts: transformPoly(x.sel.pts, m) };
+      this.ed.selection = transformSel(x.sel, m);
     }
     this.ed.view.invalidate(null);
     this.ed.emit('tool');
@@ -277,7 +293,7 @@ export class SelectTool implements Tool {
     if (!this.ed.selection) return;
     if (d?.kind !== 'select') {
       const o = this.outline();
-      if (o) drawAnts(ctx, M, o, this.antsOffset, false);
+      if (o) for (const ring of [o.pts, ...(o.holes ?? [])]) drawAnts(ctx, M, ring, this.antsOffset, false);
     }
     if (d?.kind === 'select' || this.ed.toolId !== 'select') return;
     const hs = this.handles();
@@ -305,7 +321,7 @@ function isNearIdentity(m: DOMMatrix) {
   return Math.abs(m.a - 1) < 1e-6 && Math.abs(m.d - 1) < 1e-6 && Math.abs(m.b) < 1e-6 && Math.abs(m.c) < 1e-6 && Math.abs(m.e) < 1e-3 && Math.abs(m.f) < 1e-3;
 }
 
-function drawAnts(ctx: CanvasRenderingContext2D, M: DOMMatrix, pts: number[], offset: number, open: boolean) {
+export function drawAnts(ctx: CanvasRenderingContext2D, M: DOMMatrix, pts: number[], offset: number, open: boolean) {
   ctx.beginPath();
   for (let i = 0; i + 1 < pts.length; i += 2) {
     const p = M.transformPoint({ x: pts[i], y: pts[i + 1] });

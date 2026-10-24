@@ -1,6 +1,9 @@
 // Brush parameter ranges and the shareable brush code, used by the client and the server.
 import type { BrushParams } from '../core/model';
 
+/** Numbers (x, y, pressure) one stroke op may carry; longer strokes are split. */
+export const MAX_STROKE_PTS = 120_000;
+
 export const MAX_BRUSH_SIZE = 500;
 
 /** Every slider in the brush editor, in share-code order. */

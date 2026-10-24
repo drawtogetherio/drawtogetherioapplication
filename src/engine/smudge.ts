@@ -1,5 +1,5 @@
-import { BrushParams, Op } from '../core/model';
-import { Rect, polyPath, rectUnion } from '../core/geom';
+import { BrushParams, Op, Selection } from '../core/model';
+import { Rect, rectUnion, selPath } from '../core/geom';
 import { TiledSurface, TileSnapshot } from '../core/tiles';
 import { DabPath, GRAIN, grainSheet } from './brush';
 
@@ -22,11 +22,11 @@ export class SmudgeRenderer extends DabPath {
   private readonly grainK: number;
   private readonly grainScale: number;
 
-  constructor(private surface: TiledSurface, brush: BrushParams, clip?: number[], private before?: TileSnapshot) {
+  constructor(private surface: TiledSurface, brush: BrushParams, clip?: Selection, private before?: TileSnapshot) {
     super(brush);
     this.D = Math.ceil(brush.size) + 2;
     this.scratch = square(this.D);
-    this.clip = clip ? polyPath(clip) : null;
+    this.clip = clip ? selPath(clip) : null;
     this.clipCanvas = clip ? square(this.D) : null;
     this.sq = brush.shape === 'square';
     this.grain = brush.grain ? grainSheet() : null;
@@ -87,7 +87,7 @@ export class SmudgeRenderer extends DabPath {
     c.save();
     c.translate(-bx, -by);
     c.fillStyle = '#fff';
-    c.fill(this.clip);
+    c.fill(this.clip, 'evenodd');
     c.restore();
     return c.getImageData(0, 0, D, D).data;
   }
@@ -109,7 +109,7 @@ function premultiplied(d: Uint8ClampedArray): Float32Array {
 }
 
 export function renderSmudge(surface: TiledSurface, op: SmudgeOp): Rect | null {
-  const r = new SmudgeRenderer(surface, op.brush, op.clip?.pts);
+  const r = new SmudgeRenderer(surface, op.brush, op.clip);
   let dirty: Rect | null = null;
   for (let i = 0; i + 2 < op.pts.length; i += 3) dirty = rectUnion(dirty, r.add(op.pts[i], op.pts[i + 1], op.pts[i + 2]));
   return rectUnion(dirty, r.end());

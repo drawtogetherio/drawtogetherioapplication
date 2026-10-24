@@ -1,5 +1,5 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, toWire } from './core/document';
-import { Point, Rect, polyPath, uid } from './core/geom';
+import { Point, Rect, selPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
 import { BrushPreset, DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
 import { CanvasView } from './view/canvasView';
@@ -11,8 +11,8 @@ import type { ApplyOptions } from './core/document';
 import type { TiledSurface } from './core/tiles';
 import { Prefs, cleanPrefs } from './shared/prefs';
 
-export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
-export type SelectMode = 'rect' | 'ellipse' | 'lasso';
+export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'lassoFill' | 'select' | 'shape' | 'eyedropper';
+export type SelectMode = 'rect' | 'ellipse' | 'lasso' | 'wand';
 
 export interface EditorSettings {
   brush: BrushParams;
@@ -24,6 +24,8 @@ export interface EditorSettings {
   fillTolerance: number; // 0..1
   fillSampleAll: boolean;
   fillExpand: number;
+  /** Fill lasso: only the parts closed off by lines. */
+  lassoInside: boolean;
   selectMode: SelectMode;
   shape: ShapeKind;
   shapeFill: boolean;
@@ -55,7 +57,7 @@ export class Editor {
     brush: { ...brushById(DEFAULT_BRUSH).params }, brushPreset: DEFAULT_BRUSH,
     eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
     smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
-    fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1,
+    fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, lassoInside: true,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
     hideOthersFolders: false,
   };
@@ -305,7 +307,7 @@ export class Editor {
 
   commitPending() { this.currentTool?.commit?.(); }
 
-  clipPath(): Path2D | undefined { return this.selection ? polyPath(this.selection.pts) : undefined; }
+  clipPath(): Path2D | undefined { return this.selection ? selPath(this.selection) : undefined; }
 
   workArea(): Rect {
     const s = this.doc.settings;

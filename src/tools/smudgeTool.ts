@@ -1,4 +1,5 @@
 import { uid } from '../core/geom';
+import { MAX_STROKE_PTS } from '../shared/brush';
 import type { TileSnapshot } from '../core/tiles';
 import { SmudgeRenderer } from '../engine/smudge';
 import type { Editor } from '../editor';
@@ -22,7 +23,7 @@ export class SmudgeTool implements Tool {
     this.layer = layer.props.id;
     this.before = new Map();
     this.mask = this.ed.onMask;
-    this.renderer = new SmudgeRenderer(this.ed.editSurface(layer), { ...this.ed.settings.smudge }, this.ed.selection?.pts, this.before);
+    this.renderer = new SmudgeRenderer(this.ed.editSurface(layer), { ...this.ed.settings.smudge }, this.ed.selection ?? undefined, this.before);
     this.pts = [];
     this.add(p);
   }
@@ -30,6 +31,8 @@ export class SmudgeTool implements Tool {
   move(p: PointerInfo) { if (this.renderer) this.add(p); }
 
   private add(p: PointerInfo) {
+    // A very long stroke is committed in pieces, so none grows past what the room accepts.
+    if (this.pts.length >= MAX_STROKE_PTS) { this.up(); this.down(p); return; }
     const x = round(p.x), y = round(p.y), pr = round(p.pressure);
     this.pts.push(x, y, pr);
     const r = this.renderer!.add(x, y, pr);

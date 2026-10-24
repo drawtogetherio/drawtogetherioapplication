@@ -1,4 +1,4 @@
-import { Rect, ctx2d, makeCanvas, polyPath, rectFromPoints, rectIntersect, rectRoundOut, rectUnion, uid } from './geom';
+import { Rect, ctx2d, makeCanvas, rectFromPoints, rectIntersect, rectRoundOut, rectUnion, selPath, uid } from './geom';
 import { History } from './history';
 import { DocSettings, FolderProps, LayerProps, Op, blendOp } from './model';
 import { TILE, TiledSurface, TileSnapshot } from './tiles';
@@ -7,7 +7,7 @@ import { renderStroke } from '../engine/brush';
 import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
-import { floodFill } from '../engine/fill';
+import { enclosedFill, floodFill, polyFill } from '../engine/fill';
 import { renderRegion } from '../engine/compositor';
 import { clearSelection, floatingBounds, liftSelection, placeFloating, selectionBounds } from '../engine/transform';
 
@@ -152,13 +152,13 @@ export class DrawDoc {
         const keys = [...buf.tiles.keys()].filter((k) => !op.erase || surface.tiles.has(k));
         const src = buf;
         return this.pixelEdit(layer, surface, keys, () => {
-          const clip = op.clip ? polyPath(op.clip.pts) : null;
+          const clip = op.clip ? selPath(op.clip) : null;
           let dirty: Rect | null = null;
           for (const k of keys) {
             const [tx, ty] = TiledSurface.parse(k);
             const c = ctx2d(surface.ensure(tx, ty));
             c.save();
-            if (clip) { c.translate(-tx * TILE, -ty * TILE); c.clip(clip); c.setTransform(1, 0, 0, 1, 0, 0); }
+            if (clip) { c.translate(-tx * TILE, -ty * TILE); c.clip(clip, 'evenodd'); c.setTransform(1, 0, 0, 1, 0, 0); }
             c.globalAlpha = alpha;
             c.globalCompositeOperation = gco;
             c.drawImage(src.tiles.get(k)!, 0, 0);
@@ -188,27 +188,33 @@ export class DrawDoc {
         ctx2d(src).putImageData(img, 0, 0);
         const r = region;
         return this.pixelEdit(layer, surface, surface.keysIn(r), () => {
-          const clip = op.clip ? polyPath(op.clip.pts) : null;
+          const clip = op.clip ? selPath(op.clip) : null;
           surface.draw(r, (c) => {
-            if (clip) c.clip(clip);
+            if (clip) c.clip(clip, 'evenodd');
             c.clearRect(r.x, r.y, r.w, r.h);
             c.drawImage(src, r.x, r.y);
           });
           return r;
         });
       }
-      case 'fill': {
+      case 'fill':
+      case 'fillPoly': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
         if (!layer || !surface) return null;
-        const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
-        const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
-        const fill = floodFill(data, op.region, op.x, op.y, op.color, op.tolerance, op.expand);
+        let fill: HTMLCanvasElement | null;
+        if (op.t === 'fillPoly' && !op.inside) fill = polyFill(op.region, op.pts, op.color);
+        else {
+          const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
+          const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
+          fill = op.t === 'fill' ? floodFill(data, op.region, op.x, op.y, op.color, op.tolerance, op.expand)
+            : enclosedFill(data, op.region, op.pts, op.color, op.tolerance, op.expand);
+        }
         if (!fill) return null;
         const gco: GlobalCompositeOperation = layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
         return this.pixelEdit(layer, surface, surface.keysIn(op.region), () => {
-          const clip = op.clip ? polyPath(op.clip.pts) : null;
+          const clip = op.clip ? selPath(op.clip) : null;
           surface.draw(op.region, (c) => {
-            if (clip) c.clip(clip);
+            if (clip) c.clip(clip, 'evenodd');
             c.globalCompositeOperation = gco;
             c.drawImage(fill, op.region.x, op.region.y);
           });

@@ -1,4 +1,5 @@
 import { uid } from '../core/geom';
+import { MAX_STROKE_PTS } from '../shared/brush';
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
 import type { Editor } from '../editor';
@@ -11,6 +12,8 @@ export class BrushTool implements Tool {
   private id = '';
   private sent = 0; // samples already streamed to the room
   private flushTimer = 0;
+  /** With the stabilizer on: where the brush is, and the cursor pulling it. */
+  tether: { bx: number; by: number; cx: number; cy: number } | null = null;
 
   constructor(private ed: Editor, private erase: boolean) {}
 
@@ -27,6 +30,7 @@ export class BrushTool implements Tool {
     this.buffer = new TiledSurface();
     this.renderer = new StrokeRenderer(this.buffer, params, this.erase ? '#000000' : this.ed.color);
     this.pts = [];
+    this.tether = null;
     this.ed.view.live = {
       layerId: layer.props.id, buffer: this.buffer, bufferAlpha: params.opacity,
       bufferOp: this.erase ? 'destination-out' : layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over',
@@ -35,9 +39,27 @@ export class BrushTool implements Tool {
     this.add(p);
   }
 
-  move(p: PointerInfo) { if (this.buffer) this.add(p); }
+  move(p: PointerInfo) {
+    if (!this.buffer) return;
+    this.add(this.pull(p));
+    // The rope moves even when the brush doesn't.
+    if (this.tether) this.ed.view.requestRender();
+  }
+
+  /** The brush trails the cursor on a rope: it only moves once the rope is taut. */
+  private pull(p: PointerInfo): PointerInfo {
+    const L = (this.ed.prefs.stabilizer * ROPE_MAX) / this.ed.view.viewport.zoom;
+    if (!L) return p;
+    const t = this.tether ?? (this.tether = { bx: p.x, by: p.y, cx: p.x, cy: p.y });
+    t.cx = p.x; t.cy = p.y;
+    const dx = p.x - t.bx, dy = p.y - t.by, d = Math.hypot(dx, dy);
+    if (d > L) { t.bx += (dx / d) * (d - L); t.by += (dy / d) * (d - L); }
+    return { ...p, x: t.bx, y: t.by };
+  }
 
   private add(p: PointerInfo) {
+    // A very long stroke is committed in pieces, so none grows past what the room accepts.
+    if (this.pts.length >= MAX_STROKE_PTS) { this.up(p); this.down(p); return; }
     // Rounded samples are what gets rendered, so a replay matches exactly.
     const x = round(p.x), y = round(p.y), pr = round(p.pressure);
     this.pts.push(x, y, pr);
@@ -58,8 +80,15 @@ export class BrushTool implements Tool {
     this.sent = this.pts.length;
   }
 
-  up() {
+  up(p?: PointerInfo) {
     if (!this.buffer) return;
+    const t = this.tether;
+    if (t && p) {
+      // Lifting lets the rope snap: the brush finishes the line to the cursor.
+      const n = Math.ceil(Math.hypot(p.x - t.bx, p.y - t.by) / 4);
+      for (let i = 1; i <= n; i++) this.add({ ...p, x: t.bx + ((p.x - t.bx) * i) / n, y: t.by + ((p.y - t.by) * i) / n });
+      this.tether = null;
+    }
     const r = this.renderer!.end();
     if (r) this.ed.view.invalidate(r);
     this.flush();
@@ -80,9 +109,12 @@ export class BrushTool implements Tool {
     this.flushTimer = 0;
     this.ed.room?.send({ type: 'live-end', stroke: this.id });
     this.buffer = null;
+    this.tether = null;
     this.ed.view.live = null;
     this.ed.view.invalidate(null);
   }
 }
 
 const round = (v: number) => Math.round(v * 100) / 100;
+/** Rope length in screen px at the stabilizer's maximum. */
+const ROPE_MAX = 160;

@@ -16,6 +16,10 @@ for (const name of ['list', 'get', 'put', 'loadOps', 'appendOps', 'replaceOps', 
     return store[name](...args);
   });
 }
+ipcMain.handle('canvases:reveal', (e, id) => {
+  if (new URL(e.senderFrame.url).origin !== origin) throw new Error('not allowed');
+  shell.showItemInFolder(path.join(store.dir(id), 'meta.json'));
+});
 
 // .hivecanvas and .hivelapse files opened from the system wait here until the page takes them.
 const HIVE_FILE = /\.(hivecanvas|hivelapse)$/i;

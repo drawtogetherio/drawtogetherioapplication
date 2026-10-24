@@ -63,11 +63,21 @@ export function pointInPoly(pts: number[], x: number, y: number): boolean {
   return inside;
 }
 
-export function polyPath(pts: number[]): Path2D {
-  const p = new Path2D();
+export function polyPath(pts: number[], p = new Path2D()): Path2D {
   for (let i = 0; i + 1 < pts.length; i += 2) i === 0 ? p.moveTo(pts[i], pts[i + 1]) : p.lineTo(pts[i], pts[i + 1]);
   p.closePath();
   return p;
+}
+
+/** A selection with its holes; fill or clip it with the 'evenodd' rule. */
+export function selPath(sel: { pts: number[]; holes?: number[][] }): Path2D {
+  const p = polyPath(sel.pts);
+  for (const hole of sel.holes ?? []) polyPath(hole, p);
+  return p;
+}
+
+export function pointInSel(sel: { pts: number[]; holes?: number[][] }, x: number, y: number): boolean {
+  return pointInPoly(sel.pts, x, y) && !sel.holes?.some((hole) => pointInPoly(hole, x, y));
 }
 
 let idCounter = 0;

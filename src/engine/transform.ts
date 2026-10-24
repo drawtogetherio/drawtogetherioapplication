@@ -1,4 +1,4 @@
-import { Rect, ctx2d, makeCanvas, polyPath, rectFromPoints, rectRoundOut, transformRect } from '../core/geom';
+import { Rect, ctx2d, makeCanvas, rectFromPoints, rectRoundOut, selPath, transformRect } from '../core/geom';
 import { Selection } from '../core/model';
 import { TiledSurface } from '../core/tiles';
 
@@ -14,18 +14,18 @@ export function liftSelection(surface: TiledSurface, sel: Selection): Floating {
   const ctx = ctx2d(c);
   ctx.translate(-b.x, -b.y);
   ctx.save();
-  ctx.clip(polyPath(sel.pts));
+  ctx.clip(selPath(sel), 'evenodd');
   surface.drawTo(ctx, b);
   ctx.restore();
   return { canvas: c, x: b.x, y: b.y };
 }
 
 export function clearSelection(surface: TiledSurface, sel: Selection) {
-  const path = polyPath(sel.pts);
+  const path = selPath(sel);
   surface.draw(selectionBounds(sel), (ctx) => {
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = '#000';
-    ctx.fill(path);
+    ctx.fill(path, 'evenodd');
   }, false);
 }
 
@@ -39,6 +39,10 @@ export function placeFloating(surface: TiledSurface, f: Floating, m: DOMMatrixRe
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(f.canvas, f.x, f.y);
   });
+}
+
+export function transformSel(sel: Selection, m: DOMMatrixReadOnly): Selection {
+  return { pts: transformPoly(sel.pts, m), holes: sel.holes?.map((h) => transformPoly(h, m)) };
 }
 
 export function transformPoly(pts: number[], m: DOMMatrixReadOnly): number[] {

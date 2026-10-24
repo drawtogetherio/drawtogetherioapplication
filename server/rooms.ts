@@ -1,11 +1,12 @@
 import crypto from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { config } from './config.ts';
-import { db, getUser, keepGuest, newId, publicProfile, UserRow } from './db.ts';
+import { db, getUser, hasBlocked, keepGuest, newId, publicProfile, UserRow } from './db.ts';
 import { areFriends, notifyFriends, touch } from './social.ts';
 import { validLive, validOp } from './validate.ts';
 import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
+import type { PublicProfile } from '../src/shared/profile.ts';
 import {
   CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
 } from '../src/shared/protocol.ts';
@@ -18,6 +19,7 @@ const KICK_BLOCK_MS = 10 * 60_000;
 const MSGS_PER_SEC = 80, MSG_BURST = 240;
 const BYTES_PER_MIN = 24 * 1024 * 1024;
 const KICKED_MSG = 'You were removed from this room. Try again later.';
+const BLOCKED_MSG = 'You can’t join this room.';
 const ID_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
 const randomId = (n: number) => Array.from(crypto.randomBytes(n), (b) => ID_CHARS[b % 31]).join('');
 
@@ -61,14 +63,16 @@ export class Room {
   private kicked = new Map<string, number>();
   private leaving = new Map<string, ReturnType<typeof setTimeout>>();
   private waiting = new Map<string, { ws: WebSocket; user: UserRow }>();
-  private allowed = new Set<string>();
+  /** People a host let in: invitees (kept) and approved joins (this run only). */
+  private allowed: Set<string>;
   private seq = 0;
   private savedAt = 0;
   private hostTimer: ReturnType<typeof setTimeout> | null = null;
   hosts: Set<string>;
 
-  constructor(public info: RoomInfo, hosts: string[], private watchKey: string) {
+  constructor(public info: RoomInfo, hosts: string[], private watchKey: string, private invited: string[] = []) {
     this.hosts = new Set(hosts);
+    this.allowed = new Set(invited);
     const rows = db.prepare('SELECT op FROM room_ops WHERE room_id = ? ORDER BY seq').all(info.id) as { op: string }[];
     for (const r of rows) { this.ops.push(r.op); this.track(JSON.parse(r.op)); }
   }
@@ -102,7 +106,25 @@ export class Room {
   private broadcastMembers() { this.broadcast({ type: 'members', members: this.members() }); }
   private toHosts(m: ServerMsg) { for (const c of this.clients) if (this.isHost(c.userId)) this.send(c, m); }
 
-  invite(userId: string) { this.allowed.add(userId); }
+  invite(userId: string) {
+    this.allowed.add(userId);
+    if (this.invited.includes(userId)) return;
+    this.invited = [...this.invited, userId].slice(-200);
+    db.prepare('UPDATE rooms SET invited = ? WHERE id = ?').run(JSON.stringify(this.invited), this.info.id);
+  }
+  invitedProfiles(): PublicProfile[] { return this.invited.map(getUser).filter((u): u is UserRow => !!u).map(publicProfile); }
+
+  /** Closes someone's connections; `block` also keeps them out for a while. */
+  expel(userId: string, block = false) {
+    if (block) this.kicked.set(userId, Date.now() + KICK_BLOCK_MS);
+    for (const x of [...this.clients]) {
+      if (x.userId !== userId) continue;
+      if (block) this.send(x, { type: 'kicked', by: '' });
+      x.ws.close(4003, 'kicked');
+      this.clients.delete(x);
+    }
+    this.broadcastMembers();
+  }
   /** A private room is invisible to everyone but its hosts and invitees. */
   visibleTo(u: UserRow | undefined) { return !this.info.private || (!!u && (this.isHost(u.id) || this.allowed.has(u.id))); }
   canJoin(u: UserRow) { const a = this.access(u); return a === 'yes' || a === 'ask'; }
@@ -110,6 +132,7 @@ export class Room {
   private access(user: UserRow): 'yes' | 'ask' | string {
     const until = this.kicked.get(user.id);
     if (until && until > Date.now()) return KICKED_MSG;
+    if (hasBlocked(this.info.ownerId, user.id) || [...this.hosts].some((h) => hasBlocked(h, user.id))) return BLOCKED_MSG;
     if (this.isHost(user.id) || this.allowed.has(user.id)) return 'yes';
     const s = this.info.share;
     switch (s.visibility) {
@@ -264,16 +287,8 @@ export class Room {
         const target = String(msg.user);
         if (!this.isHost(c.userId) || target === this.info.ownerId || target === c.userId) return;
         if (this.role(target) === 'host' && this.role(c.userId) !== 'owner') return;
-        this.kicked.set(target, Date.now() + KICK_BLOCK_MS);
-        const name = getUser(target)?.display_name ?? 'Someone';
-        for (const x of [...this.clients]) {
-          if (x.userId !== target) continue;
-          this.send(x, { type: 'kicked', by: c.userId });
-          x.ws.close(4003, 'kicked');
-          this.clients.delete(x);
-        }
-        this.systemChat(`${name} was removed by a host`);
-        this.broadcastMembers();
+        this.expel(target, true);
+        this.systemChat(`${getUser(target)?.display_name ?? 'Someone'} was removed by a host`);
         return;
       }
       case 'set-host': {
@@ -305,7 +320,7 @@ export class Room {
     if (!validOp(op)) return 'Unknown edit';
     const host = this.isHost(userId);
     switch (op.t) {
-      case 'stroke': case 'smudge': case 'effect': case 'shape': case 'fill': case 'transform': case 'tiles': case 'layer.clear': case 'layer.props': case 'layer.remove': case 'layer.merge': case 'layer.mask.apply':
+      case 'stroke': case 'smudge': case 'effect': case 'shape': case 'fill': case 'fillPoly': case 'transform': case 'tiles': case 'layer.clear': case 'layer.props': case 'layer.remove': case 'layer.merge': case 'layer.mask.apply':
         return this.can(userId, op.layer) ? null : 'That layer belongs to someone else';
       case 'layer.add':
       case 'folder.add': {
@@ -470,13 +485,13 @@ export function createRoom(owner: UserRow, name: string, settings: DocSettings, 
 export function getRoom(id: string): Room | undefined {
   let r = rooms.get(id);
   if (r) return r;
-  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share, watch_key, ephemeral FROM rooms WHERE id = ?').get(id) as
-    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string; watch_key: string | null; ephemeral: number } | undefined;
+  const row = db.prepare('SELECT id, name, owner_id, settings, hosts, visibility, share, watch_key, ephemeral, invited FROM rooms WHERE id = ?').get(id) as
+    { id: string; name: string; owner_id: string; settings: string; hosts: string; visibility: string; share: string; watch_key: string | null; ephemeral: number; invited: string } | undefined;
   if (!row) return undefined;
   const share = cleanShare({ ...JSON.parse(row.share), visibility: row.visibility });
   let key = row.watch_key;
   if (!key) { key = randomId(16); db.prepare('UPDATE rooms SET watch_key = ? WHERE id = ?').run(key, id); }
-  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share, ephemeral: !!row.ephemeral }, JSON.parse(row.hosts), key);
+  r = new Room({ id: row.id, name: row.name, ownerId: row.owner_id, settings: JSON.parse(row.settings), private: share.visibility === 'private', share, ephemeral: !!row.ephemeral }, JSON.parse(row.hosts), key, JSON.parse(row.invited));
   rooms.set(id, r);
   return r;
 }

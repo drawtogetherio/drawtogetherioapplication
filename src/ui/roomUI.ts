@@ -1,6 +1,6 @@
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
-import { polyPath } from '../core/geom';
+import { selPath } from '../core/geom';
 import type { Editor } from '../editor';
 import type { RoomClient, RoomEvent } from '../net/roomClient';
 import type { PublicProfile } from '../shared/profile';
@@ -9,6 +9,8 @@ import { clear, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, nameText, profileCardBody } from './people';
 import { confirmDialog, exportDialog, modal } from './dialogs';
+import { blockPerson, unblockPerson } from './blocks';
+import { api } from '../net/api';
 
 interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[] }
 interface Bubble { x: number; y: number; drawing: boolean; t: number }
@@ -42,9 +44,11 @@ export class RoomUI {
     this.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { this.toggleChat(false); e.stopPropagation(); } });
     this.chatInput.addEventListener('blur', () => this.typing(false));
     setInterval(() => this.tick(), 1000);
+    ed.on((w) => { if (w === 'blocked') { this.renderMembers(); this.renderChat(); ed.view.requestRender(); } });
   }
 
   get room() { return this.ed.room; }
+  private blocked(id: string) { return !!this.ed.me?.blocked.includes(id); }
 
   attach(room: RoomClient) {
     this.unsub?.();
@@ -122,7 +126,7 @@ export class RoomUI {
           ed.view.remoteLive.set(l.stroke, {
             layerId: l.layer, buffer, bufferAlpha: l.brush.opacity,
             bufferOp: l.erase ? 'destination-out' : layer?.props.alphaLock && !l.mask ? 'source-atop' : 'source-over',
-            clip: l.clip ? polyPath(l.clip.pts) : undefined, mask: l.mask,
+            clip: l.clip ? selPath(l.clip) : undefined, mask: l.mask,
           });
         }
         s.touched = Date.now();
@@ -169,7 +173,7 @@ export class RoomUI {
     let animating = false;
     for (const [uid, b] of this.bubbles) {
       const m = room.member(uid);
-      if (!m || uid === room.you) continue;
+      if (!m || uid === room.you || this.blocked(uid)) continue;
       const age = b.drawing ? Math.max(0, now - b.t - 600) : now - b.t;
       const alpha = Math.max(0, 1 - age / BUBBLE_LINGER);
       if (alpha <= 0) { this.bubbles.delete(uid); continue; }
@@ -240,7 +244,7 @@ export class RoomUI {
     clear(panel);
     if (!room) return;
     const order = { owner: 0, host: 1, member: 2, spectator: 3 } as const;
-    const members = [...room.members].sort((a, b) => order[a.role] - order[b.role] || a.displayName.localeCompare(b.displayName));
+    const members = room.members.filter((m) => !this.blocked(m.id)).sort((a, b) => order[a.role] - order[b.role] || a.displayName.localeCompare(b.displayName));
     panel.append(h('div.panel-head', {}, h('span.panel-title', {}, `In this room · ${members.length}`)));
     const list = h('div.member-list');
     for (const m of members) {
@@ -253,11 +257,32 @@ export class RoomUI {
   }
 
   profileCard(m: Member) {
-    const room = this.room!;
+    const room = this.room!, me = this.ed.me;
     const actions: HTMLElement[] = [];
     const meRole = room.me?.role;
     const canKick = room.isHost && m.id !== room.you && m.role !== 'owner' && !(m.role === 'host' && meRole !== 'owner');
     let close = () => {};
+    if (me && m.id !== room.you) {
+      if (!me.guest && !m.guest) {
+        const add = h('button.btn', { html: icon('userPlus', 16) + '<span>Add friend</span>', onclick: async () => {
+          add.disabled = true;
+          try { const r = await api.addFriend(m.handle); this.ed.toast(r.result === 'accepted' ? 'You’re now friends!' : 'Friend request sent'); add.lastElementChild!.textContent = r.result === 'accepted' ? 'Friends' : 'Requested'; }
+          catch (e) { add.disabled = false; this.ed.toast((e as Error).message); }
+        } });
+        // Already friends, or asked: the button says so instead.
+        api.friends().then((f) => {
+          const state = f.friends.some((p) => p.id === m.id) ? 'Friends' : f.outgoing.some((p) => p.id === m.id) ? 'Requested' : f.incoming.some((p) => p.id === m.id) ? 'Accept request' : '';
+          if (state && state !== 'Accept request') { add.disabled = true; add.lastElementChild!.textContent = state; }
+          else if (state) add.lastElementChild!.textContent = state;
+        }).catch(() => {});
+        actions.push(add);
+      }
+      if (!me.guest) {
+        actions.push(this.blocked(m.id)
+          ? h('button.btn', { onclick: async () => { close(); await unblockPerson(this.ed, m.id); } }, 'Unblock')
+          : h('button.btn.danger', { onclick: async () => { close(); if (await blockPerson(this.ed, m)) this.ed.toast(`${m.displayName} is blocked`); } }, 'Block'));
+      }
+    }
     if (meRole === 'owner' && m.id !== room.you && m.role !== 'spectator') {
       const on = m.role !== 'host';
       actions.push(h('button.btn', { onclick: () => { room.send({ type: 'set-host', user: m.id, on }); close(); } }, on ? 'Make host' : 'Remove host'));
@@ -291,6 +316,8 @@ export class RoomUI {
     this.room.send({ type: 'chat', text });
     this.chatInput.value = '';
     this.typingSent = 0;
+    // Closing hands the keys back to the canvas.
+    this.toggleChat(false);
   }
 
   private typing(on: boolean) {
@@ -305,7 +332,7 @@ export class RoomUI {
   renderChat() {
     const room = this.room;
     if (!room) return;
-    const msgs = room.chat.slice(-(this.chatOpen ? 50 : 6));
+    const msgs = room.chat.filter((m) => !this.blocked(m.from)).slice(-(this.chatOpen ? 50 : 6));
     this.chatLog.replaceChildren(...msgs.map((m) => this.chatLine(m)), ...room.requests.map((u) => this.requestLine(u)));
     this.chatLog.scrollTop = this.chatLog.scrollHeight;
     this.fadeChat();
@@ -327,6 +354,7 @@ export class RoomUI {
     const who = this.room?.member(m.from);
     const name = h('span.chat-name', {}, who ? nameText(who, 'chat-who', who.favoriteColor) : 'Someone');
     if (who) name.append(badges(who.role, who.premium, who.badges));
+    if (who) el.append(h('button.chat-pic', { type: 'button', title: who.displayName, 'aria-label': `${who.displayName}’s profile`, onclick: () => this.profileCard(who) }, avatarEl(who, 20)));
     el.append(name, h('span.chat-text', {}, m.text));
     return el;
   }
@@ -343,7 +371,7 @@ export class RoomUI {
   private renderTyping() {
     const room = this.room;
     if (!room) return;
-    const names = [...room.typing.keys()].filter((id) => id !== room.you).map((id) => room.member(id)?.displayName).filter(Boolean) as string[];
+    const names = [...room.typing.keys()].filter((id) => id !== room.you && !this.blocked(id)).map((id) => room.member(id)?.displayName).filter(Boolean) as string[];
     if (!names.length) { this.typingEl.textContent = ''; this.typingEl.hidden = true; return; }
     this.typingEl.hidden = false;
     const who = names.length === 1 ? names[0] : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names.length} people`;

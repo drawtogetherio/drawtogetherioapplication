@@ -11,9 +11,10 @@ import { confirmDialog, modal, textDialog } from './dialogs';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
-import { LocalCanvas, deleteCanvas, listCanvases, patchCanvas } from '../io/localStore';
-import { deleteLapse, roomLapseKey } from '../io/lapse';
+import { LocalCanvas, deleteCanvas, getCanvas, listCanvases, patchCanvas } from '../io/localStore';
 import { isNativeApp, native } from '../io/native';
+import { blockedDialog } from './blocks';
+import { deleteLapse, roomLapseKey } from '../io/lapse';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
 
@@ -237,6 +238,7 @@ export class Home {
       h('div.account', {}, avatarEl(me, 40, true), h('div.account-text', {}, nameLine(me), h('small.muted', {}, '@' + me.handle), me.status ? h('small.status-line', {}, me.status) : null)),
       h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
       h('button.menu-item', { html: icon('settings', 18) + '<span>Preferences</span>', onclick: () => { close(); preferencesDialog(this.app); } }),
+      h('button.menu-item', { html: icon('kick', 18) + '<span>Blocked people</span>', onclick: () => { close(); blockedDialog(this.app.ed); } }),
       me.admin ? h('a.menu-item', { href: '/admin', html: icon('shield', 18) + '<span>Admin</span>' }) : null,
       h('button.menu-item', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
     ));
@@ -251,7 +253,27 @@ export class Home {
     this.notices = r.notices;
     this.bellBadge.hidden = !r.unread;
     this.bellBadge.textContent = r.unread > 99 ? '99+' : String(r.unread);
+    this.app.setUnread(r.unread);
     if (!this.noticesPop.hidden) this.renderNotices();
+  }
+
+  /** Notifications as a dialog, for the drawing screen. */
+  async showNotices() {
+    await Promise.all([this.loadFriends(), this.loadNotices()]);
+    let close = () => {};
+    const body = h('div.modal-body.notices-body');
+    const refresh = async () => { await Promise.all([this.loadFriends(), this.loadNotices()]); body.replaceChildren(...this.noticeRows(() => close(), refresh)); };
+    body.append(...this.noticeRows(() => close(), refresh));
+    const clearBtn = h('button.btn', { type: 'button', onclick: async () => { await api.clearNotices().catch(() => {}); refresh(); } }, 'Clear');
+    close = modal('Notifications', body, [clearBtn]);
+    this.markRead();
+  }
+
+  private markRead() {
+    if (!this.notices.some((n) => !n.read)) return;
+    this.bellBadge.hidden = true;
+    this.app.setUnread(0);
+    api.readNotices().catch(() => {});
   }
 
   private toggleNotices() {
@@ -260,15 +282,22 @@ export class Home {
     if (this.noticesPop.hidden) return;
     this.renderNotices();
     this.popUnder(this.noticesPop, this.bellBtn);
-    if (this.notices.some((n) => !n.read)) {
-      this.bellBadge.hidden = true;
-      api.readNotices().catch(() => {});
-    }
+    this.markRead();
   }
 
   private renderNotices() {
-    const s = this.app.session, pop = this.noticesPop;
+    const pop = this.noticesPop;
+    clear(pop);
     const refresh = () => { this.loadFriends(); this.loadNotices(); };
+    pop.append(h('div.panel', {},
+      h('div.panel-head', {}, h('span.panel-title', {}, 'Notifications'),
+        this.notices.length ? h('button.btn.small', { type: 'button', onclick: async () => { await api.clearNotices().catch(() => {}); refresh(); } }, 'Clear') : null),
+      ...this.noticeRows(() => { pop.hidden = true; }, refresh)));
+  }
+
+  /** The notification rows with their actions; `hide` closes whatever shows them before joining a room. */
+  private noticeRows(hide: () => void, refresh: () => void): HTMLElement[] {
+    const s = this.app.session;
     const rows = this.notices.map((n) => {
       const d = n.data as { user?: string; name?: string; room?: { id: string; name: string } };
       const actions: HTMLElement[] = [];
@@ -278,18 +307,13 @@ export class Home {
           h('button.icon-btn', { title: 'Decline', 'aria-label': `Decline ${d.name}`, html: icon('x', 18), onclick: async () => { await api.removeFriend(d.user!).catch(() => {}); refresh(); } }),
         );
       } else if (n.kind === 'invite' && d.room) {
-        actions.push(h('button.btn.small.primary', { type: 'button', onclick: () => { pop.hidden = true; s.joinRoom(d.room!.id); } }, 'Join'));
+        actions.push(h('button.btn.small.primary', { type: 'button', onclick: () => { hide(); s.joinRoom(d.room!.id); } }, 'Join'));
       }
       const ic = n.kind === 'friend' ? 'userPlus' : n.kind === 'friend-accepted' ? 'users' : n.kind === 'invite' ? 'link' : 'sparkle';
       return h(`div.notice-row${n.read ? '' : '.unread'}` as 'div', {}, h('span.notice-icon', { html: icon(ic, 18) }),
         h('span.notice-text', {}, n.text, h('small', {}, ago(n.at))), ...actions);
     });
-    clear(pop);
-    pop.append(h('div.panel', {},
-      h('div.panel-head', {}, h('span.panel-title', {}, 'Notifications'),
-        this.notices.length ? h('button.btn.small', { type: 'button', onclick: async () => { await api.clearNotices().catch(() => {}); this.loadNotices(); } }, 'Clear') : null),
-      ...(rows.length ? rows : [h('p.notices-empty', {}, 'Nothing new')]),
-    ));
+    return rows.length ? rows : [h('p.notices-empty', {}, 'Nothing new')];
   }
 
   // ---- Friends ----
@@ -444,6 +468,7 @@ export class Home {
     const item = (ic: string, text: string, fn: () => void, cls = '') =>
       h(`button.menu-item${cls}` as 'button', { html: icon(ic, 17) + `<span>${text}</span>`, onclick: () => { close(); fn(); } });
     if (p.local) pop.append(h('div.panel', {},
+      item('info', 'Properties', () => this.properties(p)),
       item('rename', 'Rename', async () => {
         const name = await textDialog('Rename canvas', p.name);
         if (name == null) return;
@@ -458,6 +483,7 @@ export class Home {
       }, '.danger'),
     ));
     else pop.append(h('div.panel', {},
+      item('info', 'Properties', () => this.properties(p)),
       item('rename', 'Rename', async () => {
         const name = await textDialog('Rename canvas', p.name);
         if (name == null) return;
@@ -491,6 +517,36 @@ export class Home {
       const off = (e: PointerEvent) => { if (!pop.contains(e.target as Node)) { close(); document.removeEventListener('pointerdown', off, true); } };
       document.addEventListener('pointerdown', off, true);
     });
+  }
+
+  /** Where the canvas lives, with what fits that: who was invited, show the file, save a copy, or bring it off the server. */
+  private async properties(p: ProjectInfo) {
+    const s = this.app.session;
+    const row = (label: string, ...value: (Node | string | null)[]) => h('div.prop-row', {}, h('span.prop-label', {}, label), h('span.prop-value', {}, ...value));
+    const size = (st: { infinite: boolean; width: number; height: number } | undefined) => st ? (st.infinite ? 'Unlimited' : `${st.width} × ${st.height}`) : '';
+    const body = h('div.modal-body.props'), actions: HTMLElement[] = [];
+    let close = () => {};
+    try {
+      if (p.local) {
+        const c = await getCanvas(p.id);
+        const reveal = native?.canvases.reveal;
+        body.append(row('Size', size(c?.settings)),
+          row('Stored', h('span', { html: icon(isNativeApp ? 'device' : 'warning', 16) }), isNativeApp ? 'On this device' : 'In this browser’s cache',
+            reveal ? h('button.icon-btn', { type: 'button', title: 'Show in folder', 'aria-label': 'Show in folder', html: icon('folder', 18), onclick: () => reveal(p.id) }) : null),
+          row('People', 'Just you'));
+        if (!isNativeApp) actions.push(h('button.btn', { type: 'button', html: icon('download', 16) + '<span>Save as file</span>', onclick: () => { close(); s.exportLocal(p.id); } }));
+      } else {
+        const info = await api.room(p.id), invited = info.invited ?? [];
+        body.append(row('Size', size(info.settings)),
+          row('Stored', h('span', { html: icon('cloud', 16) }), 'Safe on the server'),
+          row('Invited', invited.length ? h('span.avatar-row', {}, ...invited.map((u) => Object.assign(avatarEl(u, 28), { title: u.displayName }))) : h('span.muted', {}, 'No one yet')));
+        actions.push(h('button.btn', { type: 'button', html: icon('device', 16) + '<span>Move to this device</span>', onclick: async () => {
+          close();
+          if (await confirmDialog('Move to this device?', 'It leaves the server when you close it. A copy stays on this device.', 'Move')) s.joinRoom(p.id, null, { takeLocal: true });
+        } }));
+      }
+    } catch (e) { this.app.toast((e as Error).message); return; }
+    close = modal(p.name, body, actions);
   }
 }
 

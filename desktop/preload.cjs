@@ -9,5 +9,5 @@ contextBridge.exposeInMainWorld('doodlehiveNative', {
   frameless: true,
   window: { minimize: () => ipcRenderer.send('win:minimize'), maximize: () => ipcRenderer.send('win:maximize'), close: () => ipcRenderer.send('win:close') },
   files: { take: () => ipcRenderer.invoke('files:take'), onOpen: (cb) => { ipcRenderer.on('files:open', () => cb()); } },
-  canvases: { list: call('list'), get: call('get'), put: call('put'), loadOps: call('loadOps'), appendOps: call('appendOps'), replaceOps: call('replaceOps'), delete: call('delete') },
+  canvases: { list: call('list'), get: call('get'), put: call('put'), loadOps: call('loadOps'), appendOps: call('appendOps'), replaceOps: call('replaceOps'), delete: call('delete'), reveal: call('reveal') },
 });

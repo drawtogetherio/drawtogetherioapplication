@@ -28,7 +28,7 @@ await page.locator('.pref-page .segmented button', { hasText: 'Studio' }).click(
 await page.locator('.modal-head .icon-btn').click();
 check(await page.evaluate(() => document.body.classList.contains('studio')) && (await page.locator('.sp:visible').count()) === 5, 'studio shows five panels');
 check((await page.locator('.dock-left .sp').count()) === 2 && (await page.locator('.dock-right .sp').count()) === 3 && (await page.locator('.sidebar').isHidden()), 'tools and brush properties dock left; colour, swatches and layers right; the floating sidebar is gone');
-check((await page.locator('.sp-tools .tool').count()) === 7 && (await page.locator('.sp-brush .optionsbar .slider').count()) >= 4 && (await page.locator('.sp-brush .sp-sliders .slider').count()) === 2, 'the toolbar, options and size/opacity sliders live in the panels');
+check((await page.locator('.sp-tools .tool').count()) === 8 && (await page.locator('.sp-brush .optionsbar .slider').count()) >= 4 && (await page.locator('.sp-brush .sp-sliders .slider').count()) === 2, 'the toolbar, options and size/opacity sliders live in the panels');
 await page.screenshot({ path: `${out}/01-studio.png` });
 
 // ---- Drawing still works and the canvas fits the middle ----
@@ -94,7 +94,7 @@ await page.locator('.pref-page .btn', { hasText: 'Reset layout' }).click();
 check((await panel('layers')).order === 2 && (await panel('swatches')).show, 'Reset layout restores the default arrangement');
 await page.locator('.pref-page .segmented button', { hasText: 'Classic' }).click();
 await page.locator('.modal-head .icon-btn').click();
-check((await page.locator('.topbar .tool').count()) === 7 && (await page.locator('.sidebar .slider').count()) === 2 && (await page.locator('#app > .optionsbar').count()) === 1 && (await page.locator('.studio').isHidden()), 'classic has its toolbar, sliders and options bar back');
+check((await page.locator('.topbar .tool').count()) === 8 && (await page.locator('.sidebar .slider').count()) === 2 && (await page.locator('#app > .optionsbar').count()) === 1 && (await page.locator('.studio').isHidden()), 'classic has its toolbar, sliders and options bar back');
 await page.locator('.topbar [aria-label="Colour"]').click();
 check(await page.locator('.color-pop .cp-hue').isVisible() && (await page.locator('.color-pop .cp-swatch').count()) >= 24, 'the colour popover is a bar picker with swatches again');
 await page.screenshot({ path: `${out}/04-classic.png` });

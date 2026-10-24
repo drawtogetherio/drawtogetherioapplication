@@ -1,5 +1,5 @@
 import { EFFECTS, EffectId } from '../core/model';
-import { ctx2d, polyPath, rectFromPoints, rectIntersect, rectRoundOut, transformRect, uid } from '../core/geom';
+import { ctx2d, rectFromPoints, rectIntersect, rectRoundOut, selPath, transformRect, uid } from '../core/geom';
 import { EFFECT_INFO, EffectOp, applyEffect, effectReach } from '../engine/effects';
 import type { Editor } from '../editor';
 import { h } from './dom';
@@ -17,7 +17,7 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
   const surface = ed.editSurface(layer), mask = ed.onMask;
   const view = ed.view, vp = view.viewport, stage = view.canvas.parentElement!;
   const sel = ed.selection;
-  const clip = sel ? polyPath(sel.pts) : null;
+  const clip = sel ? selPath(sel) : null;
   const selBox = sel ? rectFromPoints(sel.pts) : null;
   const state = { effect: initial, amount: 0.3, angle: 0 };
   const op = (): EffectOp => ({ t: 'effect', id: uid(), layer: layer.props.id, effect: state.effect, amount: state.amount, angle: state.effect === 'motion' ? state.angle : undefined, clip: sel ?? undefined, mask });
@@ -38,7 +38,7 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
       applyEffect(img, { ...o, id: 'preview' }, r.x, r.y);
       const c = ctx2d(src);
       c.putImageData(img, 0, 0);
-      if (clip) { c.setTransform(1, 0, 0, 1, -r.x, -r.y); c.globalCompositeOperation = 'destination-in'; c.fill(clip); }
+      if (clip) { c.setTransform(1, 0, 0, 1, -r.x, -r.y); c.globalCompositeOperation = 'destination-in'; c.fill(clip, 'evenodd'); }
       const hole = new Path2D();
       hole.rect(r.x, r.y, r.w, r.h);
       // The processed pixels replace the layer's there, so the original never shows through.

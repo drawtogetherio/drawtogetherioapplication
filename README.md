@@ -109,6 +109,18 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   toggle swaps it to two swatches with the name previewed. The Premium section has three states:
   blurred perks behind a Patreon prompt (with Link Patreon and a link to the page), "not an active
   patron" with Check again and Unlink, or the perks list with the link status.
+- **Fill lasso and magic wand (v0.26)**: the fill lasso (K) fills the shape you draw; with **Fill
+  inside lines** on, only the parts of it that lines close off (`enclosedFill` in `src/engine/fill.ts`:
+  the lasso's surroundings are the colour most of its edge sits on, and whatever of that colour can't
+  be reached from the edge is inside the lines). Tolerance, Expand and the layer reference are shared
+  with the bucket. The selection tool's **Magic wand** mode selects the connected area of similar
+  colour under the click; the mask becomes a polygon along pixel edges (`src/engine/contour.ts`), with
+  holes, so a selection now carries `holes` and every clip uses the even-odd rule.
+- **Brush stabilizer (v0.26)**: the Stabilizer slider in the brush options puts the brush on a rope
+  behind the cursor (`pull` in `src/tools/brushTool.ts`, up to 160 screen px); the overlay draws the
+  rope and the cursor, and lifting finishes the line to the cursor. Saved with the preferences.
+- **Long strokes (v0.26)**: a stroke that outgrows `MAX_STROKE_PTS` (40k samples) is committed and
+  continued as a new one, instead of being rejected as "Unknown edit".
 - **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the
   first sample) starts the stroke on the first sample that has pressure, instead of dotting the canvas
   with the previous stroke's size (`pendingDown` in `src/view/input.ts`).
@@ -120,7 +132,7 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   layer's through the view's live layer, clipped to the selection when there is one, and only the
   on-screen part is processed. Enter or ✓ bakes it, Escape or drawing cancels. The bar notes that
   the bake can be undone only while it is still in the undo history.
-- Selection (rect/ellipse/lasso) with move/rotate/scale/flip; fill bucket; shapes; eyedropper
+- Selection (rect/ellipse/lasso/magic wand) with move/rotate/scale/flip; fill bucket and fill lasso; shapes; eyedropper
 - Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
 - R + drag rotates the view (Shift snaps 15°), Z + drag zooms
 - Flip/pan/zoom/rotate view, undo/redo (incl. two/three-finger taps), HSV colour picker
@@ -181,6 +193,19 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - The dock's link button opens **Share links**: the draw link, the room code (paste it on the home
   screen) and a **watch link** (`?room=code&watch=key`). Watchers see the canvas and chat but get no
   tools, undo, layers or export; they can be removed like anyone else. The key is only sent to hosts.
+- In a room, a member's profile card (member list, or the picture by their name in chat) has **Add
+  friend** and **Block**. Blocking hides their messages, bubbles and presence from you, ends the
+  friendship, and keeps them out of rooms you host (they are dropped from one you're hosting at the
+  time, and `Room.access` refuses them afterwards). The account menu's **Blocked people** unblocks;
+  `blocked` on your profile carries the ids. Chat closes itself once a message is sent, so keys go
+  back to the canvas.
+- The drawing screen's menu has a bell next to your name; a red dot on the menu button and the bell
+  means unread notifications. The bell opens them as a dialog with the same actions as the home bell.
+- Each home tile's menu has **Properties**: size, where the canvas is stored, and the people a host
+  invited (their pictures, names on hover; `rooms.invited` keeps the list). A device canvas in the
+  browser offers **Save as file** (.hivecanvas); in the desktop app, a folder button shows the files
+  (`canvases:reveal`, desktop 0.24). A server canvas offers **Move to this device**, which keeps a
+  copy here and lets the room close once you leave it.
 - The bell on your profile card (top of the friends list) counts unread notifications: friend requests (accept or decline
   right there), accepted requests, room invites (Join) and system notices such as premium ending
   within a day. They arrive live over the event stream; the server keeps the last 100 per person.
@@ -315,10 +340,11 @@ node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, squ
 node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer masks, replay
 node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to classic
 node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
+node tests/tools.mjs http://localhost:4180/app.html     # fill lasso (inside lines or not), magic wand with holes, rope stabilizer, long strokes split
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev
-DB_PATH=/tmp/dw-test.db node tests/room.mjs   # screenshots in test-results/room/
+DB_PATH=/tmp/dw-test.db node tests/room.mjs   # rooms, chat, friends from chat, menu notifications, blocking, kick; screenshots in test-results/room/
 DB_PATH=/tmp/dw-test.db node tests/site.mjs   # landing, login, home, friends, private canvases
 node tests/share.mjs                          # sharing, joining from friends, approval, invites, presence
 node tests/spectate.mjs                       # watch links: chat only, no edits or export, removable

@@ -4,6 +4,7 @@ import { BrushTool } from '../tools/brushTool';
 import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
 import { FillTool } from '../tools/fillTool';
+import { LassoFillTool } from '../tools/lassoFillTool';
 import { SelectTool } from '../tools/selectTool';
 import { ShapeTool } from '../tools/shapeTool';
 import { InputController } from '../view/input';
@@ -23,7 +24,7 @@ import { EFFECT_INFO } from '../engine/effects';
 import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
-import { applyMode, applyTheme, theme } from './theme';
+import { accentColor, applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
 import { KeyAction, actionFor, keyOf } from '../shared/prefs';
 import { Studio } from './panels';
@@ -39,7 +40,7 @@ const isBrushTool = (id: ToolId): id is BrushToolId => id === 'brush' || id === 
 
 const TOOLS: { id: ToolId; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
-  { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
+  { id: 'lassoFill', label: 'Fill lasso' }, { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
 ];
 
 export const SAVE_BADGE = {
@@ -74,6 +75,8 @@ export class App {
   readonly session: Session;
   readonly home: Home;
   private menuDyn = h('div.menu-dyn');
+  private menuDot = h('span.red-dot', { hidden: true });
+  private unread = 0;
   private dock = h('div.room-dock', { hidden: true });
   private membersPop = h('div.popover.members-pop', { hidden: true });
   private invitePanel = new InvitePanel();
@@ -92,7 +95,7 @@ export class App {
     const ed = this.ed;
     this.select = new SelectTool(ed);
     ed.tools = {
-      brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), smudge: new SmudgeTool(ed), fill: new FillTool(ed),
+      brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), smudge: new SmudgeTool(ed), fill: new FillTool(ed), lassoFill: new LassoFillTool(ed),
       select: this.select, shape: new ShapeTool(ed), eyedropper: new EyedropperTool(ed),
     };
     this.input = new InputController(ed, ed.view.canvas);
@@ -111,6 +114,8 @@ export class App {
 
     const menuPop = this.menu();
     const menuBtn = btn('menu', 'Menu', () => { menuPop.hidden = !menuPop.hidden; if (!menuPop.hidden) this.renderMenuDyn(); });
+    menuBtn.classList.add('has-dot');
+    menuBtn.append(this.menuDot);
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
     const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {}, ...EFFECTS.map((e) =>
@@ -200,10 +205,18 @@ export class App {
     this.refreshRoom();
   }
 
+  /** Unread notifications: a red dot on the menu button and its bell. */
+  setUnread(n: number) {
+    this.unread = n;
+    this.menuDot.hidden = !n;
+    this.renderMenuDyn();
+  }
+
   refreshAccount() {
     // The account's saved theme wins over the one remembered on this device.
     const me = this.ed.me;
     if (me) applyTheme(canUseTheme(me.theme, me.premium) ? me.theme : null);
+    if (me && !me.guest) this.home.loadNotices();
     this.applyPrefs();
     this.renderMenuDyn();
     this.home.renderAccount();
@@ -573,17 +586,23 @@ export class App {
         range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
         range('Grain', params.grain ?? 0, 0, 1, (v) => { params.grain = v; }),
         range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
+      );
+      if (!smudge) o.append(range('Stabilizer', ed.prefs.stabilizer, 0, 1, (v) => { ed.prefs.stabilizer = v; ed.emit('prefs'); }));
+      o.append(
         label('Pressure:'),
         toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? (smudge ? 0.5 : 1) : 0; }),
         toggle(smudge ? 'Strength' : 'Opacity', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? (smudge ? 0.5 : 1) : 0; }),
       );
-    } else if (ed.toolId === 'fill') {
+    } else if (ed.toolId === 'fill' || ed.toolId === 'lassoFill' || (ed.toolId === 'select' && st.selectMode === 'wand')) {
+      if (ed.toolId === 'select') o.append(this.modeButton(SELECT_MODES.find((m) => m[0] === st.selectMode)!));
+      if (ed.toolId === 'lassoFill') o.append(toggle('Fill inside lines', st.lassoInside, (v) => { st.lassoInside = v; }));
+      o.append(range('Tolerance', st.fillTolerance, 0, 1, (v) => { st.fillTolerance = v; }));
+      if (ed.toolId !== 'select') o.append(range('Expand', st.fillExpand, 0, 4, (v) => { st.fillExpand = Math.round(v); }, (v) => Math.round(v) + 'px'));
       o.append(
-        range('Tolerance', st.fillTolerance, 0, 1, (v) => { st.fillTolerance = v; }),
-        range('Expand', st.fillExpand, 0, 4, (v) => { st.fillExpand = Math.round(v); }, (v) => Math.round(v) + 'px'),
         label('Reference:'),
         seg([['all', 'All layers'], ['layer', 'This layer']] as const, st.fillSampleAll ? 'all' : 'layer', (v) => { st.fillSampleAll = v === 'all'; }),
       );
+      if (ed.toolId === 'select' && ed.selection) o.append(h('button.btn', { onclick: () => this.select.deselect() }, 'Deselect'));
     } else if (ed.toolId === 'select') {
       o.append(this.modeButton(SELECT_MODES.find((m) => m[0] === st.selectMode)!));
       o.append(h('button.btn', { onclick: () => this.select.selectAll() }, 'Select all'));
@@ -625,7 +644,9 @@ export class App {
     clear(d);
     const me = ed.me;
     if (me) {
-      d.append(h('div.account', {}, avatarEl(me, 36), h('div.account-text', {}, nameLine(me, undefined), h('small.muted', {}, '@' + me.handle))),
+      d.append(h('div.account', {}, avatarEl(me, 36), h('div.account-text', {}, nameLine(me, undefined), h('small.muted', {}, '@' + me.handle)),
+          me.guest ? null : h('button.icon-btn.menu-bell', { title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 18), onclick: () => { close(); this.home.showNotices(); } },
+            h('span.red-dot', { hidden: !this.unread }))),
         h('div.row.account-actions', {},
           h('button.btn', { html: icon('user', 16) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
           h('button.btn', { html: icon('logout', 16) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } })),
@@ -670,8 +691,9 @@ export class App {
     const ed = this.ed;
     this.select.overlay(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
-    const hv = ed.hover;
-    if (hv && ed.prefs.hoverPreview && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser' || ed.toolId === 'smudge') && !this.input.altPick && !this.input.viewKey) {
+    const tool = ed.currentTool, t = tool instanceof BrushTool ? tool.tether : null;
+    const hv = t ? { x: t.bx, y: t.by } : ed.hover;
+    if (hv && (t || ed.prefs.hoverPreview) && !ed.readOnly && (ed.toolId === 'brush' || ed.toolId === 'eraser' || ed.toolId === 'smudge') && !this.input.altPick && !this.input.viewKey) {
       const p = M.transformPoint(hv);
       const r = Math.max(1, (ed.sizeParams.size * ed.view.viewport.zoom) / 2);
       ctx.lineWidth = 1;
@@ -679,6 +701,18 @@ export class App {
       ctx.beginPath(); ctx.arc(p.x, p.y, r + 0.5, 0, Math.PI * 2); ctx.stroke();
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.5, r - 0.5), 0, Math.PI * 2); ctx.stroke();
+      if (t) {
+        // The rope from the brush to the cursor.
+        const c = M.transformPoint({ x: t.cx, y: t.cy });
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+        ctx.strokeStyle = accentColor();
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = accentColor();
+        ctx.beginPath(); ctx.arc(c.x, c.y, 3, 0, Math.PI * 2); ctx.fill();
+      }
     }
   }
 

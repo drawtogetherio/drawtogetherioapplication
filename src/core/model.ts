@@ -71,7 +71,8 @@ export interface BrushParams {
 export const EFFECTS = ['blur', 'motion', 'mosaic', 'chroma', 'glitch', 'sharpen', 'noise'] as const;
 export type EffectId = (typeof EFFECTS)[number];
 
-export interface Selection { pts: number[] }
+/** A polygon; `holes` are rings cut out of it (magic wand). */
+export interface Selection { pts: number[]; holes?: number[][] }
 
 export type ShapeKind = 'line' | 'rect' | 'ellipse';
 
@@ -94,6 +95,11 @@ export type Op =
     })
   | (OpBase & {
       t: 'fill'; layer: string; x: number; y: number; color: string; tolerance: number;
+      sampleAll: boolean; expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
+    })
+  /** A lasso filled with colour; `inside` fills only the parts closed off by lines. */
+  | (OpBase & {
+      t: 'fillPoly'; layer: string; pts: number[]; color: string; inside: boolean; tolerance: number;
       sampleAll: boolean; expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
     })
   | (OpBase & {

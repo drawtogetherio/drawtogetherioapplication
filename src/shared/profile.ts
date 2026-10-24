@@ -149,6 +149,8 @@ export interface MyProfile extends PublicProfile {
   admin: boolean;
   /** Linked Patreon account; `active` patrons have premium. */
   patreon: { name: string; active: boolean } | null;
+  /** Ids of people you blocked. */
+  blocked: string[];
 }
 
 export const AVATAR_SIZE = 128;

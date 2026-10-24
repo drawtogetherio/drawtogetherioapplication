@@ -180,7 +180,7 @@ await ada.locator('.members-btn').click();
 check(await ada.locator('.member-row', { hasText: 'Vee' }).locator('small').innerText() === 'watching', 'member list marks spectators');
 await ada.locator('.member-row', { hasText: 'Vee' }).click();
 check((await ada.locator('.modal .btn', { hasText: 'Make host' }).count()) === 0, 'spectators can’t be made hosts');
-await ada.locator('.modal .btn.danger').click();
+await ada.locator('.modal .btn.danger', { hasText: 'Remove' }).click();
 await ada.locator('.modal .btn.primary', { hasText: 'Remove' }).click();
 await vee.waitForSelector('text=A host removed you', { timeout: 4000 }).then(() => check(true, 'spectator sees they were removed'), () => check(false, 'spectator sees they were removed'));
 check((await vee.locator('.modal .btn', { hasText: 'Export a copy' }).count()) === 0, 'no export offer on the way out');

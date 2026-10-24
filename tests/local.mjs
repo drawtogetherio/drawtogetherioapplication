@@ -68,6 +68,19 @@ check(await ren.locator('.tile-meta', { hasText: 'On this device' }).count() ===
 check(await ren.locator('.tile-meta .save-mark.cache').count() === 1, 'the tile carries the cache warning too');
 await ren.screenshot({ path: `${out}/01-home-local.png` });
 
+// ---- Properties ----
+await ren.locator('.tile-more').click();
+await ren.locator('.tile-pop .menu-item', { hasText: 'Properties' }).click();
+await ren.waitForSelector('.modal .props');
+check(await ren.locator('.modal .prop-value', { hasText: 'In this browser’s cache' }).count() === 1, 'properties say the canvas is in the browser cache');
+const sizeText = await ren.locator('.modal .prop-row', { hasText: 'Size' }).textContent();
+check(/\d+ × \d+|Unlimited/.test(sizeText), `and show its size (${sizeText.trim()})`);
+await ren.screenshot({ path: `${out}/01b-properties.png` });
+const dl = ren.waitForEvent('download', { timeout: 8000 }).then((d) => d.suggestedFilename(), () => '');
+await ren.locator('.modal .btn', { hasText: 'Save as file' }).click();
+const fname = await dl;
+check(/\.hivecanvas$/.test(fname), `Save as file downloads a .hivecanvas (${fname})`);
+
 // ---- Share it: a live-only room seeded with the drawing ----
 await ren.locator('.tile-open').click();
 await ren.waitForFunction(() => window.doodlehive.session.local && window.doodlehive.ed.doc.log.length > 2);

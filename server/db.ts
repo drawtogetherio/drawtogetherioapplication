@@ -87,6 +87,7 @@ addColumn('users', 'avatar_anim_crop', 'TEXT');
 addColumn('users', 'banner', 'BLOB');
 addColumn('users', 'banner_type', 'TEXT');
 addColumn('users', 'banner_version', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('rooms', 'invited', `TEXT NOT NULL DEFAULT '[]'`); // user ids let into the room by a host
 db.exec('CREATE TABLE IF NOT EXISTS site (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
 /** Dashboard settings; one JSON row. */
@@ -111,6 +112,8 @@ db.exec(`
     PRIMARY KEY (user_a, user_b)
   );
   CREATE INDEX IF NOT EXISTS friendships_b ON friendships (user_b);
+  -- user_id no longer sees blocked_id in chat or rooms, and blocked_id can't join rooms user_id hosts.
+  CREATE TABLE IF NOT EXISTS blocks (user_id TEXT NOT NULL, blocked_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, blocked_id));
   CREATE INDEX IF NOT EXISTS rooms_owner ON rooms (owner_id);
   CREATE TABLE IF NOT EXISTS ip_bans (ip TEXT PRIMARY KEY, reason TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS stats (key TEXT PRIMARY KEY, n INTEGER NOT NULL DEFAULT 0);
@@ -174,7 +177,15 @@ export function myProfile(u: UserRow): MyProfile {
     ...publicProfile(u), needsSetup: !!u.needs_setup, provider: u.provider as MyProfile['provider'], theme,
     presenceMode: u.presence_mode as MyProfile['presenceMode'], prefs: cleanPrefs(safeJson(u.prefs)), admin: isAdmin(u),
     patreon: u.patreon_id ? { name: u.patreon_name ?? 'Patreon', active: !!u.patreon_active } : null,
+    blocked: blockedIds(u.id),
   };
+}
+
+export function blockedIds(userId: string): string[] {
+  return (db.prepare('SELECT blocked_id FROM blocks WHERE user_id = ?').all(userId) as { blocked_id: string }[]).map((r) => r.blocked_id);
+}
+export function hasBlocked(by: string, who: string): boolean {
+  return !!db.prepare('SELECT 1 FROM blocks WHERE user_id = ? AND blocked_id = ?').get(by, who);
 }
 
 function safeJson(s: string): unknown { try { return JSON.parse(s); } catch { return {}; } }

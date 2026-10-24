@@ -1,4 +1,4 @@
-import { db, getUser, publicProfile, USER_COLS, UserRow } from './db.ts';
+import { db, getUser, hasBlocked, publicProfile, USER_COLS, UserRow } from './db.ts';
 import { connectedIds, isConnected, sendTo } from './live.ts';
 import { dropNotice, notify } from './notify.ts';
 import { liveRooms, roomsWithUser, type Room } from './rooms.ts';
@@ -58,6 +58,7 @@ export function friendIds(me: string): string[] {
 export function canJoinFromFriends(me: string, room: Room): boolean {
   const s = room.info.share;
   if (room.info.ownerId === me) return true;
+  if (hasBlocked(room.info.ownerId, me)) return false;
   if (s.visibility === 'friends') return areFriends(me, room.info.ownerId);
   return s.visibility === 'open' && s.friendsCanJoin;
 }
@@ -95,6 +96,8 @@ export function requestFriend(me: UserRow, handle: string): 'requested' | 'accep
   if (!them) throw new FriendError(404, `No one has the handle @${h}.`);
   if (them.id === me.id) throw new FriendError(400, 'That’s you!');
   if (them.provider === 'guest') throw new FriendError(400, `@${them.handle} is a guest. Guests can’t be added as friends.`);
+  if (hasBlocked(me.id, them.id)) throw new FriendError(409, `You blocked @${them.handle}. Unblock them first.`);
+  if (hasBlocked(them.id, me.id)) throw new FriendError(403, `@${them.handle} isn’t accepting friend requests.`);
   const existing = row(me.id, them.id);
   if (existing?.accepted) throw new FriendError(409, `You’re already friends with ${them.display_name}.`);
   if (existing && existing.requested_by === me.id) throw new FriendError(409, 'Request already sent.');
@@ -132,3 +135,26 @@ export function removeFriend(me: string, other: string) {
 }
 
 const person = (u: UserRow) => ({ user: u.id, handle: u.handle, name: u.display_name });
+
+// ---- Blocking ----
+
+const MAX_BLOCKS = 1000;
+
+export function listBlocked(me: string): PublicProfile[] {
+  const rows = db.prepare('SELECT blocked_id FROM blocks WHERE user_id = ? ORDER BY created_at DESC').all(me) as { blocked_id: string }[];
+  return rows.map((r) => getUser(r.blocked_id)).filter((u): u is UserRow => !!u).map(publicProfile);
+}
+
+/** Ends the friendship and any pending request, and removes them from rooms you host. */
+export function blockUser(me: UserRow, id: string) {
+  const them = getUser(id);
+  if (!them || them.id === me.id) throw new FriendError(404, 'No such person.');
+  if ((db.prepare('SELECT count(*) AS n FROM blocks WHERE user_id = ?').get(me.id) as { n: number }).n >= MAX_BLOCKS) throw new FriendError(409, 'Your block list is full.');
+  db.prepare('INSERT OR IGNORE INTO blocks (user_id, blocked_id, created_at) VALUES (?, ?, ?)').run(me.id, id, Date.now());
+  if (row(me.id, id)) removeFriend(me.id, id);
+  for (const r of roomsWithUser(id)) if (r.isHost(me.id)) r.expel(id);
+}
+
+export function unblockUser(me: string, id: string) {
+  db.prepare('DELETE FROM blocks WHERE user_id = ? AND blocked_id = ?').run(me, id);
+}

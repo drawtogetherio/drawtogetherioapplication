@@ -10,7 +10,8 @@ import { avatarEl } from './people';
 import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import { deleteCanvas, listCanvases } from '../io/localStore';
-import { HIVE_ACCEPT, hiveCanvasBlob, hiveCanvasOps, readHiveFile } from '../io/hivecanvas';
+import { HIVE_ACCEPT, hiveCanvasBlob, hiveCanvasOps, readHiveFile, safeFileName } from '../io/hivecanvas';
+import { saveFile } from '../io/platform';
 import { lapse, lapseFromFiles, moveLapse, roomLapseKey } from '../io/lapse';
 import { timelapseDialog } from './timelapse';
 import { native } from '../io/native';
@@ -243,6 +244,16 @@ export class Session {
       await copy.patch({ room: null });
     }
     this.startLocal(copy, await this.loadCopy(copy, ops));
+  }
+
+  /** A device canvas as a .hivecanvas file. */
+  async exportLocal(id: string) {
+    const opened = await LocalCopy.open(id).catch(() => null);
+    if (!opened) return;
+    const doc = await this.loadCopy(opened.copy, opened.ops);
+    this.booted();
+    const name = opened.copy.meta.name;
+    await saveFile(await hiveCanvasBlob(doc, name), `${safeFileName(name)}.hivecanvas`);
   }
 
   /** Premium accounts keep canvases on the server; one made while free moves there when opened, as a .hivecanvas. */

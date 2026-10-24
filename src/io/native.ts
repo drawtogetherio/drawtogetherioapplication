@@ -22,6 +22,8 @@ export interface NativeBridge {
     appendOps(id: string, ops: Op[]): Promise<void>;
     replaceOps(id: string, ops: Op[]): Promise<void>;
     delete(id: string): Promise<void>;
+    /** Shows the canvas's folder in the system file manager (desktop 0.24+). */
+    reveal?(id: string): Promise<void>;
   };
 }
 

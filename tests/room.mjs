@@ -127,7 +127,58 @@ await bob.screenshot({ path: `${out}/03-bob-typing.png` });
 await alice.keyboard.press('Enter');
 await bob.waitForSelector('.chat-msg:has-text("hello bob")');
 check(true, 'chat message delivered');
-await alice.keyboard.press('Escape');
+check(await alice.locator('.chat-form').isHidden(), 'chat closes once the message is sent');
+check(await bob.locator('.chat-msg:has-text("hello bob") .chat-pic').count() === 1, 'the message carries Alice’s picture');
+
+// ---- Friends from a chat picture; notifications in the menu ----
+await bob.locator('.chat-msg:has-text("hello bob") .chat-pic').click();
+await bob.waitForSelector('.modal .profile-card');
+check(await bob.locator('.modal .btn', { hasText: 'Block' }).count() === 1, 'the picture opens the profile card with Block');
+await bob.locator('.modal .btn', { hasText: 'Add friend' }).click();
+await bob.waitForSelector('.toast:has-text("Friend request sent")', { timeout: 4000 }).then(() => check(true, 'Add friend sends a request'), () => check(false, 'Add friend sends a request'));
+await bob.locator('.modal [title="Close"]').click();
+await alice.waitForSelector('[aria-label="Menu"] .red-dot:not([hidden])', { timeout: 5000 }).then(() => check(true, 'Alice’s menu button shows a red dot'), () => check(false, 'Alice’s menu button shows a red dot'));
+await alice.locator('[aria-label="Menu"]').click();
+await alice.waitForTimeout(150);
+await alice.screenshot({ path: `${out}/03b-alice-menu-dot.png` });
+await alice.locator('.menu-bell').click();
+await alice.waitForSelector('.modal .notice-row');
+await alice.screenshot({ path: `${out}/03c-alice-notices.png` });
+await alice.locator('.modal .notice-row .accept').click();
+await bob.waitForFunction(async () => (await (await fetch('/api/friends')).json()).friends.length === 1, null, { timeout: 4000 })
+  .then(() => check(true, 'accepting from the drawing menu makes them friends'), () => check(false, 'accepting from the drawing menu makes them friends'));
+await alice.waitForFunction(() => document.querySelector('[aria-label="Menu"] .red-dot').hidden, null, { timeout: 4000 })
+  .then(() => check(true, 'the red dot clears once read'), () => check(false, 'the red dot clears once read'));
+await alice.locator('.modal [title="Close"]').click();
+
+// ---- Blocking ----
+const cara = await person('Cara', '#4f7cff', `${url}?room=${roomId}`);
+await cara.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+await cara.locator('canvas.stage').hover();
+await cara.keyboard.press('Enter');
+await cara.keyboard.type('hi from cara');
+await cara.keyboard.press('Enter');
+await alice.waitForSelector('.chat-msg:has-text("hi from cara")');
+await alice.locator('.chat-msg:has-text("hi from cara") .chat-pic').click();
+await alice.locator('.modal .btn.danger', { hasText: 'Block' }).click();
+await alice.locator('.modal .btn.primary', { hasText: 'Block' }).click();
+await alice.waitForSelector('.toast:has-text("is blocked")');
+await alice.waitForTimeout(300);
+check(await alice.locator('.chat-msg:has-text("hi from cara")').count() === 0, 'blocked person’s messages disappear');
+check(await ed(alice, (e) => e.me.blocked.length) === 1, 'the profile remembers who is blocked');
+await cara.waitForFunction(() => window.doodlehive.ed.room?.status !== 'open', null, { timeout: 4000 }).then(() => check(true, 'the blocked person is dropped from the host’s room'), () => check(false, 'the blocked person is dropped from the host’s room'));
+await cara.goto(`${url}?room=${roomId}`);
+await cara.waitForSelector('.toast:has-text("can’t join this room")', { timeout: 5000 }).then(() => check(true, 'and can’t rejoin'), () => check(false, 'and can’t rejoin'));
+await alice.locator('.members-btn').click();
+await alice.waitForSelector('.member-row');
+check(await alice.locator('.member-row', { hasText: 'Cara' }).count() === 0, 'the member list hides them');
+await alice.locator('.members-btn').click();
+const caraId = await ed(cara, (e) => e.me.id);
+await alice.evaluate((id) => fetch('/api/blocks/' + id, { method: 'DELETE' }), caraId);
+await cara.goto(`${url}?room=${roomId}`);
+await cara.waitForFunction(() => window.doodlehive.ed.room?.status === 'open', null, { timeout: 5000 }).then(() => check(true, 'unblocking lets them back in'), () => check(false, 'unblocking lets them back in'));
+await cara.context().close();
+await alice.waitForFunction(() => window.doodlehive.ed.room.members.length === 2);
 
 // ---- Members panel, badges ----
 await bob.locator('.members-btn').click();
@@ -146,7 +197,7 @@ const visibleFolders = await bob.locator('.folder-row').count();
 check(visibleFolders === 1, 'hide-others shows only your own folder (' + visibleFolders + ')');
 await ed(bob, (e) => { e.settings.hideOthersFolders = false; e.emit('settings'); });
 await bob.waitForTimeout(200);
-check(await bob.locator('.folder-row').count() === 2, 'both folders listed again');
+check(await bob.locator('.folder-row').count() === 3, 'all folders listed again (Cara’s stays)');
 await alice.locator('[aria-label="Layers (L)"]').click();
 await alice.waitForTimeout(200);
 await alice.screenshot({ path: `${out}/06-alice-layers.png` });
@@ -181,7 +232,7 @@ await bob.waitForFunction(() => !!window.doodlehive.ed.room.members.find((m) => 
 // ---- Kick ----
 await alice.locator('.members-btn').click();
 await alice.locator('.member-row', { hasText: 'Bob' }).click();
-await alice.locator('.modal .btn.danger').click();
+await alice.locator('.modal .btn.danger', { hasText: 'Remove' }).click();
 await alice.locator('.modal .btn.primary', { hasText: 'Remove' }).click();
 await bob.waitForSelector('text=A host removed you', { timeout: 4000 }).then(() => check(true, 'Bob sees he was removed'), () => check(false, 'Bob sees he was removed'));
 await alice.waitForFunction(() => window.doodlehive.ed.room.members.length === 1);
