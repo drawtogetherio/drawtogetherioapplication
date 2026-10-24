@@ -271,6 +271,7 @@ export class App {
       this.layersPop.append(this.layers.el);
       this.layers.open = false;
     }
+    this.renderOptions(); // the simple bar and the studio panel show different controls
     ed.view.resize();
   }
 

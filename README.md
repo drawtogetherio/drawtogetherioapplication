@@ -130,9 +130,16 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   turned canvas still fits the screen. Per device, so nobody's rotation turns anyone else's room.
 - **Long strokes (v0.26)**: a stroke that outgrows `MAX_STROKE_PTS` (40k samples) is committed and
   continued as a new one, instead of being rejected as "Unknown edit".
-- **Light pen strokes stay even (v0.26)**: the stroke engine takes a median of three pressure samples
-  and smooths pressure a little more (`DabPath.add` in `src/engine/brush.ts`), so a stray spike at a
-  light touch no longer leaves a dark speck. Local drawing and replay share the filter.
+- **Strokes are coverage, not piles of dabs (v0.26)**: `StrokeRenderer` (`src/engine/brush.ts`) paints
+  grey coverage into a scratch surface where round dabs combine by maximum (`lighten`), so a pixel
+  holds the brush's coverage however many dabs land on it: a light touch, Pressure → Opacity, or a
+  slow stroke no longer shows the dab pattern or dark specks. Hairlines (under 2.5 px) are a ribbon
+  of quads added once per pixel, so a 0.5 px line is an even grey. The coverage level is what the old
+  overlapping dabs settled at (`1 - (1 - flow)^(1/spacing)`), so every brush keeps its darkness.
+  Grain multiplies the coverage (`paper`), square brushes still stamp. `sync` copies the touched
+  coverage into the stroke buffer as coloured pixels after each input event (microtask) and at the
+  end, so the compositor and replay see the same buffer as before. The dab path also takes a median
+  of three pressure samples, so a stray spike doesn't make one fat dab.
 - **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the
   first sample) starts the stroke on the first sample that has pressure, instead of dotting the canvas
   with the previous stroke's size (`pendingDown` in `src/view/input.ts`).

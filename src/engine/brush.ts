@@ -1,6 +1,6 @@
 import { BrushParams } from '../core/model';
 import { Rect, ctx2d, lerp, makeCanvas, rectUnion } from '../core/geom';
-import { TiledSurface } from '../core/tiles';
+import { TILE, TiledSurface } from '../core/tiles';
 
 export interface BrushPreset { id: string; name: string; params: BrushParams }
 export interface BrushCategory { name: string; brushes: BrushPreset[] }
@@ -79,12 +79,12 @@ export function grainSheet(): Float32Array {
   return grainData = out;
 }
 
-const grainMaskCache = new Map<string, HTMLCanvasElement>();
+const paperCache = new Map<string, HTMLCanvasElement>();
 
-/** Alpha mask: 1 where paper takes paint, less where grain is deep. Scaled by `scale`. */
-function grainMask(strength: number, scale: number): HTMLCanvasElement {
+/** Opaque grey paper: white where paint takes, darker where grain is deep. Scaled by `scale`. */
+function paper(strength: number, scale: number): HTMLCanvasElement {
   const key = strength.toFixed(2) + '|' + scale.toFixed(2);
-  let c = grainMaskCache.get(key);
+  let c = paperCache.get(key);
   if (c) return c;
   const sheet = grainSheet(), S = Math.max(1, Math.round(GRAIN * scale));
   c = makeCanvas(S, S);
@@ -95,50 +95,53 @@ function grainMask(strength: number, scale: number): HTMLCanvasElement {
     // Contrast grows with strength, so a light grain only speckles and a heavy one breaks the dab up.
     const v = Math.min(1, Math.max(0, 0.5 + (n - 0.5) * (1 + strength * 3)));
     const i = (y * S + x) * 4;
-    d[i] = d[i + 1] = d[i + 2] = 255;
-    d[i + 3] = Math.round(255 * (1 - strength * (1 - v)));
+    d[i] = d[i + 1] = d[i + 2] = Math.round(255 * (1 - strength * (1 - v)));
+    d[i + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
-  grainMaskCache.set(key, c);
+  paperCache.set(key, c);
   return c;
 }
 
-function stampFor(color: string, hardness: number, square = false): HTMLCanvasElement {
-  const key = color + '|' + hardness.toFixed(2) + (square ? '|sq' : '');
+/** Stamp sizes are bucketed so a pressure stroke doesn't build one per pixel of diameter. */
+function stampSize(d: number) {
+  return d <= 32 ? Math.ceil(d) : d <= 128 ? Math.ceil(d / 4) * 4 : d <= 256 ? Math.ceil(d / 16) * 16 : 256;
+}
+
+/** A white square dab with the falloff in its alpha, at (about) its own size. */
+function stampFor(hardness: number, S: number): HTMLCanvasElement {
+  const key = hardness.toFixed(2) + '|' + S;
   let c = stampCache.get(key);
   if (c) return c;
-  const R = 128;
-  c = makeCanvas(R * 2, R * 2);
+  const R = S / 2;
+  c = makeCanvas(S, S);
   const ctx = ctx2d(c);
-  if (square) {
-    // Same cosine falloff as the round stamp, measured to the nearest edge.
-    const [r, gg, b] = hexToRgb(color), h = Math.min(hardness, 0.99);
-    const img = ctx.createImageData(R * 2, R * 2), d = img.data;
-    for (let y = 0; y < R * 2; y++) for (let x = 0; x < R * 2; x++) {
-      const t = Math.max(Math.abs(x + 0.5 - R), Math.abs(y + 0.5 - R)) / R;
-      const a = t <= h ? 1 : t >= 1 ? 0 : 0.5 + 0.5 * Math.cos((Math.PI * (t - h)) / (1 - h));
-      const i = (y * R * 2 + x) * 4;
-      d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = Math.round(a * 255);
-    }
-    ctx.putImageData(img, 0, 0);
-    stampCache.set(key, c);
-    return c;
+  const img = ctx.createImageData(S, S), d = img.data;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = (y * S + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = 255;
+    d[i + 3] = Math.round(profile(Math.max(Math.abs(x + 0.5 - R), Math.abs(y + 0.5 - R)) / R, hardness) * 255);
   }
-  const g = ctx.createRadialGradient(R, R, 0, R, R, R);
-  const h = Math.min(hardness, 0.99);
-  const [r, gg, b] = hexToRgb(color);
-  for (let i = 0; i <= 12; i++) {
-    const t = i / 12;
-    const pos = h + (1 - h) * t;
-    const a = 0.5 + 0.5 * Math.cos(Math.PI * t); // smooth cosine falloff
-    g.addColorStop(pos, `rgba(${r},${gg},${b},${a})`);
-  }
-  if (h > 0) g.addColorStop(0, `rgba(${r},${gg},${b},1)`);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, R * 2, R * 2);
-  if (stampCache.size > 64) stampCache.clear();
+  ctx.putImageData(img, 0, 0);
+  if (stampCache.size > 128) stampCache.clear();
   stampCache.set(key, c);
   return c;
+}
+
+/** Coverage at distance t (0..1) from a dab's centre: solid to the hardness, then a cosine falloff. */
+function profile(t: number, hardness: number) {
+  const h = Math.min(hardness, 0.99);
+  return t <= h ? 1 : t >= 1 ? 0 : 0.5 + 0.5 * Math.cos((Math.PI * (t - h)) / (1 - h));
+}
+
+const grey = (v: number) => `rgb(${Math.round(v * 255)},${Math.round(v * 255)},${Math.round(v * 255)})`;
+
+/** Stops from the centre (u = 0) to the edge (u = 1) at coverage `level`, placed by `at(u)`. */
+function softStops(g: CanvasGradient, hardness: number, level: number, at: (u: number) => number[]) {
+  for (let i = 0; i <= 12; i++) {
+    const u = i / 12, c = grey(level * profile(u, hardness));
+    for (const pos of at(u)) g.addColorStop(pos, c);
+  }
 }
 
 export function hexToRgb(hex: string): [number, number, number] {
@@ -209,58 +212,204 @@ export abstract class DabPath {
   protected strength(p: number) { return this.brush.flow * lerp(1, p, this.brush.pressureFlow); }
 }
 
-export class StrokeRenderer extends DabPath {
-  private stamp: HTMLCanvasElement | null;
-  private readonly square: boolean;
-  private grain: CanvasPattern | null = null;
-  private scratch: HTMLCanvasElement | null = null;
+let gctx: CanvasRenderingContext2D | null = null;
+/** A context to make patterns and gradients with. */
+const gradients = () => gctx ?? (gctx = ctx2d(makeCanvas(1, 1)));
 
-  constructor(private target: TiledSurface, brush: BrushParams, private color: string) {
+interface Edge { lx: number; ly: number; rx: number; ry: number }
+/** A hairline dab: centre, radius, coverage, and its two edge vertices once the next dab is known. */
+interface Node extends Edge { x: number; y: number; r: number; a: number }
+
+/** Dabs narrower than this are drawn as a ribbon, since a disc that small is mostly anti-aliasing. */
+const THIN = 2.5;
+/** Narrower ribbons fade instead, since a thinner polygon would just vanish. */
+const MIN_WIDTH = 0.6;
+
+/**
+ * Paint is laid down as coverage (grey levels) in a scratch surface, where round dabs combine by
+ * maximum ('lighten'), so a pixel holds the brush's coverage however many dabs land on it: no
+ * build-up pattern, no banding at light pressure. Hairlines are a ribbon of quads added once per
+ * pixel instead, since discs that small are all anti-aliasing. Square dabs still stamp over each other.
+ * `sync` turns the coverage into coloured pixels in the stroke buffer; it runs after each input event.
+ */
+export class StrokeRenderer extends DabPath {
+  private readonly cov = new TiledSurface();
+  private readonly rgb: [number, number, number];
+  private readonly square: boolean;
+  private readonly soft: boolean;
+  private paper: CanvasPattern | null = null;
+  private scratch: HTMLCanvasElement | null = null;
+  private nodes: Node[] = [];
+  private dirty: Rect | null = null;
+  private queued = false;
+
+  constructor(private target: TiledSurface, brush: BrushParams, color: string) {
     super(brush);
+    this.rgb = hexToRgb(color);
     this.square = brush.shape === 'square';
-    this.stamp = brush.hardness >= 0.98 && !this.square ? null : stampFor(color, brush.hardness, this.square);
+    this.soft = brush.hardness < 0.98;
     if (brush.grain) {
       const scale = Math.max(0.25, Math.min(8, brush.grainScale ?? 1));
-      this.grain = ctx2d(makeCanvas(1, 1)).createPattern(grainMask(Math.min(1, brush.grain), scale), 'repeat');
+      this.paper = gradients().createPattern(paper(Math.min(1, brush.grain), scale), 'repeat');
     }
   }
 
-  private paint(ctx: CanvasRenderingContext2D, x: number, y: number, d: number) {
-    const r = d / 2;
-    if (this.stamp) ctx.drawImage(this.stamp, x - r, y - r, d, d);
-    else {
-      ctx.fillStyle = this.color;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  end(): Rect | null {
+    const r = rectUnion(super.end(), this.flush());
+    this.sync();
+    return r;
   }
 
   protected dab(x: number, y: number, p: number): Rect | null {
-    let d = this.diameter(p);
-    let a = this.strength(p);
-    if (d < 1) { a *= d; d = 1; }
-    if (a <= 0.001) return null;
-    const r = d / 2;
-    const box = { x: x - r - 1, y: y - r - 1, w: d + 2, h: d + 2 };
-    if (this.grain) {
-      // The dab is cut by the grain sheet in canvas coordinates, so neighbouring dabs share the same paper.
-      const S = Math.ceil(d) + 2, ox = Math.floor(x - r) - 1, oy = Math.floor(y - r) - 1;
-      const sc = this.scratch && this.scratch.width >= S ? this.scratch : (this.scratch = makeCanvas(S, S));
-      const c = ctx2d(sc);
-      c.clearRect(0, 0, S, S);
-      c.save();
-      c.translate(-ox, -oy);
-      this.paint(c, x, y, d);
-      c.globalCompositeOperation = 'destination-in';
-      c.fillStyle = this.grain;
-      c.fillRect(ox, oy, S, S);
-      c.restore();
-      this.target.draw(box, (ctx) => { ctx.globalAlpha = a; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
-      return box;
+    const d = this.diameter(p), a = Math.min(1, this.strength(p));
+    if (this.square) return this.stamp(x, y, d, a);
+    // The darkness the old pile of overlapping dabs settled at, so every brush keeps its feel.
+    const n = Math.max(1, Math.min(1 / this.brush.spacing, d / 0.4));
+    const level = 1 - Math.pow(1 - a, n);
+    if (d >= THIN) { const r = rectUnion(this.flush(), this.disc(x, y, d, level)); return r; }
+    const fade = Math.min(1, d / MIN_WIDTH);
+    const nodes = this.nodes;
+    nodes.push({ x, y, r: Math.max(d, MIN_WIDTH) / 2, a: level * fade, lx: 0, ly: 0, rx: 0, ry: 0 });
+    if (nodes.length < 3) {
+      if (nodes.length < 2) return null;
+      this.joint(nodes[0], null, nodes[1]);
+      return this.cap(nodes[0], nodes[1]);
     }
-    this.target.draw(box, (ctx) => { ctx.globalAlpha = a; this.paint(ctx, x, y, d); });
+    const [A, B, C] = nodes;
+    this.joint(B, A, C);
+    nodes.shift();
+    return this.quad(A, B);
+  }
+
+  /** A round dab at full coverage `level`, kept by maximum. */
+  private disc(x: number, y: number, d: number, level: number): Rect | null {
+    const r = d / 2;
+    return this.paint({ x: x - r - 1, y: y - r - 1, w: d + 2, h: d + 2 }, 'lighten', (c) => {
+      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
+      if (this.soft) { const g = c.createRadialGradient(x, y, 0, x, y, r); softStops(g, this.brush.hardness, level, (u) => [u]); c.fillStyle = g; }
+      else c.fillStyle = grey(level);
+      c.fill();
+    }, level);
+  }
+
+  /** The pending ribbon: its last quad and end cap, or a dot for a tap. */
+  private flush(): Rect | null {
+    const nodes = this.nodes;
+    if (!nodes.length) return null;
+    this.nodes = [];
+    if (nodes.length === 1) {
+      const N = nodes[0];
+      return this.paint({ x: N.x - N.r - 1, y: N.y - N.r - 1, w: N.r * 2 + 2, h: N.r * 2 + 2 }, 'lighter', (c) => {
+        c.fillStyle = grey(N.a); c.beginPath(); c.arc(N.x, N.y, N.r, 0, Math.PI * 2); c.fill();
+      }, N.a);
+    }
+    const [A, B] = nodes;
+    this.joint(B, A, null);
+    return rectUnion(this.quad(A, B), this.cap(B, A));
+  }
+
+  /** Edge vertices at N along the joint's bisector, pushed out so the quads either side meet exactly. */
+  private joint(N: Node, prev: Node | null, next: Node | null) {
+    const dir = (a: Node, b: Node) => { const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return [(b.x - a.x) / l, (b.y - a.y) / l]; };
+    const [ix, iy] = prev ? dir(prev, N) : dir(N, next!), [ox, oy] = next ? dir(N, next) : [ix, iy];
+    let ux = ix + ox, uy = iy + oy;
+    const l = Math.hypot(ux, uy);
+    if (l < 1e-6) { ux = ix; uy = iy; } else { ux /= l; uy /= l; }
+    const m = N.r / Math.max(0.5, ux * ix + uy * iy);
+    N.lx = N.x - uy * m; N.ly = N.y + ux * m;
+    N.rx = N.x + uy * m; N.ry = N.y - ux * m;
+  }
+
+  private quad(A: Node, B: Node): Rect | null {
+    const a = (A.a + B.a) / 2;
+    const xs = [A.lx, B.lx, B.rx, A.rx], ys = [A.ly, B.ly, B.ry, A.ry];
+    const x0 = Math.min(...xs), y0 = Math.min(...ys);
+    return this.paint({ x: x0 - 1, y: y0 - 1, w: Math.max(...xs) - x0 + 2, h: Math.max(...ys) - y0 + 2 }, 'lighter', (c) => {
+      c.fillStyle = grey(a);
+      c.beginPath(); c.moveTo(A.lx, A.ly); c.lineTo(B.lx, B.ly); c.lineTo(B.rx, B.ry); c.lineTo(A.rx, A.ry); c.closePath(); c.fill();
+    }, a);
+  }
+
+  /** Half a disc on N, facing away from `from`. */
+  private cap(N: Node, from: Node): Rect | null {
+    const t = Math.atan2(N.y - from.y, N.x - from.x), r = N.r;
+    return this.paint({ x: N.x - r - 1, y: N.y - r - 1, w: r * 2 + 2, h: r * 2 + 2 }, 'lighter', (c) => {
+      c.fillStyle = grey(N.a); c.beginPath(); c.arc(N.x, N.y, r, t - Math.PI / 2, t + Math.PI / 2); c.closePath(); c.fill();
+    }, N.a);
+  }
+
+  /** Square dabs stamp over each other as they always did; the stamp's alpha is the coverage. */
+  private stamp(x: number, y: number, d: number, a: number): Rect | null {
+    if (d < 1) { a *= d; d = 1; }
+    const r = d / 2, box = { x: x - r - 1, y: y - r - 1, w: d + 2, h: d + 2 };
+    if (a <= 0.001) return null;
+    const stamp = stampFor(this.brush.hardness, stampSize(d));
+    if (this.paper) {
+      const sc = this.scratchFor(box), c = ctx2d(sc), S = sc.width, ox = Math.floor(box.x), oy = Math.floor(box.y);
+      c.save();
+      c.clearRect(0, 0, S, S);
+      c.translate(-ox, -oy);
+      c.fillStyle = this.paper; c.fillRect(ox, oy, S, S);
+      c.globalCompositeOperation = 'destination-in';
+      c.drawImage(stamp, x - r, y - r, d, d);
+      c.restore();
+      this.cov.draw(box, (ctx) => { ctx.globalAlpha = a; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
+    } else this.cov.draw(box, (ctx) => { ctx.globalAlpha = a; ctx.drawImage(stamp, x - r, y - r, d, d); });
+    return this.touched(box);
+  }
+
+  private scratchFor(box: Rect) {
+    const S = Math.ceil(Math.max(box.w, box.h)) + 1;
+    return this.scratch && this.scratch.width >= S ? this.scratch : (this.scratch = makeCanvas(S, S));
+  }
+
+  /** Draws `shape` into the coverage with `op`; with grain, the shape is cut by the paper first. */
+  private paint(box: Rect, op: GlobalCompositeOperation, shape: (c: CanvasRenderingContext2D) => void, level: number): Rect | null {
+    if (level <= 0.002) return null;
+    if (this.paper) {
+      const sc = this.scratchFor(box), c = ctx2d(sc), S = sc.width, ox = Math.floor(box.x), oy = Math.floor(box.y);
+      c.save();
+      c.clearRect(0, 0, S, S);
+      c.translate(-ox, -oy);
+      shape(c);
+      c.globalCompositeOperation = 'multiply';
+      c.fillStyle = this.paper; c.fillRect(ox, oy, S, S);
+      c.globalCompositeOperation = 'destination-in';
+      shape(c); // keeps only the shape: 'multiply' painted the paper over the whole square
+      c.restore();
+      this.cov.draw(box, (ctx) => { ctx.globalCompositeOperation = op; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
+    } else this.cov.draw(box, (ctx) => { ctx.globalCompositeOperation = op; shape(ctx); });
+    return this.touched(box);
+  }
+
+  private touched(box: Rect): Rect {
+    this.dirty = rectUnion(this.dirty, box);
+    if (!this.queued) { this.queued = true; queueMicrotask(() => this.sync()); }
     return box;
+  }
+
+  /** Copies the coverage touched since the last call into the stroke buffer as coloured pixels. */
+  sync() {
+    this.queued = false;
+    const d = this.dirty;
+    this.dirty = null;
+    if (!d) return;
+    const [cr, cg, cb] = this.rgb;
+    const x0 = Math.floor(d.x), y0 = Math.floor(d.y), x1 = Math.ceil(d.x + d.w), y1 = Math.ceil(d.y + d.h);
+    for (let ty = Math.floor(y0 / TILE); ty * TILE < y1; ty++) for (let tx = Math.floor(x0 / TILE); tx * TILE < x1; tx++) {
+      const src = this.cov.get(tx, ty);
+      if (!src) continue;
+      const lx = Math.max(x0, tx * TILE) - tx * TILE, ly = Math.max(y0, ty * TILE) - ty * TILE;
+      const w = Math.min(x1, tx * TILE + TILE) - tx * TILE - lx, h = Math.min(y1, ty * TILE + TILE) - ty * TILE - ly;
+      if (w <= 0 || h <= 0) continue;
+      const img = ctx2d(src).getImageData(lx, ly, w, h), px = img.data;
+      for (let i = 0; i < px.length; i += 4) {
+        // Coverage is the premultiplied red channel: level × alpha.
+        const v = Math.round((px[i] * px[i + 3]) / 255);
+        px[i] = cr; px[i + 1] = cg; px[i + 2] = cb; px[i + 3] = v;
+      }
+      ctx2d(this.target.ensure(tx, ty)).putImageData(img, lx, ly);
+    }
   }
 }
 
