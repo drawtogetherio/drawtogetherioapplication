@@ -33,7 +33,7 @@ public class DoodlehivePlugin: CAPPlugin, CAPBridgedPlugin {
             var squeeze = false
             if #available(iOS 17.5, *) { squeeze = true }
             var hoverPreview = true
-            if #available(iOS 16.1, *) { hoverPreview = UIPencilInteraction.prefersHoverToolPreview }
+            if #available(iOS 17.5, *) { hoverPreview = UIPencilInteraction.prefersHoverToolPreview }
             #if DEBUG
             let apns = "sandbox"
             #else
@@ -79,7 +79,7 @@ final class PencilListener: NSObject, UIPencilInteractionDelegate {
     @available(iOS 17.5, *)
     func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
         var data = pose(tap.hoverPose)
-        data["action"] = name(interaction.preferredTapAction)
+        data["action"] = name(UIPencilInteraction.preferredTapAction)
         send("pencilTap", data)
     }
 
@@ -88,7 +88,7 @@ final class PencilListener: NSObject, UIPencilInteractionDelegate {
         // One event per squeeze, when it is let go; a cancelled squeeze does nothing.
         guard squeeze.phase == .ended else { return }
         var data = pose(squeeze.hoverPose)
-        data["action"] = name(interaction.preferredSqueezeAction)
+        data["action"] = name(UIPencilInteraction.preferredSqueezeAction)
         send("pencilSqueeze", data)
     }
 
