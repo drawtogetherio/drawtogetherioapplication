@@ -28,6 +28,12 @@ const patreonId = env.PATREON_CLIENT_ID || '';
 const patreonSecret = env.PATREON_CLIENT_SECRET || '';
 const onRailway = !!(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
 const production = env.NODE_ENV === 'production' || onRailway;
+/** The .p8 key from Apple, inline (newlines as \n) or as a file path. */
+function apnsKey(): string {
+  if (env.APNS_KEY_FILE) { try { return fs.readFileSync(env.APNS_KEY_FILE, 'utf8'); } catch { console.warn('APNS_KEY_FILE could not be read'); return ''; } }
+  return (env.APNS_KEY || '').replace(/\\n/g, '\n');
+}
+const apnsPem = apnsKey();
 const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
 
 function defaultDbPath() {
@@ -59,5 +65,9 @@ export const config = {
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
   /** How long a free host's room waits for them to come back before it closes. */
   ephemeralGraceMs: Number(env.EPHEMERAL_GRACE_MS) || 2 * 60_000,
+  /** Push notifications for the iPad app (Apple Push Notification service). APNS_HOST is for tests. */
+  apns: apnsPem && env.APNS_KEY_ID && env.APNS_TEAM_ID
+    ? { key: apnsPem, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, topic: env.APNS_TOPIC || 'net.doodlehive.app', host: env.APNS_HOST || undefined }
+    : null,
   secureCookies: publicUrl.startsWith('https://'),
 };

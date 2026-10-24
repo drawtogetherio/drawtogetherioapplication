@@ -16,6 +16,7 @@ import { deleteLapse, roomLapseKey } from '../io/lapse';
 import { isNativeApp, native } from '../io/native';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
+import { badge } from './ipadApp';
 
 // Fallback to the live event stream.
 const BANNER_KEY = 'doodlehive.support';
@@ -252,6 +253,13 @@ export class Home {
     this.bellBadge.hidden = !r.unread;
     this.bellBadge.textContent = r.unread > 99 ? '99+' : String(r.unread);
     if (!this.noticesPop.hidden) this.renderNotices();
+    void badge(r.unread);
+  }
+
+  /** From a tapped push: the notifications list, open. */
+  openNotices() {
+    if (this.noticesPop.hidden) this.toggleNotices();
+    else this.loadNotices();
   }
 
   private toggleNotices() {
@@ -263,6 +271,7 @@ export class Home {
     if (this.notices.some((n) => !n.read)) {
       this.bellBadge.hidden = true;
       api.readNotices().catch(() => {});
+      void badge(0);
     }
   }
 

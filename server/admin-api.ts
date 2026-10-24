@@ -3,6 +3,7 @@ import { db, getSite, getUser, isAdmin, publicProfile, setSite, USER_COLS, UserR
 import { HttpError, Req, Res, json, jsonBody } from './http.ts';
 import { deleteRoom, disconnectUser, liveRooms } from './rooms.ts';
 import { closeStreams } from './live.ts';
+import { forgetDevices } from './push.ts';
 import { forget, onlineIds } from './social.ts';
 import { readStats } from './stats.ts';
 import { sweep } from './sweep.ts';
@@ -26,6 +27,7 @@ function log(admin: UserRow, action: string, target = '') {
 
 function signOut(userId: string, reason: string) {
   db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  forgetDevices(userId);
   disconnectUser(userId, reason);
   closeStreams(userId);
   forget(userId);

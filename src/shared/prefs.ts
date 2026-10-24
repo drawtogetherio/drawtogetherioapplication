@@ -18,6 +18,13 @@ export const DEFAULT_KEYS: Record<KeyAction, string> = {
   sizeUp: ']', sizeDown: '[', rotate: 'r', zoomDrag: 'z', fit: '0', zoomIn: '=', zoomOut: '-', flipH: 'h', flipV: 'v',
 };
 
+/** What an Apple Pencil double-tap or squeeze does in the iPad app; 'system' follows iPadOS Settings → Apple Pencil. */
+export type PencilAction = 'system' | 'eraser' | 'previous' | 'color' | 'brushes' | 'palette' | 'undo' | 'off';
+export const PENCIL_ACTIONS: { id: PencilAction; label: string }[] = [
+  { id: 'system', label: 'As in iPad Settings' }, { id: 'eraser', label: 'Switch to eraser' }, { id: 'previous', label: 'Previous tool' },
+  { id: 'palette', label: 'Quick palette' }, { id: 'color', label: 'Colour' }, { id: 'brushes', label: 'Brush library' }, { id: 'undo', label: 'Undo' }, { id: 'off', label: 'Nothing' },
+];
+
 export type Mode = 'dark' | 'light' | 'system';
 export const MODES: Mode[] = ['dark', 'light', 'system'];
 
@@ -62,16 +69,20 @@ export interface Prefs {
   layout: 'classic' | 'studio';
   /** Where each studio panel sits. */
   panels: Record<PanelId, PanelState>;
+  pencilTap: PencilAction;
+  pencilSqueeze: PencilAction;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
   fingerDraws: true, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
+  pencilTap: 'system', pencilSqueeze: 'system',
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
 const isBrushId = (v: unknown): v is string => typeof v === 'string' && /^[a-z0-9-]{1,24}$/.test(v);
 export const cleanName = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '');
+const pencilAction = (v: unknown): PencilAction => (PENCIL_ACTIONS.some((a) => a.id === v) ? v as PencilAction : 'system');
 const list = (v: unknown) => (Array.isArray(v) ? v : []);
 
 function cleanPanels(raw: unknown): Record<PanelId, PanelState> {
@@ -124,6 +135,8 @@ export function cleanPrefs(raw: unknown): Prefs {
     brushCategories: cats,
     layout: r.layout === 'studio' ? 'studio' : 'classic',
     panels: cleanPanels(r.panels),
+    pencilTap: pencilAction(r.pencilTap),
+    pencilSqueeze: pencilAction(r.pencilSqueeze),
   };
 }
 

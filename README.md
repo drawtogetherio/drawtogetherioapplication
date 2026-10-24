@@ -109,6 +109,13 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   toggle swaps it to two swatches with the name previewed. The Premium section has three states:
   blurred perks behind a Patreon prompt (with Link Patreon and a link to the page), "not an active
   patron" with Check again and Unlink, or the perks list with the link status.
+- **iPad app (v0.26)**: Apple Pencil **double-tap** and **squeeze** (Pencil Pro) do what iPadOS Settings →
+  Apple Pencil says (switch to eraser, previous tool, colour, brush library, or the **quick palette**:
+  tools, recent colours, undo/redo, opened under the hovering tip), or what Preferences → Apple Pencil
+  overrides them with (also Undo or Nothing). Hover shows the brush outline like a mouse does. Exports
+  open the share sheet (Photos, Files, AirDrop). Friend requests, accepted requests and invites arrive
+  as **push notifications**; tapping an invite opens the room, the app icon's number follows the bell,
+  and logging out stops the pushes for that iPad.
 - **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the
   first sample) starts the stroke on the first sample that has pressure, instead of dotting the canvas
   with the previous stroke's size (`pendingDown` in `src/view/input.ts`).
@@ -285,6 +292,15 @@ from GitHub (see DEPLOY.md). Every canvas shows where it lives at the top right:
 server, a yellow **In Cache** warning in a browser (hover: the browser may clear it, get the app), and
 a device icon in the apps. Home tiles carry the same mark.
 
+**iPad app (v0.26).** `ipad/ios` is the Xcode project (Swift Package Manager, iPad only) and
+`ipad/plugins/doodlehive` its own plugin: a `UIPencilInteraction` on the web view that reports
+double-taps and squeezes with the system's preferred action and the hover position, the push
+environment, and the app badge. `src/io/ipad.ts` types the injected plugins; `src/ui/pencil.ts` turns
+gestures into tool changes and the quick palette; `src/ui/ipadApp.ts` registers for push after login,
+routes tapped pushes, keeps the badge and saves exports through the share sheet. On the server
+`server/push.ts` keeps device tokens (`push_devices`) and sends every notice from `notify()` to
+Apple's APNs over HTTP/2 with an ES256 token signed by the `.p8` key; tokens Apple rejects are dropped.
+
 **Files (.hivecanvas, .hivelapse).** `src/shared/hivecanvas.ts` reads and writes both, for the app and
 the server. A `.hivecanvas` is a zip of `manifest.json`, `tree.json` (folders and layers) and the
 layers' 256 px tiles as PNGs: the canvas as it looks now, never its undo history. Export saves one,
@@ -315,6 +331,7 @@ node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, squ
 node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer masks, replay
 node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to classic
 node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
+node tests/pencil.mjs http://localhost:4180/app.html    # iPad app: Pencil double-tap/squeeze, quick palette, Apple Pencil prefs, share-sheet export
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev
@@ -333,6 +350,7 @@ node tests/embed.mjs                          # invite link embeds: Open Graph t
 DB_PATH=... node tests/pins.mjs               # pinned canvases: limits, ownership, public thumbnails, picker, lightbox
 DB_PATH=... node tests/profile.mjs            # profile dialog: premium states, GIF picture with crop, banner, colour/gradient picker
 node tests/patreon.mjs                        # Patreon linking against a mock (server needs PATREON_CLIENT_ID=test-client PATREON_CLIENT_SECRET=test-secret PATREON_CAMPAIGN_ID=c1 PATREON_API=http://localhost:8799)
+node tests/push.mjs                           # iPad push against a mock APNs, then the app page with faked plugins (own server on :8796; build first)
 ```
 
 Performance with several people drawing (built app served by the server, so it measures production code):

@@ -21,7 +21,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; notice?: SiteNotice | null }
+export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; push?: boolean; notice?: SiteNotice | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 
@@ -76,4 +76,6 @@ export const api = {
   notices: () => call<{ unread: number; notices: Notice[] }>('GET', '/api/notices'),
   readNotices: () => call<{ ok: true }>('POST', '/api/notices/read'),
   clearNotices: () => call<{ ok: true }>('DELETE', '/api/notices'),
+  addDevice: (token: string, env: 'sandbox' | 'production') => call<{ ok: true; push: boolean }>('POST', '/api/me/devices', { token, env }),
+  removeDevice: (token: string) => call<{ ok: true }>('DELETE', '/api/me/devices/' + encodeURIComponent(token)),
 };

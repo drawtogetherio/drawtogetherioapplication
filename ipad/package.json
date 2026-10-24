@@ -1,19 +1,21 @@
 {
   "name": "doodlehive-ipad",
-  "version": "0.19.0",
+  "version": "0.26.0",
   "private": true,
-  "description": "Doodlehive for iPad: the web app in a native shell, with canvases kept in the app's own storage.",
+  "description": "Doodlehive for iPad: the web app in a native shell, with Apple Pencil gestures, push notifications and canvases kept in the app's own storage.",
   "scripts": {
-    "add:ios": "cap add ios",
     "sync": "cap sync ios",
     "open": "cap open ios"
   },
   "dependencies": {
-    "@capacitor/core": "^7.4.0",
-    "@capacitor/filesystem": "^7.1.0",
-    "@capacitor/ios": "^7.4.0"
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/filesystem": "^8.0.0",
+    "@capacitor/ios": "^8.0.0",
+    "@capacitor/push-notifications": "^8.0.0",
+    "@capacitor/share": "^8.0.0",
+    "doodlehive-native": "file:./plugins/doodlehive"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.4.0"
+    "@capacitor/cli": "^8.0.0"
   }
 }

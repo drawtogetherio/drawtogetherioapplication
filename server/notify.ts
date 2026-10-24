@@ -1,5 +1,6 @@
 import { db, isPremium, newId, USER_COLS, UserRow } from './db.ts';
 import { sendTo } from './live.ts';
+import { push } from './push.ts';
 import type { Notice, NoticeKind } from '../src/shared/notices.ts';
 
 // Notifications are rows per user; `key` lets a repeat replace the old one instead of piling up.
@@ -27,7 +28,11 @@ export function notify(userId: string, kind: NoticeKind, text: string, data: Rec
     .run(newId('n_'), userId, key ?? null, kind, text, JSON.stringify(data), Date.now());
   db.prepare(`DELETE FROM notices WHERE user_id = ? AND id NOT IN (SELECT id FROM notices WHERE user_id = ? ORDER BY created_at DESC LIMIT ${KEEP})`).run(userId, userId);
   sendTo(userId, { type: 'notices' });
+  // The iPad app gets it as a push too; tapping it opens the room or the notifications.
+  push(userId, { body: text, badge: unreadCount(userId), data: { kind, room: (data.room as { id?: string } | undefined)?.id ?? null }, collapse: key }).catch(() => {});
 }
+
+const unreadCount = (userId: string) => (db.prepare('SELECT count(*) AS n FROM notices WHERE user_id = ? AND read = 0').get(userId) as { n: number }).n;
 
 export function dropNotice(userId: string, key: string) {
   if (db.prepare('DELETE FROM notices WHERE user_id = ? AND key = ?').run(userId, key).changes) sendTo(userId, { type: 'notices' });
@@ -36,8 +41,7 @@ export function dropNotice(userId: string, key: string) {
 export function listNotices(userId: string): { unread: number; notices: Notice[] } {
   const rows = db.prepare('SELECT id, kind, text, data, read, created_at FROM notices WHERE user_id = ? ORDER BY created_at DESC LIMIT 50').all(userId) as
     { id: string; kind: NoticeKind; text: string; data: string; read: number; created_at: number }[];
-  const unread = (db.prepare('SELECT count(*) AS n FROM notices WHERE user_id = ? AND read = 0').get(userId) as { n: number }).n;
-  return { unread, notices: rows.map((r) => ({ id: r.id, kind: r.kind, text: r.text, data: JSON.parse(r.data), read: !!r.read, at: r.created_at })) };
+  return { unread: unreadCount(userId), notices: rows.map((r) => ({ id: r.id, kind: r.kind, text: r.text, data: JSON.parse(r.data), read: !!r.read, at: r.created_at })) };
 }
 
 export function readNotices(userId: string) { db.prepare('UPDATE notices SET read = 1 WHERE user_id = ?').run(userId); }

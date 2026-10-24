@@ -508,6 +508,20 @@ export class App {
     this.toolPop.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)))}px`;
   }
 
+  /** Opens or closes the colour picker (Apple Pencil double-tap or squeeze). */
+  toggleColor() {
+    if (this.studioOn) { this.studio.show('color', !this.ed.prefs.panels.color.show); return; }
+    this.colorPop.hidden = !this.colorPop.hidden;
+    if (!this.colorPop.hidden) this.picker.opened();
+  }
+
+  /** The brush library of the current brush, eraser or smudge tool; from another tool, the brush's. */
+  toggleBrushLibrary() {
+    const id = isBrushTool(this.ed.toolId) ? this.ed.toolId : 'brush';
+    this.ed.setTool(id);
+    this.togglePicker(id, this.toolButtons.get(id)!);
+  }
+
   private modeButton([, label, ic]: [string, string, string]) {
     const b: HTMLButtonElement = h('button.preset-btn', {
       title: 'Change mode', 'aria-label': `Mode: ${label}. Change mode`,
