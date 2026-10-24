@@ -11,7 +11,8 @@ import type { ApplyOptions } from './core/document';
 import type { TiledSurface } from './core/tiles';
 import { Prefs, cleanPrefs } from './shared/prefs';
 
-export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'lassoFill' | 'select' | 'shape' | 'eyedropper';
+export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
+export type FillMode = 'bucket' | 'lasso';
 export type SelectMode = 'rect' | 'ellipse' | 'lasso' | 'wand';
 
 export interface EditorSettings {
@@ -24,6 +25,7 @@ export interface EditorSettings {
   fillTolerance: number; // 0..1
   fillSampleAll: boolean;
   fillExpand: number;
+  fillMode: FillMode;
   /** Fill lasso: only the parts closed off by lines. */
   lassoInside: boolean;
   selectMode: SelectMode;
@@ -60,7 +62,7 @@ export class Editor {
     brush: { ...brushById(DEFAULT_BRUSH).params }, brushPreset: DEFAULT_BRUSH,
     eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
     smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
-    fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, lassoInside: true,
+    fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, fillMode: 'bucket', lassoInside: true,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
     hideOthersFolders: false,
   };

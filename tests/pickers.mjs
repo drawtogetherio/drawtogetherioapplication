@@ -2,7 +2,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 
-const url = process.argv[2] ?? 'http://localhost:4180/';
+const url = process.argv[2] ?? 'http://localhost:4180/app.html';
 const out = 'test-results/pickers';
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});

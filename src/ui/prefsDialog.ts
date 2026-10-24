@@ -42,7 +42,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       );
     };
     render();
-    return [row('Layout', segmented(['classic', 'studio'] as const, (v) => (v === 'classic' ? 'Classic' : 'Studio'), () => p.layout, (v) => { p.layout = v; render(); })), panels];
+    return [row('Layout', segmented(['classic', 'studio'] as const, (v) => (v === 'classic' ? 'Simple' : 'Studio'), () => p.layout, (v) => { p.layout = v; render(); })), panels];
   };
 
   const canvas = () => [

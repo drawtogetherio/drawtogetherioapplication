@@ -95,7 +95,7 @@ await page.locator('.brush-tab', { hasText: 'Pencil' }).click();
 check((await page.locator('.brush-row .brush-name').allTextContents()).join() === 'Graphite Pencil,HB Pencil,Crayon,Charcoal', 'Pencil tab lists the pencils');
 await page.screenshot({ path: `${out}/01-pencil-tab.png` });
 await page.locator('.brush-row', { hasText: 'Crayon' }).click();
-check(await ed((e) => e.settings.brushPreset) === 'crayon' && (await page.locator('.optionsbar .slider[aria-label="Grain"]').count()) === 1, 'Crayon picked; the options bar has a Grain slider');
+check(await ed((e) => e.settings.brushPreset) === 'crayon' && (await page.locator('.optionsbar .preset-btn', { hasText: 'Crayon' }).count()) === 1, 'Crayon picked; the simple bar names it (no Grain slider)');
 
 // ---- Grain breaks a stroke up; the plain brush is solid ----
 await ed((e) => { e.settings.brush.size = 30; });

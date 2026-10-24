@@ -16,4 +16,6 @@ export interface Tool {
   activate?(): void;
   deactivate?(): void;
   overlay?(ctx: CanvasRenderingContext2D, m: DOMMatrix): void;
+  /** Where the tool is drawing when that isn't under the pointer (stabilizer). */
+  pen?(): { x: number; y: number } | null;
 }

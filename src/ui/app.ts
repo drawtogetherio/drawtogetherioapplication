@@ -4,7 +4,6 @@ import { BrushTool } from '../tools/brushTool';
 import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
 import { FillTool } from '../tools/fillTool';
-import { LassoFillTool } from '../tools/lassoFillTool';
 import { SelectTool } from '../tools/selectTool';
 import { ShapeTool } from '../tools/shapeTool';
 import { InputController } from '../view/input';
@@ -26,21 +25,21 @@ import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
 import { accentColor, applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
-import { KeyAction, actionFor, keyOf } from '../shared/prefs';
+import { KeyAction, actionFor, keyOf, applyPressure } from '../shared/prefs';
 import { Studio } from './panels';
 import { PREFS_KEY } from './session';
 import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
-import { BrushTool as BrushToolId, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
+import { BrushTool as BrushToolId, FILL_MODES, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
 import { effectsBar } from './effectsBar';
 
-const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'smudge', 'select', 'shape'];
+const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'smudge', 'fill', 'select', 'shape'];
 const isBrushTool = (id: ToolId): id is BrushToolId => id === 'brush' || id === 'eraser' || id === 'smudge';
 
 const TOOLS: { id: ToolId; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
-  { id: 'lassoFill', label: 'Fill lasso' }, { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
+  { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
 ];
 
 export const SAVE_BADGE = {
@@ -95,7 +94,7 @@ export class App {
     const ed = this.ed;
     this.select = new SelectTool(ed);
     ed.tools = {
-      brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), smudge: new SmudgeTool(ed), fill: new FillTool(ed), lassoFill: new LassoFillTool(ed),
+      brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), smudge: new SmudgeTool(ed), fill: new FillTool(ed),
       select: this.select, shape: new ShapeTool(ed), eyedropper: new EyedropperTool(ed),
     };
     this.input = new InputController(ed, ed.view.canvas);
@@ -224,8 +223,10 @@ export class App {
 
   /** Puts the preferences into effect: colour mode, shortcuts, hover outline. */
   applyPrefs() {
-    const p = this.ed.prefs;
+    const p = this.ed.prefs, st = this.ed.settings;
     applyMode(p.mode);
+    applyPressure(p, st.brush);
+    applyPressure(p, st.eraser);
     const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
     for (const t of TOOLS) {
       const b = this.toolButtons.get(t.id)!;
@@ -487,8 +488,10 @@ export class App {
     const st = this.ed.settings;
     const sel = SELECT_MODES.find((m) => m[0] === st.selectMode)!;
     const shp = SHAPE_KINDS.find((m) => m[0] === st.shape)!;
+    const fil = FILL_MODES.find((m) => m[0] === st.fillMode)!;
     this.toolButtons.get('select')!.innerHTML = icon(sel[2]);
     this.toolButtons.get('shape')!.innerHTML = icon(shp[2]);
+    this.toolButtons.get('fill')!.innerHTML = icon(fil[2]);
   }
 
   private closePicker() {
@@ -504,6 +507,7 @@ export class App {
     let content: HTMLElement;
     if (isBrushTool(id)) content = brushLibrary(this, id, done);
     else if (id === 'select') content = iconChoices(SELECT_MODES, st.selectMode, (v) => { st.selectMode = v; ed.setTool('select'); done(); });
+    else if (id === 'fill') content = iconChoices(FILL_MODES, st.fillMode, (v) => { st.fillMode = v; ed.setTool('fill'); done(); });
     else content = iconChoices(SHAPE_KINDS, st.shape, (v) => { st.shape = v; ed.setTool('shape'); done(); });
     this.toolPop.replaceChildren(content);
     this.toolPop.hidden = false;
@@ -581,21 +585,31 @@ export class App {
         onclick: () => this.togglePicker(tool, pick),
       });
       pick.append(brushPreview(params, 64, 24), h('span', {}, name), h('span.caret', { html: icon('chevronDown', 14) }));
-      o.append(pick,
+      o.append(pick);
+      // The simple layout keeps the bar short; the studio brush panel has room for everything.
+      if (this.studioOn) o.append(
         range(smudge ? 'Strength' : 'Flow', params.flow, 0.02, 1, (v) => { params.flow = v; }),
         range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
         range('Grain', params.grain ?? 0, 0, 1, (v) => { params.grain = v; }),
         range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
       );
-      if (!smudge) o.append(range('Stabilizer', ed.prefs.stabilizer, 0, 1, (v) => { ed.prefs.stabilizer = v; ed.emit('prefs'); }));
-      o.append(
-        label('Pressure:'),
-        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? (smudge ? 0.5 : 1) : 0; }),
-        toggle(smudge ? 'Strength' : 'Opacity', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? (smudge ? 0.5 : 1) : 0; }),
+      const pf = ed.prefs, pref = () => ed.emit('prefs');
+      if (!smudge) {
+        o.append(toggle('Stabilizer', pf.stabilizerOn, (v) => { pf.stabilizerOn = v; pref(); this.renderOptions(); }));
+        if (pf.stabilizerOn) o.append(range('', pf.stabilizer, 0, 1, (v) => { pf.stabilizer = v; pref(); }));
+      }
+      o.append(label('Pressure:'));
+      if (smudge) o.append(
+        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? 0.5 : 0; }),
+        toggle('Strength', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? 0.5 : 0; }),
       );
-    } else if (ed.toolId === 'fill' || ed.toolId === 'lassoFill' || (ed.toolId === 'select' && st.selectMode === 'wand')) {
-      if (ed.toolId === 'select') o.append(this.modeButton(SELECT_MODES.find((m) => m[0] === st.selectMode)!));
-      if (ed.toolId === 'lassoFill') o.append(toggle('Fill inside lines', st.lassoInside, (v) => { st.lassoInside = v; }));
+      else o.append(
+        toggle('Size', params.pressureSize > 0, (v) => { pf.pressureSize = v; applyPressure(pf, st.brush); applyPressure(pf, st.eraser); pref(); }),
+        toggle('Opacity', params.pressureFlow > 0, (v) => { pf.pressureOpacity = v; applyPressure(pf, st.brush); applyPressure(pf, st.eraser); pref(); }),
+      );
+    } else if (ed.toolId === 'fill' || (ed.toolId === 'select' && st.selectMode === 'wand')) {
+      o.append(this.modeButton((ed.toolId === 'fill' ? FILL_MODES.find((m) => m[0] === st.fillMode) : SELECT_MODES.find((m) => m[0] === st.selectMode))!));
+      if (ed.toolId === 'fill' && st.fillMode === 'lasso') o.append(toggle('Fill inside lines', st.lassoInside, (v) => { st.lassoInside = v; }));
       o.append(range('Tolerance', st.fillTolerance, 0, 1, (v) => { st.fillTolerance = v; }));
       if (ed.toolId !== 'select') o.append(range('Expand', st.fillExpand, 0, 4, (v) => { st.fillExpand = Math.round(v); }, (v) => Math.round(v) + 'px'));
       o.append(
@@ -690,6 +704,7 @@ export class App {
   private drawOverlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) {
     const ed = this.ed;
     this.select.overlay(ctx, M);
+    if (ed.currentTool !== this.select) ed.currentTool.overlay?.(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
     const tool = ed.currentTool, t = tool instanceof BrushTool ? tool.tether : null;
     const hv = t ? { x: t.bx, y: t.by } : ed.hover;

@@ -20,6 +20,7 @@ export class BrushTool implements Tool {
   private get params() { return this.erase ? this.ed.settings.eraser : this.ed.settings.brush; }
 
   busy() { return !!this.buffer; }
+  pen() { return this.tether ? { x: this.tether.bx, y: this.tether.by } : null; }
 
   down(p: PointerInfo) {
     const layer = this.ed.paintableLayer();
@@ -48,7 +49,7 @@ export class BrushTool implements Tool {
 
   /** The brush trails the cursor on a rope: it only moves once the rope is taut. */
   private pull(p: PointerInfo): PointerInfo {
-    const L = (this.ed.prefs.stabilizer * ROPE_MAX) / this.ed.view.viewport.zoom;
+    const pf = this.ed.prefs, L = pf.stabilizerOn ? (pf.stabilizer * ROPE_MAX) / this.ed.view.viewport.zoom : 0;
     if (!L) return p;
     const t = this.tether ?? (this.tether = { bx: p.x, by: p.y, cx: p.x, cy: p.y });
     t.cx = p.x; t.cy = p.y;

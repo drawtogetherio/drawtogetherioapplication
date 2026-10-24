@@ -150,8 +150,8 @@ export class InputController {
       const events = e.getCoalescedEvents?.() ?? [];
       const r = this.el.getBoundingClientRect(); // once per event, not per coalesced sample
       for (const ce of events.length ? events : [e]) if (this.started(ce)) this.activeTool.move(this.info(ce, r));
-      const p = this.info(e, r);
-      this.ed.sendCursor(p.x, p.y, true);
+      const p = this.info(e, r), at = this.activeTool.pen?.() ?? p;
+      this.ed.sendCursor(at.x, at.y, true);
       return;
     }
     const t = this.touches.get(e.pointerId);

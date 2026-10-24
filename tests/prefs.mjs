@@ -67,7 +67,7 @@ check((await page.locator('.pref-page .switch-row:visible').count()) === 0, 'pan
 await page.locator('.segmented button', { hasText: 'Studio' }).click();
 check((await page.locator('.pref-page .switch-row:visible').allTextContents()).join() === 'Tools,Brush properties,Colour wheel,Swatches,Layers', 'studio lists its five panels');
 await page.locator('.switch-row', { hasText: 'Swatches' }).locator('input').click();
-await page.locator('.segmented button', { hasText: 'Classic' }).click();
+await page.locator('.segmented button', { hasText: 'Simple' }).click();
 await page.evaluate(() => { const p = window.doodlehive.ed.prefs; p.customBrushes.push({ id: 'cmine', name: 'Mine', cat: 'Pen', params: { ...window.doodlehive.ed.settings.brush, hardness: 0.25 } }); p.brushCategories.push('Inks'); });
 
 // ---- Canvas ----

@@ -27,9 +27,10 @@ export class LassoFillTool implements Tool {
 
   up() {
     const pts = this.pts, ed = this.ed, st = ed.settings;
+    if (!pts) return;
     this.pts = null;
     ed.view.requestRender();
-    if (!pts || pts.length < 6) return;
+    if (pts.length < 6) return;
     const box = rectRoundOut(rectFromPoints(pts)!, st.fillExpand + 1);
     const region = rectIntersect(box, fillRegion(ed, box.x + box.w / 2, box.y + box.h / 2));
     if (!region || region.w < 1 || region.h < 1) return;

@@ -3,18 +3,18 @@ import { DEFAULT_CURVE, curveAt, validCurve } from './curve';
 import { cleanBrush } from './brush';
 import type { BrushParams } from '../core/model';
 
-export type KeyAction = 'brush' | 'eraser' | 'smudge' | 'fill' | 'lassoFill' | 'select' | 'shape' | 'eyedropper' | 'layers'
+export type KeyAction = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper' | 'layers'
   | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag';
 
 export const KEY_ACTIONS: { id: KeyAction; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
-  { id: 'lassoFill', label: 'Fill lasso' }, { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' }, { id: 'layers', label: 'Layers' },
+  { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' }, { id: 'layers', label: 'Layers' },
   { id: 'sizeUp', label: 'Bigger brush' }, { id: 'sizeDown', label: 'Smaller brush' }, { id: 'rotate', label: 'Rotate (hold + drag)' }, { id: 'zoomDrag', label: 'Zoom (hold + drag)' },
   { id: 'fit', label: 'Fit to screen' }, { id: 'zoomIn', label: 'Zoom in' }, { id: 'zoomOut', label: 'Zoom out' }, { id: 'flipH', label: 'Flip horizontal' }, { id: 'flipV', label: 'Flip vertical' },
 ];
 
 export const DEFAULT_KEYS: Record<KeyAction, string> = {
-  brush: 'b', eraser: 'e', smudge: 's', fill: 'g', lassoFill: 'k', select: 'm', shape: 'u', eyedropper: 'i', layers: 'l',
+  brush: 'b', eraser: 'e', smudge: 's', fill: 'g', select: 'm', shape: 'u', eyedropper: 'i', layers: 'l',
   sizeUp: ']', sizeDown: '[', rotate: 'r', zoomDrag: 'z', fit: '0', zoomIn: '=', zoomOut: '-', flipH: 'h', flipV: 'v',
 };
 
@@ -52,8 +52,12 @@ export interface Prefs {
   pressureCurve: number[];
   /** One finger draws; otherwise it pans. Turns off by itself once a pen is used. */
   fingerDraws: boolean;
-  /** Brush stabilizer 0..1: how long the rope between cursor and brush is. */
+  /** Brush stabilizer: on, and 0..1 how long the rope between cursor and brush is. */
+  stabilizerOn: boolean;
   stabilizer: number;
+  /** Whether pressure drives brush size and opacity; applied to every brush picked. */
+  pressureSize: boolean;
+  pressureOpacity: boolean;
   /** The Patreon banner on the home screen; false once it has been closed. */
   supportBanner: boolean;
   /** Brush ids starred in the library. */
@@ -68,7 +72,7 @@ export interface Prefs {
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, stabilizer: 0, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
+  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
@@ -120,7 +124,10 @@ export function cleanPrefs(raw: unknown): Prefs {
     pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
     fingerDraws: r.fingerDraws !== false,
-    stabilizer: typeof r.stabilizer === 'number' ? Math.min(1, Math.max(0, r.stabilizer)) : 0,
+    stabilizerOn: r.stabilizerOn === true,
+    stabilizer: typeof r.stabilizer === 'number' ? Math.min(1, Math.max(0, r.stabilizer)) : DEFAULT_PREFS.stabilizer,
+    pressureSize: r.pressureSize !== false,
+    pressureOpacity: r.pressureOpacity === true,
     supportBanner: r.supportBanner !== false,
     favoriteBrushes: list(r.favoriteBrushes).filter(isBrushId).slice(0, 40),
     customBrushes: brushes,
@@ -128,6 +135,12 @@ export function cleanPrefs(raw: unknown): Prefs {
     layout: r.layout === 'studio' ? 'studio' : 'classic',
     panels: cleanPanels(r.panels),
   };
+}
+
+/** The remembered pressure switches, on top of a brush's own strengths. */
+export function applyPressure(p: Prefs, b: BrushParams) {
+  b.pressureSize = p.pressureSize ? b.pressureSize || 1 : 0;
+  b.pressureFlow = p.pressureOpacity ? b.pressureFlow || 1 : 0;
 }
 
 export function pressureMap(p: Prefs, v: number): number {

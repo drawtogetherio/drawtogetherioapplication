@@ -2,16 +2,17 @@ import type { BrushParams, ShapeKind } from '../core/model';
 import { TiledSurface } from '../core/tiles';
 import { BRUSH_LIBRARY, BrushCategory, BrushPreset, renderStroke, smudgeParams } from '../engine/brush';
 import { brushCode, parseBrushCode } from '../shared/brush';
-import { BUILTIN_CATEGORIES, CustomBrush } from '../shared/prefs';
+import { BUILTIN_CATEGORIES, CustomBrush, applyPressure } from '../shared/prefs';
 import type { App } from './app';
 import { brushEditor, newCategory, removeBrush } from './brushEditor';
 import { confirmDialog, textDialog } from './dialogs';
-import type { Editor, SelectMode, ToolId } from '../editor';
+import type { Editor, FillMode, SelectMode, ToolId } from '../editor';
 import { ctx2d, makeCanvas, uid } from '../core/geom';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 
 export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse'], ['wand', 'Magic wand', 'wand']];
+export const FILL_MODES: [FillMode, string, string][] = [['bucket', 'Bucket', 'fill'], ['lasso', 'Fill lasso', 'lassoFill']];
 export const SHAPE_KINDS: [ShapeKind, string, string][] = [['line', 'Line', 'line'], ['rect', 'Rectangle', 'rect'], ['ellipse', 'Ellipse', 'ellipse']];
 
 const previewCache = new Map<string, HTMLCanvasElement>();
@@ -74,6 +75,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
   const menu = h('div.panel.brush-menu', { hidden: true });
   const pick = (pr: BrushPreset) => {
     const params = { ...pr.params };
+    if (tool !== 'smudge') applyPressure(ed.prefs, params);
     if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
     else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); }
     else { st.brushPreset = pr.id; st.brush = params; }

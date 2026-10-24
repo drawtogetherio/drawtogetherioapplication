@@ -1,5 +1,6 @@
 import { Rect, rectContains, rectIntersect, rectUnion, uid } from '../core/geom';
 import type { Editor } from '../editor';
+import { LassoFillTool } from './lassoFillTool';
 import { PointerInfo, Tool } from './tool';
 
 const MAX_FILL = 8192;
@@ -15,15 +16,22 @@ export function fillRegion(ed: Editor, x: number, y: number): Rect {
   return region;
 }
 
+/** The bucket, or in lasso mode the fill lasso. */
 export class FillTool implements Tool {
-  constructor(private ed: Editor) {}
+  private lasso: LassoFillTool;
 
-  down() {}
-  move() {}
-  cancel() {}
+  constructor(private ed: Editor) { this.lasso = new LassoFillTool(ed); }
+
+  private get isLasso() { return this.ed.settings.fillMode === 'lasso'; }
+  busy() { return this.lasso.busy(); }
+  down(p: PointerInfo) { if (this.isLasso) this.lasso.down(p); }
+  move(p: PointerInfo) { this.lasso.move(p); }
+  cancel() { this.lasso.cancel(); }
+  overlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) { this.lasso.overlay(ctx, M); }
 
   up(p: PointerInfo) {
     const ed = this.ed, st = ed.settings;
+    if (this.isLasso) { this.lasso.up(); return; }
     if (!ed.paintableLayer()) return;
     const region = fillRegion(ed, p.x, p.y);
     if (!rectContains(region, p.x, p.y)) return;

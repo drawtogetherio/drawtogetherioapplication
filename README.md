@@ -65,13 +65,13 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   live in prefs; `cleanPrefs` validates them with the same ranges the server uses for strokes
   (`validBrush`). Deleting a category moves its brushes to General. `ed.preset(id)` looks a brush up in
   your own list first, then the library.
-- **Studio layout (v0.24)**: Preferences → Layout switches between Classic (bars and popovers) and
+- **Studio layout (v0.24)**: Preferences → Layout switches between Simple (bars and popovers) and
   Studio: a vertical toolbar and brush properties on the left, a colour wheel, swatches and layers on
   the right. Panels drag by their title to float over the canvas, drop on an edge to dock there (any
   side, in the order dropped), resize from the corner grip, and close with X; the Layout group lists
   which panels show and resets the arrangement. Positions are saved in prefs (`panels`) with the
   account. `src/ui/panels.ts` (`Studio`) owns the frames; the app moves the same tool buttons, options
-  bar, sliders, colour picker and layers panel between the classic bars and the studio frames
+  bar, sliders, colour picker and layers panel between the simple bars and the studio frames
   (`App.applyLayout`), so both layouts share one state. The colour wheel is the picker's `setWheel`
   mode: a hue ring drawn once around the saturation/value square.
 - **Clipping masks and layer masks (v0.24)**: the layers panel's clip button clips a layer to the one
@@ -109,16 +109,22 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   toggle swaps it to two swatches with the name previewed. The Premium section has three states:
   blurred perks behind a Patreon prompt (with Link Patreon and a link to the page), "not an active
   patron" with Check again and Unlink, or the perks list with the link status.
-- **Fill lasso and magic wand (v0.26)**: the fill lasso (K) fills the shape you draw; with **Fill
+- **Fill lasso and magic wand (v0.26)**: the bucket's drop-down has a **Fill lasso** mode that fills the
+  shape you draw (shown as marching ants while you drag); with **Fill
   inside lines** on, only the parts of it that lines close off (`enclosedFill` in `src/engine/fill.ts`:
   the lasso's surroundings are the colour most of its edge sits on, and whatever of that colour can't
   be reached from the edge is inside the lines). Tolerance, Expand and the layer reference are shared
   with the bucket. The selection tool's **Magic wand** mode selects the connected area of similar
   colour under the click; the mask becomes a polygon along pixel edges (`src/engine/contour.ts`), with
   holes, so a selection now carries `holes` and every clip uses the even-odd rule.
-- **Brush stabilizer (v0.26)**: the Stabilizer slider in the brush options puts the brush on a rope
-  behind the cursor (`pull` in `src/tools/brushTool.ts`, up to 160 screen px); the overlay draws the
-  rope and the cursor, and the line ends where the brush is when you lift. Saved with the preferences.
+- **Brush stabilizer (v0.26)**: the Stabilizer checkbox (and its slider) in the brush options puts the
+  brush on a rope behind the cursor (`pull` in `src/tools/brushTool.ts`, up to 160 screen px); the
+  overlay draws the rope and the cursor, the line ends where the brush is when you lift, and other
+  people's cursor bubble follows the brush, not the pointer (`pen()`). Saved with the preferences.
+- **Short brush bar (v0.26)**: the Simple layout's brush options show only the preset, Stabilizer and
+  the Pressure Size/Opacity checkboxes; Flow, Hardness, Grain and Smoothing stay in the Studio brush
+  panel. The pressure checkboxes are preferences (`pressureSize`, `pressureOpacity`, applied to the
+  brush and eraser by `applyPressure`), so they are remembered.
 - **Canvases remember how they were held (v0.26)**: the view's rotation and flips are kept per canvas
   on the device (`src/view/turns.ts`, localStorage) and restored on the next open, fitted so the
   turned canvas still fits the screen. Per device, so nobody's rotation turns anyone else's room.
@@ -341,7 +347,7 @@ node tests/replay.mjs http://localhost:4180/app.html
 node tests/pickers.mjs http://localhost:4180/app.html   # brush library, mode drop-downs, R/Z view keys
 node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, square tips, custom brushes and codes, slider preview, effects
 node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer masks, replay
-node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to classic
+node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to simple
 node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
 node tests/tools.mjs http://localhost:4180/app.html     # fill lasso (inside lines or not), magic wand with holes, rope stabilizer, long strokes split
 
