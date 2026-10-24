@@ -130,6 +130,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   turned canvas still fits the screen. Per device, so nobody's rotation turns anyone else's room.
 - **Long strokes (v0.26)**: a stroke that outgrows `MAX_STROKE_PTS` (40k samples) is committed and
   continued as a new one, instead of being rejected as "Unknown edit".
+- **Light pen strokes stay even (v0.26)**: the stroke engine takes a median of three pressure samples
+  and smooths pressure a little more (`DabPath.add` in `src/engine/brush.ts`), so a stray spike at a
+  light touch no longer leaves a dark speck. Local drawing and replay share the filter.
 - **Pen strokes wait for pressure (v0.25)**: a pen down that reports pressure 0 (iPads do this on the
   first sample) starts the stroke on the first sample that has pressure, instead of dotting the canvas
   with the previous stroke's size (`pendingDown` in `src/view/input.ts`).

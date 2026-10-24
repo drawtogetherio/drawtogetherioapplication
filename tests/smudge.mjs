@@ -43,7 +43,7 @@ check((await alphaAt(cx, cy)) > 200 && (await alphaAt(cx, cy + 40)) === 0, 'a th
 
 await page.keyboard.press('s');
 check(await page.evaluate(() => window.doodlehive.ed.toolId === 'smudge'), 'S picks the smudge tool');
-check(!(await page.locator('.sidebar .slider[aria-label="Opacity"]').isVisible()) && (await page.locator('.optionsbar .slider[aria-label="Strength"]').count()) === 1, 'smudge options show strength, not opacity');
+check(!(await page.locator('.sidebar .slider[aria-label="Opacity"]').isVisible()) && (await page.locator('.optionsbar label.check', { hasText: 'Strength' }).count()) === 1, 'smudge options show a Strength pressure switch, not opacity');
 await page.evaluate(() => { window.doodlehive.ed.settings.smudge.size = 40; });
 await drag(cx, cy, cx, cy + 90, 40);
 const pulled = await alphaAt(cx, cy + 40);

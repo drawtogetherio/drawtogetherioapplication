@@ -22,10 +22,21 @@ const r = await page.evaluate(async () => {
   const light = height(); ed.undo(); await wait(50);
   // A tap with no pressure samples at all still marks the canvas.
   fire('pointerdown', 300, 400, 0); fire('pointerup', 300, 400, 0); await wait(50);
-  return { heavy, light, tap: height() };
+  const tap = height(); ed.undo(); await wait(50);
+  // A light stroke with stray pressure spikes must not leave dark specks.
+  const maxAlpha = () => { const b = ed.layer.surface.contentBounds(), c = document.createElement('canvas'); c.width = b.w; c.height = b.h;
+    const x = c.getContext('2d'); x.translate(-b.x, -b.y); ed.layer.surface.drawTo(x, b);
+    const d = x.getImageData(0, 0, b.w, b.h).data; let m = 0; for (let i = 3; i < d.length; i += 4) m = Math.max(m, d[i]); return m; };
+  ed.settings.brush.size = 3; ed.settings.brush.smoothing = 0.45;
+  line(0.03, (i) => (i % 7 === 0 ? 0.5 : 0.03)); await wait(50);
+  const spiky = maxAlpha(); ed.undo(); await wait(50);
+  line(0.03, () => 0.03); await wait(50);
+  return { heavy, light, tap, spiky, plain: maxAlpha() };
 });
 await browser.close();
 const ok = r.heavy > 50 && r.light < r.heavy / 3 && r.tap > 0;
 console.log((ok ? 'ok   ' : 'FAIL ') + `pressureless first samples start thin (heavy ${r.heavy}, light ${r.light}, tap ${r.tap})`);
-if (!ok) process.exit(1);
+const calm = r.spiky < r.plain + 40;
+console.log((calm ? 'ok   ' : 'FAIL ') + `pressure spikes are filtered out (spiky ${r.spiky}, plain ${r.plain})`);
+if (!ok || !calm) process.exit(1);
 console.log('all passed');

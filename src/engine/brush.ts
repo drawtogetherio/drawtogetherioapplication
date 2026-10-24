@@ -152,6 +152,7 @@ export abstract class DabPath {
   private sx = 0; private sy = 0; private sp = 0; // smoothed input
   private lx = 0; private ly = 0; private lp = 0; // last dab position
   private rawX = 0; private rawY = 0; private rawP = 0;
+  private p1 = -1; private p2 = -1; // the two raw pressures before this one
   private started = false;
   private carry = 0; // distance travelled since the last dab
 
@@ -160,6 +161,9 @@ export abstract class DabPath {
   protected abstract dab(x: number, y: number, p: number): Rect | null;
 
   add(x: number, y: number, p: number): Rect | null {
+    // Pens jitter at light pressure and some drivers slip in a stray sample; a median of three drops single spikes.
+    const pm = this.p2 < 0 ? p : Math.max(Math.min(this.p2, this.p1), Math.min(Math.max(this.p2, this.p1), p));
+    this.p2 = this.p1; this.p1 = p; p = pm;
     this.rawX = x; this.rawY = y; this.rawP = p;
     if (!this.started) {
       this.started = true;
@@ -169,7 +173,7 @@ export abstract class DabPath {
     const k = 1 - this.brush.smoothing * 0.9;
     this.sx += (x - this.sx) * k;
     this.sy += (y - this.sy) * k;
-    this.sp += (p - this.sp) * Math.min(1, k * 1.5);
+    this.sp += (p - this.sp) * Math.min(0.5, k * 1.5);
     return this.segmentTo(this.sx, this.sy, this.sp);
   }
 
