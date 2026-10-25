@@ -49,6 +49,9 @@ export interface ProjectInfo {
 
 export interface Member extends PublicProfile { role: Role }
 
+/** A room someone else owns that you joined before, newest visit first. */
+export interface VisitInfo { id: string; name: string; owner: PublicProfile | null; visibility: Visibility; private: boolean; at: number; updatedAt: number; online: number; thumb: string | null }
+
 export interface ChatMsg { id: string; from: string; text: string; at: number; system?: boolean }
 
 /** A chunk of a stroke in progress. */

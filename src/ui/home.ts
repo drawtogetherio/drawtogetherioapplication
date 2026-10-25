@@ -1,6 +1,6 @@
 import { STATUS_MAX, cleanStatus } from '../shared/profile';
 import { ApiError, Friend, FriendsList, api } from '../net/api';
-import type { ProjectInfo, Visibility } from '../shared/protocol';
+import type { ProjectInfo, Visibility, VisitInfo } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
 import { MODE_CHOICES, presenceLabel } from './presence';
 import { shareDialog } from './share';
@@ -11,6 +11,7 @@ import { confirmDialog, modal, textDialog } from './dialogs';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
+import { socialLogo } from './socials';
 import { LocalCanvas, deleteCanvas, getCanvas, listCanvases, patchCanvas } from '../io/localStore';
 import { isNativeApp, native } from '../io/native';
 import { blockedDialog } from './blocks';
@@ -46,7 +47,11 @@ export class Home {
   readonly el = h('div.home', { hidden: true });
   private friendsEl = h('div.friends-list');
   private requestsEl = h('div.friend-requests');
-  private grid = h('div.project-grid');
+  private recent = h('div.project-row');
+  private shared = h('div.project-row');
+  private sharedSec = h('section.home-sec', { hidden: true }, h('h2', {}, 'Shared with you'), this.shared);
+  private start = h('div.start-card');
+  private promo = h('div.home-cards');
   private friendCount = h('span.count');
   private accountPop = h('div.popover.account-pop', { hidden: true });
   private timer = 0;
@@ -87,8 +92,17 @@ export class Home {
     // header is the window's top strip, so the banner goes under it, clear of the resize border.
     const under = !!native?.frameless;
     if (!under) this.el.append(this.notice, this.banner);
+    const s = () => this.app.session;
+    const startBtn = (ic: string, text: string, fn: () => void) => h('button.start-btn', { type: 'button', html: icon(ic, 22) + `<span>${text}</span>`, onclick: fn });
+    this.start.append(
+      startBtn('brush', 'Draw alone', () => s().createFlow(true)),
+      startBtn('users', 'Open shared room', () => s().createFlow(false)),
+      startBtn('link', 'Join room', () => s().joinDialog()),
+      startBtn('file', 'Open file', () => s().pickFile()),
+    );
+    const plus = h('button.icon-btn.create-tile', { type: 'button', title: 'New canvas', 'aria-label': 'New canvas', html: icon('plus', 22), onclick: () => s().createNew() });
     this.el.append(h('div.home-main', {},
-      frameBar(h('header.home-top', {}, h('div.home-brand', { html: brandHtml('/') }), h('span.grow'))),
+      frameBar(h('header.home-top', {}, h('div.home-brand', { html: brandHtml('/') }), h('span.grow'), plus)),
       under ? this.notice : null, under ? this.banner : null,
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
@@ -99,8 +113,10 @@ export class Home {
           this.friendsEl,
         ),
         h('main.projects', {},
-          h('div.projects-head', {}, this.projectsHead),
-          this.grid,
+          this.start,
+          h('section.home-sec', {}, this.projectsHead, this.recent),
+          this.sharedSec,
+          this.promo,
         ),
       ),
       this.accountPop,
@@ -117,9 +133,12 @@ export class Home {
     this.el.classList.toggle('guest', guest);
     this.friendsPanel.hidden = guest;
     this.renderBanner();
+    this.start.hidden = guest;
+    this.renderPromo();
     if (guest) { this.renderGuest(); return; }
     this.projectsHead.textContent = 'Recent';
     this.loadProjects();
+    this.loadVisits();
     this.loadFriends();
     this.loadNotices();
     clearInterval(this.timer);
@@ -152,6 +171,16 @@ export class Home {
         this.app.savePrefs();
       } }),
     );
+  }
+
+  /** Patreon, and the Discord server when `DISCORD_INVITE_URL` is set. */
+  private renderPromo() {
+    const srv = this.app.session.server;
+    clear(this.promo);
+    const card = (href: string, platform: string, title: string, text: string) =>
+      h('a.promo-card', { href, target: '_blank', rel: 'noopener noreferrer' }, socialLogo(platform, 40), h('span.promo-text', {}, h('strong', {}, title), h('small', {}, text)));
+    if (srv?.patreon) this.promo.append(card(srv.patreon, 'patreon', 'Support on Patreon', 'Unlock special features'));
+    if (srv?.discordInvite) this.promo.append(card(srv.discordInvite, 'discord', 'Join the Discord', 'Chat with other artists'));
   }
 
   // ---- Account ----
@@ -405,8 +434,9 @@ export class Home {
     const me = this.app.ed.me!;
     clearInterval(this.timer);
     this.projectsHead.textContent = 'You’re a guest';
-    clear(this.grid);
-    this.grid.append(h('div.guest-card', {},
+    this.sharedSec.hidden = true;
+    clear(this.recent);
+    this.recent.append(h('div.guest-card', {},
       h('p', {}, 'You’re drawing as ', h('strong', {}, me.displayName), ' (@' + me.handle + ').'),
       h('p.muted', {}, 'Log in with Discord to make canvases, add friends and pick a handle.'),
       h('div.row', {},
@@ -432,19 +462,38 @@ export class Home {
       list.push({ id: c.id, name: c.name, private: !c.room, visibility: c.room ? c.share.visibility : 'private', createdAt: c.createdAt, updatedAt: c.updatedAt, thumb, online: 0, local: true });
     }
     list.sort((a, b) => b.updatedAt - a.updatedAt);
-    clear(this.grid);
-    const create = h('button.project-tile.create-tile', { type: 'button', onclick: () => this.app.session.createNew() },
-      h('span.create-square', { html: icon('plus', 34) }), h('span.tile-name', {}, 'Create new'));
-    this.grid.append(create);
-    for (const p of list) this.grid.append(this.projectTile(p));
-    if (!list.length) this.grid.append(h('p.projects-empty', {}, 'No canvases yet.'));
+    clear(this.recent);
+    for (const p of list) this.recent.append(this.projectTile(p));
+    if (!list.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet.'));
+  }
+
+  /** Rooms of other people you joined; open ones can be rejoined. */
+  async loadVisits() {
+    let visits: VisitInfo[] = [];
+    try { visits = await api.visits(); } catch { /* shown empty */ }
+    clear(this.shared);
+    this.sharedSec.hidden = !visits.length;
+    for (const v of visits) {
+      const who = v.owner?.displayName ?? 'Someone';
+      this.shared.append(h('div.project-tile', {},
+        h('button.tile-open', { type: 'button', 'aria-label': `Open ${v.name}`, onclick: () => this.app.session.joinRoom(v.id) },
+          this.thumb(v.thumb, v.online, v.private ? 'lock' : 'brush'),
+          h('span.tile-name', {}, v.name),
+          h('span.tile-meta', {}, v.owner ? avatarEl(v.owner, 16) : null, `${who} · ${v.online ? 'Open now' : timeAgo(v.at)}`)),
+      ));
+    }
+  }
+
+  private thumb(src: string | null, online: number, blank: string): HTMLElement {
+    const thumb = h('span.tile-thumb', {});
+    if (src) thumb.append(h('img', { src, alt: '', loading: 'lazy' }));
+    else thumb.append(h('span.tile-blank', { html: icon(blank, 28) }));
+    if (online) thumb.append(h('span.live-pill', {}, `${online} drawing`));
+    return thumb;
   }
 
   private projectTile(p: ProjectInfo): HTMLElement {
-    const thumb = h('span.tile-thumb', {});
-    if (p.thumb) thumb.append(h('img', { src: p.thumb, alt: '', loading: 'lazy' }));
-    else thumb.append(h('span.tile-blank', { html: icon('brush', 28) }));
-    if (p.online) thumb.append(h('span.live-pill', {}, `${p.online} drawing`));
+    const thumb = this.thumb(p.thumb, p.online, 'brush');
     const more = h('button.icon-btn.tile-more', { type: 'button', title: 'More', 'aria-label': `More options for ${p.name}`, html: icon('more', 18) });
     const s = this.app.session, premium = !!this.app.ed.me?.premium;
     // Free accounts keep canvases on this device; premium ones on the server. A tile on the other side moves when opened.

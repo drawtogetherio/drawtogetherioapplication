@@ -35,6 +35,7 @@ log ever says `WARNING: no volume attached`, the volume is missing.
 | `DISCORD_CLIENT_SECRET` | from the Discord developer portal (keep it only here) |
 | `DOWNLOAD_MAC_URL` | optional, later: link to the Mac app download (the landing page shows "soon" until set) |
 | `DOWNLOAD_WINDOWS_URL` | optional, later: link to the Windows app download |
+| `DISCORD_INVITE_URL` | optional: shows a Join the Discord card on the home screen |
 | `PATREON_URL` | optional: where the home-screen support banner links (default `https://www.patreon.com/doodlehive`) |
 | `PATREON_CLIENT_ID` | optional: from the Patreon client (step 6). Turns on Link Patreon in Edit profile |
 | `PATREON_CLIENT_SECRET` | optional: from the same client (keep it only here) |

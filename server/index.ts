@@ -8,7 +8,7 @@ import { config } from './config.ts';
 import {
   SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getSite, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, userByHandle, UserRow,
 } from './db.ts';
-import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
+import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare, visited, visitsOf } from './rooms.ts';
 import { validOp } from './validate.ts';
 import type { Op } from '../src/core/model.ts';
 import { HiveFileError, canvasOps, unzip } from '../src/shared/hivecanvas.ts';
@@ -183,7 +183,7 @@ async function route(req: Req, res: Res) {
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
     const site = getSite();
-    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), notice: site.notice.on ? site.notice : null });
+    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), discordInvite: config.discordInvite || undefined, notice: site.notice.on ? site.notice : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });
@@ -540,6 +540,7 @@ async function route(req: Req, res: Res) {
     return json(res, 200, info);
   }
   if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));
+  if (p === '/api/visits' && m === 'GET') return json(res, 200, visitsOf(requireUser(req).id));
   mm = /^\/api\/rooms\/([a-z0-9]+)\/thumb$/.exec(p);
   if (mm && m === 'PUT') {
     const u = ownRoom(req, mm[1]);
@@ -549,10 +550,13 @@ async function route(req: Req, res: Res) {
     db.prepare('UPDATE rooms SET thumb = ?, thumb_version = thumb_version + 1 WHERE id = ?').run(buf, mm[1]);
     return json(res, 200, { ok: true });
   }
+  // The owner sees their thumbnail; so does anyone who joined, as long as the room isn't private now.
   mm = /^\/thumbs\/([a-z0-9]+)$/.exec(p);
   if (mm && m === 'GET') {
-    ownRoom(req, mm[1]);
-    const row = db.prepare('SELECT thumb FROM rooms WHERE id = ?').get(mm[1]) as { thumb: Uint8Array | null };
+    const u = requireUser(req);
+    const row = db.prepare('SELECT owner_id, visibility, thumb FROM rooms WHERE id = ?').get(mm[1]) as { owner_id: string; visibility: string; thumb: Uint8Array | null } | undefined;
+    if (!row) throw new HttpError(404, 'That canvas doesn’t exist.');
+    if (row.owner_id !== u.id && (row.visibility === 'private' || !visited(u.id, mm[1]))) throw new HttpError(403, 'Only the owner can do that.');
     return sendImage(res, row.thumb, row.thumb ? checkThumb(Buffer.from(row.thumb)) : '', 'private');
   }
   // A canvas pinned to its owner's profile shows its thumbnail to everyone.

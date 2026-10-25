@@ -188,8 +188,12 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 **Home screen (v0.5)**
 - Friends on the left, online first (seen in the last ~75 s), with presence dots and status messages.
   Add by @handle, accept/decline requests. Premium friends show the star, their name gradient and GIF avatar.
-- Recent canvases in the middle with thumbnails; the first tile is always **Create new**: choose
-  **Draw alone** (a private canvas), **Shared room**, or paste a room link or code to join one.
+- The middle (v0.29): a thin start card (**Draw alone**, **Open shared room**, **Join room**, **Open
+  file**), a **Recent** row of your canvases with thumbnails, and **Shared with you**: rooms of other
+  people you joined (`room_visits`, recorded on each join), newest first, with the host's name and
+  whether the room is open now, so a lobby can be rejoined from home. Private rooms show no
+  thumbnail there. At the bottom, cards for Patreon and, when `DISCORD_INVITE_URL` is set, the
+  Discord server. The + top right opens the create menu (the same three choices plus a join box).
 - **Where canvases live (v0.19).** Free accounts keep their canvases in the browser (IndexedDB), so
   they only exist on that device and the server stores nothing for them. Premium accounts keep
   canvases on the server, so every device sees them. A tile from the other side moves when opened:

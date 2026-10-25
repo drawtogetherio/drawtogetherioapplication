@@ -8,7 +8,7 @@ import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import type { PublicProfile } from '../src/shared/profile.ts';
 import {
-  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, LogEntry, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
+  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, LogEntry, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, VisitInfo, Visibility, userFolderId,
 } from '../src/shared/protocol.ts';
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
@@ -282,6 +282,7 @@ export class Room {
     this.clients.add(c);
     if (user.id === this.info.ownerId && this.hostTimer) { clearTimeout(this.hostTimer); this.hostTimer = null; }
 
+    if (!spectator && user.id !== this.info.ownerId) db.prepare('INSERT OR REPLACE INTO room_visits (user_id, room_id, at) VALUES (?, ?, ?)').run(user.id, this.info.id, now);
     const fid = userFolderId(user.id);
     if (!spectator && !this.nodes.has(fid)) {
       this.commit({
@@ -633,6 +634,22 @@ export function projectsOf(userId: string, limit = 60): ProjectInfo[] {
   }));
 }
 
+/** Rooms the person joined that still exist, newest visit first. Private ones are listed so a device copy can stand in, without a thumbnail. */
+export function visitsOf(userId: string, limit = 30): VisitInfo[] {
+  const rows = db.prepare(`SELECT r.id, r.name, r.owner_id, r.visibility, v.at, coalesce(r.updated_at, r.created_at) AS updated_at, r.thumb_version, r.thumb IS NOT NULL AS has_thumb
+    FROM room_visits v JOIN rooms r ON r.id = v.room_id WHERE v.user_id = ? ORDER BY v.at DESC LIMIT ?`).all(userId, limit) as
+    { id: string; name: string; owner_id: string; visibility: Visibility; at: number; updated_at: number; thumb_version: number; has_thumb: number }[];
+  return rows.map((r) => {
+    const owner = getUser(r.owner_id), priv = r.visibility === 'private';
+    return {
+      id: r.id, name: r.name, owner: owner ? publicProfile(owner) : null, visibility: r.visibility, private: priv, at: r.at, updatedAt: r.updated_at,
+      online: rooms.get(r.id)?.members().length ?? 0, thumb: r.has_thumb && !priv ? `/thumbs/${r.id}?v=${r.thumb_version}` : null,
+    };
+  });
+}
+
+export const visited = (userId: string, roomId: string) => !!db.prepare('SELECT 1 FROM room_visits WHERE user_id = ? AND room_id = ?').get(userId, roomId);
+
 /** After a restart, free hosts get a while to come back before their rooms close. */
 export function resumeEphemeral(ms: number) {
   for (const r of db.prepare('SELECT id FROM rooms WHERE ephemeral = 1').all() as { id: string }[]) getRoom(r.id)?.hostGrace(ms);
@@ -644,5 +661,6 @@ export function deleteRoom(id: string) {
   rooms.delete(id);
   db.prepare('DELETE FROM room_ops WHERE room_id = ?').run(id);
   db.prepare('DELETE FROM room_snapshots WHERE room_id = ?').run(id);
+  db.prepare('DELETE FROM room_visits WHERE room_id = ?').run(id);
   db.prepare('DELETE FROM rooms WHERE id = ?').run(id);
 }

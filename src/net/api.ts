@@ -1,6 +1,6 @@
 import type { DocSettings, Op } from '../core/model';
 import type { ImageCrop, MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
-import type { LogEntry, ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
+import type { LogEntry, ProjectInfo, RoomInfo, ShareSettings, VisitInfo } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
 import type { SiteNotice } from '../shared/site';
 import type { Prefs } from '../shared/prefs';
@@ -31,7 +31,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; notice?: SiteNotice | null }
+export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; discordInvite?: string; notice?: SiteNotice | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 
@@ -42,6 +42,7 @@ export type LiveEvent =
 export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
 
 export const api = {
+  visits: () => call<VisitInfo[]>('GET', '/api/visits'),
   roomLog: (room: string) => call<{ entries: LogEntry[]; people: PublicProfile[] }>('GET', `/api/rooms/${room}/log`),
   roomHistory: (room: string, upto: number, layer: string | null) => call<{ ops: Op[]; complete: boolean }>('GET', `/api/rooms/${room}/history?upto=${upto}${layer ? '&layer=' + encodeURIComponent(layer) : ''}`),
   roomSnapshot: (room: string, seq: number, ops: Op[]) => call<{ ok: true }>('POST', `/api/rooms/${room}/snapshot`, { seq, ops }),

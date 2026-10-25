@@ -71,6 +71,8 @@ export const config = {
   },
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
+  /** A Discord invite shown on the home screen; none hides the card. */
+  discordInvite: env.DISCORD_INVITE_URL || '',
   /** OAuth client for linking Patreon accounts; PATREON_CAMPAIGN_ID limits which memberships count. PATREON_API is for tests. */
   patreonApp: patreonId && patreonSecret ? { clientId: patreonId, clientSecret: patreonSecret, campaignId: env.PATREON_CAMPAIGN_ID || '', api: (env.PATREON_API || 'https://www.patreon.com').replace(/\/$/, '') } : null,
   /** Handles made admin at startup, comma separated. */

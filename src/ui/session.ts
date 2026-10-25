@@ -162,6 +162,11 @@ export class Session {
     close = modal(guest ? 'Join a canvas' : 'Create a canvas or join one', body, []);
   }
 
+  joinDialog() {
+    let close = () => {};
+    close = modal('Join a canvas', h('div.modal-body', {}, this.joinSection(() => close())), []);
+  }
+
   /** Looks the room up first; a room you can't join, or can't see, reads as not found. */
   private joinSection(close: () => void): HTMLElement {
     const input = h('input', { type: 'text', id: 'join-code', placeholder: 'Room link or code', 'aria-label': 'Room link or code', autocomplete: 'off', spellcheck: 'false' });

@@ -55,6 +55,13 @@ db.exec(`
     op TEXT NOT NULL,
     PRIMARY KEY (room_id, seq)
   );
+  -- Rooms a person joined (not their own), for the home screen's "Shared with you".
+  CREATE TABLE IF NOT EXISTS room_visits (
+    user_id TEXT NOT NULL,
+    room_id TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, room_id)
+  );
   -- The canvas as it looked after op seq, so joining replays only what came after.
   CREATE TABLE IF NOT EXISTS room_snapshots (
     room_id TEXT PRIMARY KEY,

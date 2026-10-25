@@ -68,8 +68,12 @@ await visitor.screenshot({ path: `${out}/03-login.png` });
 // ---- Sign up + home ----
 const ren = await newPage('ren');
 const renHandle = await signUp(ren, 'Ren', 'Sketching dragons');
-check(await ren.locator('.create-tile').isVisible(), 'home shows a Create new tile first');
-check((await ren.locator('.plus-btn, .home-join').count()) === 0, 'no + button or join box in the header');
+check(await ren.locator('.home-top .create-tile').isVisible(), 'home shows a plus button top right');
+check((await ren.locator('.start-card .start-btn').allInnerTexts()).join('|') === 'Draw alone|Open shared room|Join room|Open file', 'the start card offers the four ways in');
+check(await ren.locator('.home-sec h1', { hasText: 'Recent' }).isVisible() && await ren.locator('.home-sec', { hasText: 'Shared with you' }).isHidden(), 'Recent shows; Shared with you waits for a visit');
+const cfg = await ren.evaluate(() => fetch('/api/config').then((r) => r.json()));
+check(await ren.locator('.promo-card', { hasText: 'Patreon' }).isVisible(), 'a Patreon card sits at the bottom');
+check((await ren.locator('.promo-card', { hasText: 'Discord' }).count()) === (cfg.discordInvite ? 1 : 0), 'the Discord card follows DISCORD_INVITE_URL');
 
 // Create a private canvas, draw, come back home: the tile has a thumbnail.
 await ren.locator('.create-tile').click();
@@ -224,6 +228,15 @@ await bob.screenshot({ path: `${out}/09-join.png` });
 await bob.locator('.join-go').click();
 await bob.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
 check(true, 'Join opens it');
+await bob.evaluate(() => window.doodlehive.session.leaveRoom());
+await bob.waitForSelector('.home:not([hidden])');
+const sharedTile = bob.locator('.home-sec', { hasText: 'Shared with you' }).locator('.project-tile', { hasText: 'Open studio' });
+await sharedTile.waitFor();
+check((await sharedTile.innerText()).includes('Ren'), 'Shared with you lists the room with its host');
+await bob.screenshot({ path: `${out}/10-shared.png` });
+await sharedTile.locator('.tile-open').click();
+await bob.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+check(true, 'a shared tile rejoins the room');
 
 console.log(errors.length ? 'Errors:\n' + errors.join('\n') : 'No page errors');
 await browser.close();
