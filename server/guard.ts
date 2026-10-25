@@ -40,7 +40,7 @@ export function sameSite(req: IncomingMessage): boolean {
 
 const wsOrigin = config.publicUrl.replace(/^http/, 'ws');
 const CSP = [
-  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
+  "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", `img-src 'self' data: blob:${config.media ? ' ' + new URL(config.media.publicUrl).origin : ''}`,
   `connect-src 'self' ${wsOrigin}`, "font-src 'self' data:", "worker-src 'self' blob:", "object-src 'none'",
   "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
 ].join('; ');

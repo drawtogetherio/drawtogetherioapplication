@@ -32,6 +32,15 @@ const production = env.NODE_ENV === 'production' || onRailway;
 const beta = env.BETA ? env.BETA === '1' : (env.RAILWAY_ENVIRONMENT_NAME ?? '').toLowerCase() === 'beta';
 const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
 
+/** Pictures on Cloudflare R2: on once the keys, the bucket and its public URL are all set. R2_ENDPOINT is for tests. */
+const r2Endpoint = (env.R2_ENDPOINT || (env.R2_ACCOUNT_ID ? `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '')).replace(/\/$/, '');
+const media = r2Endpoint && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_MEDIA_BUCKET && env.MEDIA_URL ? {
+  endpoint: r2Endpoint, accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY, bucket: env.R2_MEDIA_BUCKET,
+  publicUrl: env.MEDIA_URL.replace(/\/$/, ''),
+  /** Keeps one site's pictures apart from another's in a shared bucket, e.g. "beta/". */
+  prefix: (env.MEDIA_PREFIX ?? (beta ? 'beta/' : '')).replace(/^\/+/, ''),
+} : null;
+
 function defaultDbPath() {
   const dir = path.join(here, 'data');
   const file = path.join(dir, 'doodlehive.db');
@@ -53,6 +62,7 @@ export const config = {
   devLogin: env.DEV_LOGIN ? env.DEV_LOGIN === '1' : !(discordId && discordSecret) && !production,
   dbPath: env.DB_PATH || (env.RAILWAY_VOLUME_MOUNT_PATH ? path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'doodlehive.db') : defaultDbPath()),
   persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
+  media,
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
   /** OAuth client for linking Patreon accounts; PATREON_CAMPAIGN_ID limits which memberships count. PATREON_API is for tests. */

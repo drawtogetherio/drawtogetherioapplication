@@ -84,6 +84,39 @@ Active patrons who link their account in Edit profile get premium for as long as
   inside it `npm run admin -- premium SomeHandle 30` (or `forever` / `off`), or `npm run admin -- admin SomeHandle on`.
 - Deploys restart the server for a few seconds; people in a room reconnect on their own.
 
+## Pictures on Cloudflare R2 (optional, recommended)
+
+Profile pictures, animated pictures and banners can live on Cloudflare R2 instead of in the database.
+They then load from Cloudflare's network near each person, and the database stays small. Without the
+variables below, pictures stay in the database as before. Canvas thumbnails stay on the server,
+because private canvases' previews need a permission check.
+
+Cost: R2 storage is about $0.015 per GB a month, with the first 10 GB free and no download fees.
+
+One-time setup:
+1. Cloudflare → R2 → **Create bucket** `doodlehive-media`.
+2. Bucket → **Settings → Custom Domains → Connect Domain**: `media.doodlehive.net`. This makes the bucket
+   publicly readable at that address. Cloudflare adds the DNS record itself if doodlehive.net is on Cloudflare.
+3. R2 → **Manage API tokens → Create API token**: permission **Object Read & Write**, limited to
+   `doodlehive-media`. Copy the Access Key ID and Secret Access Key. The Account ID is on the R2 overview page.
+4. Railway variables, in **both** the production and beta environments:
+
+| Name | Value |
+| --- | --- |
+| `R2_ACCOUNT_ID` | your Cloudflare account id |
+| `R2_ACCESS_KEY_ID` | from the token |
+| `R2_SECRET_ACCESS_KEY` | from the token (keep it only here) |
+| `R2_MEDIA_BUCKET` | `doodlehive-media` |
+| `MEDIA_URL` | `https://media.doodlehive.net` |
+
+Beta uses the same bucket and puts its pictures under `beta/` on its own (set `MEDIA_PREFIX` to
+change that). Each site only ever deletes pictures it made itself, so a beta running on a copy of the
+live data can't remove live pictures.
+
+On the first start with R2 set up, the server moves the pictures already in the database to R2 in the
+background (the deploy log says `Moved N pictures to R2.`). Old picture links keep working by
+redirecting to R2.
+
 ## Beta site (beta.doodlehive.net)
 
 A second copy of the site for trying changes before they go live. It runs from the `beta` branch,

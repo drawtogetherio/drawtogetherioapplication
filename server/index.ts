@@ -16,6 +16,8 @@ import { FriendError, acceptFriend, areFriends, blockUser, forget, listBlocked, 
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
 import { sweep } from './sweep.ts';
+import { deleteMedia, mediaOn, mediaUrl, newMediaKey, putMedia } from './media.ts';
+import { movePicturesToMedia } from './media-move.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import { HttpError, Req, Res, body, json, jsonBody } from './http.ts';
 import { adminRoute, bannedIp, lastIp } from './admin-api.ts';
@@ -130,6 +132,17 @@ function profileChanged(userId: string) {
   for (const r of roomsWithUser(userId)) r.profileChanged();
   notifyFriends(userId);
 }
+
+/** Puts an upload on R2 when that's set up and returns its key; null means it goes in the database. */
+async function storePicture(userId: string, kind: string, buf: Buffer, type: string): Promise<string | null> {
+  if (!mediaOn) return null;
+  const key = newMediaKey(kind, userId);
+  try { await putMedia(key, buf, type); } catch (e) { console.error(e); throw new HttpError(503, 'Couldn’t save the picture. Try again in a moment.'); }
+  return key;
+}
+
+/** Old links to a picture that has moved to R2 follow it there. */
+function sendMoved(res: Res, key: string) { res.writeHead(301, { Location: mediaUrl(key), 'Cache-Control': 'public, max-age=86400' }); res.end(); }
 
 function sendImage(res: Res, buf: Uint8Array | null | undefined, type: string, cache: string) {
   if (!buf) { res.writeHead(404); return res.end(); }
@@ -343,20 +356,22 @@ async function route(req: Req, res: Res) {
   }
   if (p === '/api/me/avatar' && (m === 'PUT' || m === 'DELETE')) {
     const u = requireUser(req);
-    if (m === 'DELETE') db.prepare('UPDATE users SET avatar = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_anim_crop = NULL WHERE id = ?').run(u.id);
+    if (m === 'DELETE') db.prepare('UPDATE users SET avatar = NULL, avatar_key = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_anim_key = NULL, avatar_anim_crop = NULL WHERE id = ?').run(u.id);
     else {
       limit('upload:' + u.id, 30, HOUR);
       const buf = await body(req, AVATAR_MAX_BYTES);
       const type = checkAvatar(buf);
+      const key = await storePicture(u.id, 'avatar', buf, type);
       // A new still replaces a GIF too; a GIF upload follows its still.
-      db.prepare('UPDATE users SET avatar = ?, avatar_type = ?, avatar_version = avatar_version + 1, avatar_anim = NULL, avatar_anim_crop = NULL WHERE id = ?').run(buf, type, u.id);
+      db.prepare('UPDATE users SET avatar = ?, avatar_key = ?, avatar_type = ?, avatar_version = avatar_version + 1, avatar_anim = NULL, avatar_anim_key = NULL, avatar_anim_crop = NULL WHERE id = ?').run(key ? null : buf, key, type, u.id);
     }
+    deleteMedia(u.avatar_key, u.avatar_anim_key);
     profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
   if (p === '/api/me/avatar-animated' && (m === 'PUT' || m === 'DELETE')) {
     const u = requireUser(req);
-    if (m === 'DELETE') db.prepare('UPDATE users SET avatar_anim = NULL WHERE id = ?').run(u.id);
+    if (m === 'DELETE') db.prepare('UPDATE users SET avatar_anim = NULL, avatar_anim_key = NULL WHERE id = ?').run(u.id);
     else {
       if (!isPremium(u)) throw new HttpError(403, 'Animated pictures are part of premium.');
       limit('upload:' + u.id, 30, HOUR);
@@ -365,19 +380,24 @@ async function route(req: Req, res: Res) {
       if (!size) throw new HttpError(400, 'Animated pictures need to be GIFs.');
       if (size.w > AVATAR_ANIM_MAX_SIZE || size.h > AVATAR_ANIM_MAX_SIZE) throw new HttpError(400, `Use a GIF up to ${AVATAR_ANIM_MAX_SIZE} × ${AVATAR_ANIM_MAX_SIZE} pixels.`);
       const crop = cleanCrop(Object.fromEntries(['x', 'y', 'w', 'h'].map((k) => [k, Number(url.searchParams.get(k))])));
-      db.prepare('UPDATE users SET avatar_anim = ?, avatar_anim_crop = ?, avatar_anim_version = avatar_anim_version + 1 WHERE id = ?').run(buf, crop ? JSON.stringify(crop) : null, u.id);
+      const key = await storePicture(u.id, 'anim', buf, 'image/gif');
+      db.prepare('UPDATE users SET avatar_anim = ?, avatar_anim_key = ?, avatar_anim_crop = ?, avatar_anim_version = avatar_anim_version + 1 WHERE id = ?').run(key ? null : buf, key, crop ? JSON.stringify(crop) : null, u.id);
     }
+    deleteMedia(u.avatar_anim_key);
     profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
   if (p === '/api/me/banner' && (m === 'PUT' || m === 'DELETE')) {
     const u = requireUser(req);
-    if (m === 'DELETE') db.prepare('UPDATE users SET banner = NULL, banner_type = NULL WHERE id = ?').run(u.id);
+    if (m === 'DELETE') db.prepare('UPDATE users SET banner = NULL, banner_key = NULL, banner_type = NULL WHERE id = ?').run(u.id);
     else {
       limit('upload:' + u.id, 30, HOUR);
       const buf = await body(req, BANNER_MAX_BYTES);
-      db.prepare('UPDATE users SET banner = ?, banner_type = ?, banner_version = banner_version + 1 WHERE id = ?').run(buf, checkAvatar(buf, BANNER_MAX_BYTES), u.id);
+      const type = checkAvatar(buf, BANNER_MAX_BYTES);
+      const key = await storePicture(u.id, 'banner', buf, type);
+      db.prepare('UPDATE users SET banner = ?, banner_key = ?, banner_type = ?, banner_version = banner_version + 1 WHERE id = ?').run(key ? null : buf, key, type, u.id);
     }
+    deleteMedia(u.banner_key);
     profileChanged(u.id);
     return json(res, 200, myProfile(getUser(u.id)!));
   }
@@ -395,17 +415,20 @@ async function route(req: Req, res: Res) {
   }
   let mm = /^\/avatars\/([\w-]+)$/.exec(p);
   if (mm && m === 'GET') {
-    const row = db.prepare('SELECT avatar, avatar_type FROM users WHERE id = ?').get(mm[1]) as { avatar: Uint8Array | null; avatar_type: string } | undefined;
+    const row = db.prepare('SELECT avatar, avatar_key, avatar_type FROM users WHERE id = ?').get(mm[1]) as { avatar: Uint8Array | null; avatar_key: string | null; avatar_type: string } | undefined;
+    if (row?.avatar_key) return sendMoved(res, row.avatar_key);
     return sendImage(res, row?.avatar, row?.avatar_type ?? '', 'public');
   }
   mm = /^\/avatars\/([\w-]+)\/banner$/.exec(p);
   if (mm && m === 'GET') {
-    const row = db.prepare('SELECT banner, banner_type FROM users WHERE id = ?').get(mm[1]) as { banner: Uint8Array | null; banner_type: string } | undefined;
+    const row = db.prepare('SELECT banner, banner_key, banner_type FROM users WHERE id = ?').get(mm[1]) as { banner: Uint8Array | null; banner_key: string | null; banner_type: string } | undefined;
+    if (row?.banner_key) return sendMoved(res, row.banner_key);
     return sendImage(res, row?.banner, row?.banner_type ?? '', 'public');
   }
   mm = /^\/avatars\/([\w-]+)\/anim$/.exec(p);
   if (mm && m === 'GET') {
-    const row = db.prepare('SELECT avatar_anim FROM users WHERE id = ?').get(mm[1]) as { avatar_anim: Uint8Array | null } | undefined;
+    const row = db.prepare('SELECT avatar_anim, avatar_anim_key FROM users WHERE id = ?').get(mm[1]) as { avatar_anim: Uint8Array | null; avatar_anim_key: string | null } | undefined;
+    if (row?.avatar_anim_key) return sendMoved(res, row.avatar_anim_key);
     return sendImage(res, row?.avatar_anim, 'image/gif', 'public');
   }
 
@@ -754,6 +777,8 @@ server.listen(config.port, () => {
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Database: ${config.dbPath}`);
+  console.log(`  Pictures: ${config.media ? `R2 bucket ${config.media.bucket}${config.media.prefix ? ` under ${config.media.prefix}` : ''}, served from ${config.media.publicUrl}` : 'in the database (set the R2_* variables and MEDIA_URL to use R2)'}`);
+  if (config.media) movePicturesToMedia().catch((e) => console.error('Moving pictures to R2 stopped:', e));
   const pages = ['index.html', 'login.html', 'app.html', 'admin.html', '404.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
   console.log(`  Pages in ${config.staticDir}: ${pages.join(', ')}`);
   if (path.resolve(config.dbPath).startsWith(path.resolve(config.staticDir) + path.sep)) {

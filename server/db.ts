@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
+import { mediaUrl } from './media.ts';
 import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isValidHandle, suggestHandle } from '../src/shared/profile.ts';
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
@@ -13,6 +14,9 @@ fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
 export const db = new DatabaseSync(config.dbPath);
 db.exec(`
   PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL; -- safe with WAL: a power cut can lose the last moments, never corrupt
+  PRAGMA cache_size = -65536; -- 64 MB
+  PRAGMA mmap_size = 268435456;
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     provider TEXT NOT NULL,            -- 'discord' | 'dev' | 'guest'
@@ -93,6 +97,10 @@ addColumn('users', 'avatar_anim_crop', 'TEXT');
 addColumn('users', 'banner', 'BLOB');
 addColumn('users', 'banner_type', 'TEXT');
 addColumn('users', 'banner_version', 'INTEGER NOT NULL DEFAULT 0');
+// Set when the picture is on R2 (see media.ts); the BLOB column is then empty.
+addColumn('users', 'avatar_key', 'TEXT');
+addColumn('users', 'avatar_anim_key', 'TEXT');
+addColumn('users', 'banner_key', 'TEXT');
 addColumn('rooms', 'invited', `TEXT NOT NULL DEFAULT '[]'`); // user ids let into the room by a host
 db.exec('CREATE TABLE IF NOT EXISTS site (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
@@ -134,12 +142,14 @@ export interface UserRow {
   admin: number; banned: number; badges: string; pinned: string;
   patreon_id: string | null; patreon_name: string | null; patreon_active: number; patreon_tokens: string | null; patreon_checked: number | null;
   avatar_anim_crop: string | null; has_banner: number; banner_version: number;
+  avatar_key: string | null; avatar_anim_key: string | null; banner_key: string | null;
 }
 
-export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, avatar IS NOT NULL AS has_avatar,
+export const USER_COLS = `id, provider, provider_id, handle, display_name, favorite_color, links, (avatar IS NOT NULL OR avatar_key IS NOT NULL) AS has_avatar,
   avatar_type, avatar_version, premium, premium_until, needs_setup, created_at, theme, status, gradient,
-  avatar_anim IS NOT NULL AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs, admin, banned, badges, pinned,
-  patreon_id, patreon_name, patreon_active, patreon_tokens, patreon_checked, avatar_anim_crop, banner IS NOT NULL AS has_banner, banner_version`;
+  (avatar_anim IS NOT NULL OR avatar_anim_key IS NOT NULL) AS has_anim, avatar_anim_version, presence_mode, premium_warned, prefs, admin, banned, badges, pinned,
+  patreon_id, patreon_name, patreon_active, patreon_tokens, patreon_checked, avatar_anim_crop,
+  (banner IS NOT NULL OR banner_key IS NOT NULL) AS has_banner, banner_version, avatar_key, avatar_anim_key, banner_key`;
 
 export const newId = (prefix: string, bytes = 9) => prefix + crypto.randomBytes(bytes).toString('base64url');
 
@@ -156,12 +166,12 @@ export function isPremium(u: UserRow) {
 export function publicProfile(u: UserRow): PublicProfile {
   return {
     id: u.id, handle: u.handle, displayName: u.display_name, favoriteColor: u.favorite_color,
-    avatar: u.has_avatar ? `/avatars/${u.id}?v=${u.avatar_version}` : null,
+    avatar: u.avatar_key ? mediaUrl(u.avatar_key) : u.has_avatar ? `/avatars/${u.id}?v=${u.avatar_version}` : null,
     links: JSON.parse(u.links), premium: isPremium(u), premiumUntil: u.premium_until, status: u.status,
     gradient: isPremium(u) && u.gradient ? (u.gradient.split(',') as [string, string]) : null,
-    avatarAnimated: isPremium(u) && u.has_anim ? `/avatars/${u.id}/anim?v=${u.avatar_anim_version}` : null,
+    avatarAnimated: !isPremium(u) || !u.has_anim ? null : u.avatar_anim_key ? mediaUrl(u.avatar_anim_key) : `/avatars/${u.id}/anim?v=${u.avatar_anim_version}`,
     avatarCrop: isPremium(u) && u.has_anim ? cleanCrop(safeJson(u.avatar_anim_crop ?? '')) : null,
-    banner: u.has_banner ? `/avatars/${u.id}/banner?v=${u.banner_version}` : null,
+    banner: u.banner_key ? mediaUrl(u.banner_key) : u.has_banner ? `/avatars/${u.id}/banner?v=${u.banner_version}` : null,
     guest: u.provider === 'guest',
     badges: cleanBadges(safeJson(u.badges)),
     pinned: pinnedCanvases(u),

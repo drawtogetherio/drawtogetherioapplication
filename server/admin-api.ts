@@ -3,6 +3,7 @@ import { db, getSite, getUser, isAdmin, publicProfile, setSite, USER_COLS, UserR
 import { HttpError, Req, Res, json, jsonBody } from './http.ts';
 import { deleteRoom, disconnectUser, liveRooms } from './rooms.ts';
 import { closeStreams } from './live.ts';
+import { deleteMedia } from './media.ts';
 import { forget, onlineIds } from './social.ts';
 import { readStats } from './stats.ts';
 import { sweep } from './sweep.ts';
@@ -85,6 +86,7 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
       db.prepare('DELETE FROM friendships WHERE user_a = ? OR user_b = ?').run(u.id, u.id);
       db.prepare('DELETE FROM notices WHERE user_id = ?').run(u.id);
       db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+      deleteMedia(u.avatar_key, u.avatar_anim_key, u.banner_key);
       log(me, 'delete', '@' + u.handle);
       return json(res, 200, { ok: true });
     }
@@ -107,7 +109,7 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
       log(me, 'rename', '@' + u.handle);
     }
     if (b.clearStatus) { set(`status = ''`); log(me, 'clear status', '@' + u.handle); }
-    if (b.removeAvatar) { set('avatar = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_version = avatar_version + 1'); log(me, 'remove avatar', '@' + u.handle); }
+    if (b.removeAvatar) { set('avatar = NULL, avatar_key = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_anim_key = NULL, avatar_version = avatar_version + 1'); deleteMedia(u.avatar_key, u.avatar_anim_key); log(me, 'remove avatar', '@' + u.handle); }
     if (b.admin !== undefined) {
       if (self) throw new HttpError(400, 'You can’t change your own admin access.');
       if (u.provider === 'guest') throw new HttpError(400, 'Guests can’t be admins.');
