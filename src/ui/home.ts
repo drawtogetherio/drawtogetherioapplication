@@ -14,7 +14,7 @@ import { avatarEl, gradientStyle, nameLine, profileCardBody } from './people';
 import { socialLogo } from './socials';
 import { LocalCanvas, deleteCanvas, getCanvas, listCanvases, patchCanvas } from '../io/localStore';
 import { isNativeApp, native } from '../io/native';
-import { blockedDialog } from './blocks';
+import { PeopleTab, peopleDialog } from './blocks';
 import { deleteLapse, roomLapseKey } from '../io/lapse';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
@@ -53,6 +53,7 @@ export class Home {
   private start = h('div.start-card');
   private promo = h('div.home-cards');
   private friendCount = h('span.count');
+  private outgoingCount = h('span.count-pill', { hidden: true });
   private accountPop = h('div.popover.account-pop', { hidden: true });
   private timer = 0;
   private friendsPanel: HTMLElement;
@@ -108,9 +109,8 @@ export class Home {
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
           this.meCard,
           h('div.panel-head', {}, h('span.panel-title', {}, 'Friends ', this.friendCount)),
-          addForm, addErr,
-          this.requestsEl,
-          this.friendsEl,
+          h('div.friends-scroll', {}, addForm, addErr, this.requestsEl, this.friendsEl),
+          h('button.friends-foot', { type: 'button', html: icon('userPlus', 17) + '<span>Manage outgoing requests</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
         ),
         h('main.projects', {},
           this.start,
@@ -267,7 +267,7 @@ export class Home {
       h('div.account', {}, avatarEl(me, 40, true), h('div.account-text', {}, nameLine(me), h('small.muted', {}, '@' + me.handle), me.status ? h('small.status-line', {}, me.status) : null)),
       h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
       h('button.menu-item', { html: icon('settings', 18) + '<span>Preferences</span>', onclick: () => { close(); preferencesDialog(this.app); } }),
-      h('button.menu-item', { html: icon('kick', 18) + '<span>Blocked people</span>', onclick: () => { close(); blockedDialog(this.app.ed); } }),
+      h('button.menu-item', { html: icon('kick', 18) + '<span>Blocked people</span>', onclick: () => { close(); this.peopleDialog('blocked'); } }),
       me.admin ? h('a.menu-item', { href: '/admin', html: icon('shield', 18) + '<span>Admin</span>' }) : null,
       h('button.menu-item', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
     ));
@@ -372,16 +372,8 @@ export class Home {
         ));
       }
     }
-    if (f.outgoing.length) {
-      this.requestsEl.append(h('div.section-label', {}, 'Sent'));
-      for (const p of f.outgoing) {
-        this.requestsEl.append(h('div.friend-row.request.sent', {},
-          avatarEl(p, 28),
-          h('div.friend-text', {}, h('span.person-name', {}, p.displayName), h('small', {}, 'Waiting for them to accept')),
-          h('button.icon-btn', { title: 'Cancel request', 'aria-label': `Cancel request to ${p.displayName}`, html: icon('x', 16), onclick: async () => this.setFriends(await api.removeFriend(p.id)) }),
-        ));
-      }
-    }
+    this.outgoingCount.hidden = !f.outgoing.length;
+    this.outgoingCount.textContent = String(f.outgoing.length);
     clear(this.friendsEl);
     if (!f.friends.length) {
       const me = this.app.ed.me;
@@ -396,6 +388,11 @@ export class Home {
       }
       this.friendsEl.append(this.friendRow(p));
     }
+  }
+
+  /** Outgoing requests and blocked people, one window with a tab each. */
+  peopleDialog(tab: PeopleTab) {
+    peopleDialog(this.app.ed, tab, (f) => this.setFriends(f));
   }
 
   private friendRow(p: Friend): HTMLElement {

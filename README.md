@@ -187,7 +187,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 **Home screen (v0.5)**
 - Friends on the left, online first (seen in the last ~75 s), with presence dots and status messages.
-  Add by @handle, accept/decline requests. Premium friends show the star, their name gradient and GIF avatar.
+  Add by @handle, accept/decline requests. Requests you sent live behind **Manage outgoing requests** at
+  the bottom of the column (v0.30): one small window with an **Outgoing requests** tab (cancel) and a
+  **Blocked** tab (unblock); the account menu's **Blocked people** opens the same window. Premium friends show the star, their name gradient and GIF avatar.
 - The middle (v0.29): a thin start card (**Draw alone**, **Open shared room**, **Join room**, **Open
   file**), a **Recent** row of your canvases with thumbnails, and **Shared with you**: rooms of other
   people you joined (`room_visits`, recorded on each join), newest first, with the host's name and
