@@ -11,6 +11,10 @@ import { avatarEl, avatarImage, badges, initials, inkOn, nameLine, nameText, pro
 import { confirmDialog, exportDialog, modal } from './dialogs';
 import { blockPerson, unblockPerson } from './blocks';
 import { api } from '../net/api';
+import { EMOJI, emojiMatches, emojify } from '../shared/emoji';
+
+const MENTION = /<@([\w-]+)>/g;
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[]; pad: number }
 interface Bubble { x: number; y: number; drawing: boolean; t: number }
@@ -32,6 +36,10 @@ export class RoomUI {
   private unsub: (() => void) | null = null;
   private typingSent = 0;
   private fadeTimer = 0;
+  private suggest = h('div.chat-suggest', { hidden: true, role: 'listbox' });
+  /** Names picked from the suggestions for this draft, so they can be sent as ids. */
+  private picks = new Map<string, string>();
+  private audio: AudioContext | null = null;
   chatOpen = false;
   onLeave: () => void = () => {};
 
@@ -39,11 +47,11 @@ export class RoomUI {
     this.chatInput = h('input.chat-input', { type: 'text', id: 'chat-input', maxlength: CHAT_MAX, placeholder: 'Say something…', autocomplete: 'off', 'aria-label': 'Chat message' });
     this.chatForm = h('form.chat-form', {}, this.chatInput, h('button.icon-btn', { type: 'submit', title: 'Send', 'aria-label': 'Send', html: icon('send', 18) }));
     this.chatForm.hidden = true;
-    this.chatEl = h('div.chat', { hidden: true }, this.chatLog, this.typingEl, this.chatForm);
+    this.chatEl = h('div.chat', { hidden: true }, this.chatLog, this.typingEl, this.suggest, this.chatForm);
     this.chatForm.addEventListener('submit', (e) => { e.preventDefault(); this.sendChat(); });
-    this.chatInput.addEventListener('input', () => this.typing(this.chatInput.value.trim().length > 0));
-    this.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Escape') { this.toggleChat(false); e.stopPropagation(); } });
-    this.chatInput.addEventListener('blur', () => this.typing(false));
+    this.chatInput.addEventListener('input', () => { this.typing(this.chatInput.value.trim().length > 0); this.renderSuggest(); });
+    this.chatInput.addEventListener('keydown', (e) => this.suggestKey(e));
+    this.chatInput.addEventListener('blur', () => { this.typing(false); setTimeout(() => { this.suggest.hidden = true; }, 150); });
     setInterval(() => this.tick(), 1000);
     ed.on((w) => { if (w === 'blocked') { this.renderMembers(); this.renderChat(); ed.view.requestRender(); } });
     ed.view.prepare = () => this.drawRemote();
@@ -137,6 +145,9 @@ export class RoomUI {
         ed.view.requestRender();
         return;
       case 'chat':
+        this.renderChat();
+        if (e.msg.from !== this.room?.you && !this.blocked(e.msg.from) && e.msg.text.includes(`<@${this.room?.you}>`)) this.ping(e.msg);
+        return;
       case 'requests':
         this.renderChat();
         return;
@@ -337,10 +348,13 @@ export class RoomUI {
   }
 
   private sendChat() {
-    const text = this.chatInput.value.trim();
+    let text = emojify(this.chatInput.value.trim());
     if (!text || !this.room) return;
+    for (const [name, id] of this.picks) text = text.replace(new RegExp('@' + escapeRe(name) + '(?![\\w])', 'g'), `<@${id}>`);
+    this.picks.clear();
     this.room.send({ type: 'chat', text });
     this.chatInput.value = '';
+    this.suggest.hidden = true;
     this.typingSent = 0;
     // Closing hands the keys back to the canvas.
     this.toggleChat(false);
@@ -381,8 +395,93 @@ export class RoomUI {
     const name = h('span.chat-name', {}, who ? nameText(who, 'chat-who', who.favoriteColor) : 'Someone');
     if (who) name.append(badges(who.role, who.premium, who.badges));
     if (who) el.append(h('button.chat-pic', { type: 'button', title: who.displayName, 'aria-label': `${who.displayName}’s profile`, onclick: () => this.profileCard(who) }, avatarEl(who, 20)));
-    el.append(name, h('span.chat-text', {}, m.text));
+    if (m.text.includes(`<@${this.room?.you}>`)) el.classList.add('mentioned');
+    el.append(name, this.chatText(m.text));
     return el;
+  }
+
+  /** Message text with <@id> shown as the person's name in their colour. */
+  private chatText(text: string): HTMLElement {
+    const el = h('span.chat-text');
+    let last = 0;
+    for (const m of text.matchAll(MENTION)) {
+      el.append(text.slice(last, m.index));
+      const who = this.room?.member(m[1]);
+      el.append(who ? nameText({ displayName: '@' + who.displayName, gradient: who.gradient }, 'mention', who.favoriteColor) : '@someone');
+      last = m.index + m[0].length;
+    }
+    el.append(text.slice(last));
+    return el;
+  }
+
+  // ---- Mentions and emoji ----
+
+  /** The @name or :code being typed at the caret, if any. */
+  private token(): { kind: '@' | ':'; q: string; start: number } | null {
+    const v = this.chatInput.value, end = this.chatInput.selectionStart ?? v.length;
+    const m = /(^|\s)([@:])([^\s:@]*(?: [^\s:@]*)?)$/.exec(v.slice(0, end));
+    if (!m) return null;
+    const kind = m[2] as '@' | ':', q = m[3];
+    if (kind === ':' && (q.length < 2 || q.includes(' '))) return null;
+    return { kind, q, start: end - q.length - 1 };
+  }
+
+  private renderSuggest() {
+    const t = this.token(), room = this.room;
+    this.suggest.hidden = true;
+    if (!t || !room) return;
+    const q = t.q.toLowerCase();
+    const items: HTMLElement[] = t.kind === '@'
+      ? room.members.filter((m) => m.id !== room.you && !this.blocked(m.id) && (m.displayName.toLowerCase().includes(q) || m.handle.toLowerCase().includes(q))).slice(0, 6)
+        .map((m) => h('button.suggest-item', { type: 'button', onclick: () => this.pick('@' + m.displayName + ' ', m) }, avatarEl(m, 20), nameText(m, 'person-name', m.favoriteColor), h('small', {}, '@' + m.handle)))
+      : emojiMatches(q).map((n) => h('button.suggest-item', { type: 'button', onclick: () => this.pick(EMOJI[n] + ' ') }, h('span.emoji', {}, EMOJI[n]), h('small', {}, ':' + n + ':')));
+    if (!items.length) return;
+    items[0].classList.add('active');
+    this.suggest.replaceChildren(...items);
+    this.suggest.hidden = false;
+  }
+
+  private pick(text: string, who?: Member) {
+    const t = this.token();
+    if (!t) return;
+    const v = this.chatInput.value;
+    this.chatInput.value = v.slice(0, t.start) + text + v.slice(this.chatInput.selectionStart ?? v.length);
+    this.chatInput.setSelectionRange(t.start + text.length, t.start + text.length);
+    if (who) this.picks.set(who.displayName, who.id);
+    this.suggest.hidden = true;
+    this.chatInput.focus();
+  }
+
+  private suggestKey(e: KeyboardEvent) {
+    if (e.key === 'Escape') { e.stopPropagation(); if (!this.suggest.hidden) this.suggest.hidden = true; else this.toggleChat(false); return; }
+    if (this.suggest.hidden) return;
+    const items = [...this.suggest.children] as HTMLElement[], i = items.findIndex((x) => x.classList.contains('active'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      items[i]?.classList.remove('active');
+      items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].classList.add('active');
+      e.preventDefault();
+    } else if (e.key === 'Enter' || e.key === 'Tab') { items[i]?.click(); e.preventDefault(); }
+  }
+
+  /** Someone mentioned you: a chime and a toast, even with chat closed. */
+  private ping(m: ChatMsg) {
+    const who = this.room?.member(m.from);
+    this.ed.toast(`${who?.displayName ?? 'Someone'} mentioned you`);
+    if (!this.ed.prefs.chime) return;
+    try {
+      const ac = this.audio ??= new AudioContext();
+      if (ac.state === 'suspended') void ac.resume();
+      const t0 = ac.currentTime;
+      for (const [f, at] of [[880, 0], [1320, 0.09]] as const) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t0 + at);
+        g.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.5);
+        o.connect(g).connect(ac.destination);
+        o.start(t0 + at); o.stop(t0 + at + 0.55);
+      }
+    } catch { /* no audio here */ }
   }
 
   /** With chat closed, old messages fade like a game chat. */

@@ -49,7 +49,7 @@ check(await banner.isHidden(), 'it stays closed after a reload');
 // ---- Groups ----
 await openPrefs();
 const groups = await page.locator('.pref-group').evaluateAll((els) => els.map((e) => e.textContent));
-check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Shortcuts', 'groups down the left: appearance, layout, canvas, pressure, shortcuts');
+check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Shortcuts,About', 'groups down the left: appearance, layout, canvas, pressure, shortcuts, about');
 check((await page.locator('.pref-page h3').textContent()) === 'Appearance', 'opens on appearance');
 
 // ---- Appearance ----
@@ -75,6 +75,12 @@ await group('Canvas');
 await page.locator('.switch-row', { hasText: 'Brush outline' }).locator('input').click();
 await page.locator('.switch-row', { hasText: 'Draw with a finger' }).locator('input').click();
 check(await page.evaluate(() => window.doodlehive.ed.prefs.fingerDraws === false), 'finger drawing lives in canvas preferences');
+await page.locator('.switch-row', { hasText: 'Chime when mentioned' }).locator('input').click();
+check(await page.evaluate(() => window.doodlehive.ed.prefs.chime === false), 'the mention chime can be turned off');
+
+// ---- About ----
+await group('About');
+check(/^v\d+\.\d+\.\d+$/.test((await page.locator('.pref-row', { hasText: 'Doodlehive' }).locator('span').last().textContent()).trim()), 'About shows the app version');
 
 // ---- Pressure ----
 await group('Pressure');

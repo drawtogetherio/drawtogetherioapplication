@@ -284,6 +284,13 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Member list with badges: crown = owner, shield = host, star = premium (all shown together).
   Tap someone to see their profile and links. Badges are SVG, not emoji.
 - Chat in the bottom-left (press Enter), with typing indicators; messages fade when chat is closed
+- @mentions and emoji (v0.27). Typing `@` lists the people in the room (display name or handle);
+  pick one and the message carries `<@id>`, shown as their display name in their profile colour or
+  gradient. Being mentioned plays a short chime (WebAudio, no asset; off in Preferences → Canvas),
+  shows a toast and highlights the message. `:smile:` and other Discord-style codes
+  (`src/shared/emoji.ts`) suggest as you type and become the character when sent.
+- Preferences → About shows the web app version (`__APP_VERSION__`, from package.json at build
+  time) and, inside the desktop or iPad app, the installed app's version.
 - Undo/redo works in rooms (undo is just another change sent to everyone)
 
 ## Architecture

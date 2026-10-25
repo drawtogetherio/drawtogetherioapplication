@@ -130,6 +130,25 @@ check(true, 'chat message delivered');
 check(await alice.locator('.chat-form').isHidden(), 'chat closes once the message is sent');
 check(await bob.locator('.chat-msg:has-text("hello bob") .chat-pic').count() === 1, 'the message carries Alice’s picture');
 
+// ---- @mention with autofill, emoji shortcode, chime toast ----
+await alice.locator('canvas.stage').hover();
+await alice.keyboard.press('Enter');
+await alice.keyboard.type('hey @bo', { delay: 30 });
+await alice.waitForSelector('.chat-suggest:not([hidden]) .suggest-item.active:has-text("Bob")', { timeout: 3000 }).then(() => check(true, 'typing @bo suggests Bob'), () => check(false, 'typing @bo suggests Bob'));
+await alice.keyboard.press('Enter');
+check(await alice.locator('.chat-input').inputValue() === 'hey @Bob ✿ ', 'Enter fills in the display name');
+await alice.keyboard.type('look :smi', { delay: 20 });
+await alice.waitForSelector('.chat-suggest:not([hidden]) .suggest-item:has-text(":smile:")', { timeout: 2000 }).then(() => check(true, ':smi suggests :smile:'), () => check(false, ':smi suggests :smile:'));
+await alice.keyboard.press('Escape');
+check(!(await alice.locator('.chat-form').isHidden()) && await alice.locator('.chat-suggest').isHidden(), 'Escape closes only the suggestions');
+await alice.keyboard.type('le:', { delay: 20 });
+await alice.keyboard.press('Enter');
+await bob.waitForSelector('.chat-msg.mentioned .mention:has-text("@Bob")', { timeout: 4000 }).then(() => check(true, 'Bob sees his name highlighted in his colour'), () => check(false, 'Bob sees his name highlighted in his colour'));
+check((await bob.locator('.chat-msg.mentioned .chat-text').textContent()).includes('😄'), ':smile: became an emoji');
+await bob.waitForSelector('.toast:has-text("mentioned you")', { timeout: 3000 }).then(() => check(true, 'Bob gets a mention toast'), () => check(false, 'Bob gets a mention toast'));
+check(await alice.locator('.chat-msg.mentioned').count() === 0, 'Alice’s own message is not highlighted for her');
+await bob.screenshot({ path: `${out}/03a-bob-mentioned.png` });
+
 // ---- Friends from a chat picture; notifications in the menu ----
 await bob.locator('.chat-msg:has-text("hello bob") .chat-pic').click();
 await bob.waitForSelector('.modal .profile-card');

@@ -46,6 +46,8 @@ export interface Prefs {
   mode: Mode;
   hoverPreview: boolean;
   showBubbles: boolean;
+  /** A chime when someone @mentions you in chat. */
+  chime: boolean;
   pressureGamma: number;
   /** Advanced pressure: a curve through points instead of the exponent. */
   pressureMode: 'simple' | 'advanced';
@@ -71,7 +73,7 @@ export interface Prefs {
 }
 
 export const DEFAULT_PREFS: Prefs = {
-  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
+  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
   fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
 };
 
@@ -120,6 +122,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     mode: MODES.includes(r.mode as Mode) ? r.mode as Mode : DEFAULT_PREFS.mode,
     hoverPreview: typeof r.hoverPreview === 'boolean' ? r.hoverPreview : DEFAULT_PREFS.hoverPreview,
     showBubbles: typeof r.showBubbles === 'boolean' ? r.showBubbles : DEFAULT_PREFS.showBubbles,
+    chime: r.chime !== false,
     pressureGamma: gamma >= 0.4 && gamma <= 2.5 ? gamma : DEFAULT_PREFS.pressureGamma,
     pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],

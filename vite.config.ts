@@ -1,6 +1,9 @@
 import { defineConfig, type Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
+
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 const api = 'http://localhost:' + (process.env.PORT || 8787);
 
@@ -22,6 +25,7 @@ const prettyUrls: Plugin = {
 // `npm run build:single` produces one self-contained HTML file of the app (used for previews).
 export default defineConfig(({ mode }) => ({
   base: mode === 'single' ? './' : '/',
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: mode === 'single' ? [viteSingleFile()] : [prettyUrls],
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',

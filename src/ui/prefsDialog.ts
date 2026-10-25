@@ -5,9 +5,10 @@ import { curveEditor } from './curveEditor';
 import { modal } from './dialogs';
 import { clear, h } from './dom';
 import { Slider } from './slider';
+import { native } from '../io/native';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
-const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Shortcuts'] as const;
+const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Shortcuts', 'About'] as const;
 
 export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'Appearance') {
   const ed = app.ed, p = ed.prefs;
@@ -48,6 +49,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
   const canvas = () => [
     toggle('Brush outline on hover', () => p.hoverPreview, (v) => { p.hoverPreview = v; }),
     toggle('Name bubbles', () => p.showBubbles, (v) => { p.showBubbles = v; }),
+    toggle('Chime when mentioned', () => p.chime, (v) => { p.chime = v; }),
     toggle('Draw with a finger', () => p.fingerDraws, (v) => { p.fingerDraws = v; }),
   ];
 
@@ -109,7 +111,13 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       h('button.btn.small', { type: 'button', onclick: () => { p.keys = {}; changed(); renderKeys(); } }, 'Reset'))];
   };
 
-  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Shortcuts: shortcuts };
+  const about = () => {
+    const rows = [row('Doodlehive', h('span.muted', {}, `v${__APP_VERSION__}`))];
+    if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
+    return rows;
+  };
+
+  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Shortcuts: shortcuts, About: about };
   const page = h('div.pref-page');
   const nav = h('nav.pref-nav', { 'aria-label': 'Preference groups' });
   const show = (g: (typeof GROUPS)[number]) => {
