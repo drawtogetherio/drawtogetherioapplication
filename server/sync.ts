@@ -34,7 +34,7 @@ export function snapshot(db: DatabaseSync): Buffer {
 }
 
 async function pull() {
-  const res = await fetch(config.sync.from + '/api/sync/snapshot', { headers: { authorization: 'Bearer ' + config.sync.secret }, signal: AbortSignal.timeout(120_000) });
+  const res = await fetch(config.sync.from + '/api/sync/snapshot', { headers: { authorization: 'Bearer ' + config.sync.secret }, signal: AbortSignal.timeout(30_000) }); // well inside Railway's 60 s health check
   if (!res.ok) throw new Error(`${config.sync.from} answered ${res.status}`);
   const incoming = config.dbPath + '.incoming';
   fs.writeFileSync(incoming, zlib.gunzipSync(Buffer.from(await res.arrayBuffer())));
