@@ -133,8 +133,8 @@ How changes move:
 One-time setup (about 10 minutes):
 1. Railway → the Doodlehive project → environment switcher at the top (it says **production**) →
    **New Environment** → name it `beta` → **Duplicate** production. Railway copies the service and its
-   variables. The name matters: the server turns on the beta tag when the environment is called `beta`
-   (or when `BETA=1` is set).
+   variables. The server knows it's beta when the environment is called `beta`, `PUBLIC_URL` starts with
+   `https://beta.`, or `BETA=1` is set. The deploy log then says `(beta)` on its first line.
 2. In the `beta` environment, open the service → **Settings → Source** and set the branch to `beta`.
 3. Check it has its own volume mounted at `/data` (add one if the copy didn't). Don't share production's.
 4. **Variables:** set `PUBLIC_URL` to `https://beta.doodlehive.net`. Leave out `DOWNLOAD_*` and

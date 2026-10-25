@@ -28,8 +28,8 @@ const patreonId = env.PATREON_CLIENT_ID || '';
 const patreonSecret = env.PATREON_CLIENT_SECRET || '';
 const onRailway = !!(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
 const production = env.NODE_ENV === 'production' || onRailway;
-/** The test site: BETA=1, or a Railway environment named "beta". */
-const beta = env.BETA ? env.BETA === '1' : (env.RAILWAY_ENVIRONMENT_NAME ?? '').toLowerCase() === 'beta';
+/** The test site: BETA=1, a Railway environment named "beta", or a beta.* address. */
+const beta = env.BETA ? env.BETA === '1' : (env.RAILWAY_ENVIRONMENT_NAME ?? '').toLowerCase() === 'beta' || /^https?:\/\/beta\./i.test(env.PUBLIC_URL ?? '');
 const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
 
 /** Pictures on Cloudflare R2: on once the keys, the bucket and its public URL are all set. R2_ENDPOINT is for tests. */
