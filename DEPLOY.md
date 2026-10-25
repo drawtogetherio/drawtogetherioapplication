@@ -119,8 +119,9 @@ redirecting to R2.
 
 ## Beta site (beta.doodlehive.net)
 
-A second copy of the site for trying changes before they go live. It runs from the `beta` branch,
-with its own database, so test accounts and rooms never touch doodlehive.net. Pages show a small
+A second copy of the site for trying changes before they go live. It runs from the `beta` branch on
+a **copy** of the live database, so your real accounts and canvases are there, but nothing done on beta
+ever reaches doodlehive.net. Pages show a small
 **BETA** tag in the bottom-left corner and tell search engines not to index them.
 
 How changes move:
@@ -143,10 +144,19 @@ One-time setup (about 10 minutes):
    Cloudflare, leave the record **DNS only** (grey cloud) until Railway shows the domain as active.
 6. Discord developer portal → the Doodlehive app → **OAuth2 → Redirects:** add
    `https://beta.doodlehive.net/auth/discord/callback`. The same app and secret work for both sites.
-7. Click **Deploy** on the beta service (or push to `beta`), then open https://beta.doodlehive.net.
+7. **Live data on beta:** make a long random secret (for example `openssl rand -hex 32` in a terminal).
+   Add it as `SYNC_SECRET` in **both** environments. In beta only, also add `SYNC_FROM=https://doodlehive.net`.
+8. Click **Deploy** on the beta service (or push to `beta`), then open https://beta.doodlehive.net.
 
-Logins are separate: you sign in to beta on its own, and the first time you do, beta makes a new
-account for you.
+How the copy works:
+- Beta copies live when it starts and its copy is more than a day old (`SYNC_HOURS` changes that), and
+  restarts itself once a day at a quiet moment (nobody connected) to refresh. Deploys within the day keep
+  beta's data.
+- **Copy now:** beta's admin page → **Site → Beta data → Copy live data now**. Beta restarts with a fresh copy.
+- Every refresh replaces everything on beta, including rooms made there.
+- The copy leaves out logins and Patreon tokens, so you sign in to beta again (same Discord account,
+  same profile). Only beta ever replaces its database: the live site ignores `SYNC_FROM`, and hands its
+  data only to a request carrying `SYNC_SECRET`.
 
 ## Limits to know about
 - One server instance holds all live rooms. That covers a lot of people drawing at once; going past

@@ -18,6 +18,7 @@ import { clearNotices, listNotices, notify, premiumWarning, readNotices } from '
 import { sweep } from './sweep.ts';
 import { deleteMedia, mediaOn, mediaUrl, newMediaKey, putMedia } from './media.ts';
 import { movePicturesToMedia } from './media-move.ts';
+import { restart, snapshot, syncDue } from './sync.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
 import { HttpError, Req, Res, body, json, jsonBody } from './http.ts';
 import { adminRoute, bannedIp, lastIp } from './admin-api.ts';
@@ -157,6 +158,15 @@ async function route(req: Req, res: Res) {
   securityHeaders(res);
 
   if (p === '/healthz') return json(res, 200, { ok: true });
+  if (p === '/api/sync/snapshot' && m === 'GET') {
+    const given = Buffer.from(String(req.headers.authorization ?? '').replace(/^Bearer /, ''));
+    const want = Buffer.from(config.sync.secret ?? '');
+    if (config.beta || !config.sync.secret || !allow('sync:' + clientIp(req), 10, HOUR) || given.length !== want.length || !crypto.timingSafeEqual(given, want)) throw new HttpError(404, 'Not found.');
+    flushOps();
+    const gz = snapshot(db);
+    res.writeHead(200, { 'Content-Type': 'application/gzip', 'Content-Length': gz.length, 'Cache-Control': 'no-store' });
+    return res.end(gz);
+  }
   if (bannedIp(clientIp(req))) { res.writeHead(403, { 'Content-Type': 'text/plain' }); return res.end('Blocked.'); }
   const host = String(req.headers.host ?? '');
   const canonical = new URL(config.publicUrl).host;
@@ -766,9 +776,14 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
     flushStats();
     server.close();
     try { db.close(); } catch { /* already closed */ }
-    process.exit(0);
+    process.exit(restart.wanted ? 75 : 0);
   });
 }
+
+// Beta refreshes its copy of live once a day, at a quiet moment: a restart brings it in.
+if (config.sync.from && config.sync.secret) setInterval(() => {
+  if (syncDue() && wss.clients.size === 0) { restart.wanted = true; process.kill(process.pid, 'SIGTERM'); }
+}, HOUR).unref();
 
 server.listen(config.port, () => {
   console.log(`Doodlehive server on ${config.publicUrl}${config.beta ? ' (beta)' : ''}`);

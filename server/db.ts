@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config.ts';
+import './sync.ts'; // may swap in a copy of the live database first
 import { mediaUrl } from './media.ts';
 import { HANDLE_FOODS, HANDLE_MAX, HANDLE_WORDS, MyProfile, PublicProfile, isValidHandle, suggestHandle } from '../src/shared/profile.ts';
 import { DEFAULT_THEME, canUseTheme } from '../src/shared/themes.ts';

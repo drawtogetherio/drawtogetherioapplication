@@ -63,6 +63,12 @@ export const config = {
   dbPath: env.DB_PATH || (env.RAILWAY_VOLUME_MOUNT_PATH ? path.join(env.RAILWAY_VOLUME_MOUNT_PATH, 'doodlehive.db') : defaultDbPath()),
   persistent: !onRailway || !!(env.RAILWAY_VOLUME_MOUNT_PATH || env.DB_PATH),
   media,
+  /** Beta copies the live database from SYNC_FROM; live hands it out to whoever has SYNC_SECRET. */
+  sync: {
+    from: beta && env.SYNC_FROM ? env.SYNC_FROM.replace(/\/$/, '') : null,
+    secret: (env.SYNC_SECRET ?? '').length >= 24 ? env.SYNC_SECRET! : null,
+    hours: Number(env.SYNC_HOURS) || 24,
+  },
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
   /** OAuth client for linking Patreon accounts; PATREON_CAMPAIGN_ID limits which memberships count. PATREON_API is for tests. */
