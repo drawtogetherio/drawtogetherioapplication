@@ -51,5 +51,6 @@ export function securityHeaders(res: ServerResponse) {
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader('Content-Security-Policy', CSP);
+  if (config.beta) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
   if (config.secureCookies) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 }

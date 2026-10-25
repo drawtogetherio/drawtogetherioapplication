@@ -9,6 +9,16 @@ export class ApiError extends Error {
   constructor(public status: number, message: string, public field?: string) { super(message); }
 }
 
+/** A corner tag on the beta site, so it can't be mistaken for the live one. */
+function betaBadge() {
+  if (document.getElementById('beta-badge')) return;
+  const tag = document.createElement('div');
+  tag.id = 'beta-badge';
+  tag.textContent = 'BETA';
+  tag.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483647;padding:2px 8px;border-radius:6px;background:#f5a524;color:#1a1200;font:700 11px/18px system-ui,sans-serif;letter-spacing:.08em;pointer-events:none;opacity:.9';
+  document.body.append(tag);
+}
+
 async function call<T>(method: string, url: string, body?: unknown, raw?: Blob): Promise<T> {
   const res = await fetch(url, {
     method,
@@ -21,7 +31,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; notice?: SiteNotice | null }
+export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; notice?: SiteNotice | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 
@@ -39,7 +49,9 @@ export const api = {
     try {
       const res = await fetch('/api/config', { credentials: 'same-origin' });
       if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
-      return await res.json();
+      const cfg: ServerConfig = await res.json();
+      if (cfg.beta) betaBadge();
+      return cfg;
     } catch { return null; }
   },
   async me(): Promise<MyProfile | null> {

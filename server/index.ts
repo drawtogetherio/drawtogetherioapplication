@@ -160,7 +160,7 @@ async function route(req: Req, res: Res) {
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
     const site = getSite();
-    return json(res, 200, { discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), notice: site.notice.on ? site.notice : null });
+    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), notice: site.notice.on ? site.notice : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });
@@ -748,7 +748,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
 }
 
 server.listen(config.port, () => {
-  console.log(`Doodlehive server on ${config.publicUrl}`);
+  console.log(`Doodlehive server on ${config.publicUrl}${config.beta ? ' (beta)' : ''}`);
   if (!config.persistent) console.warn('  WARNING: no volume attached; accounts and rooms will be lost on the next deploy.');
   if (config.production && config.devLogin) console.warn('  WARNING: dev login is on in production. Anyone can log in as anyone. Unset DEV_LOGIN.');
   console.log(`  Discord login: ${config.discord ? 'on' : 'off (set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET)'}`);

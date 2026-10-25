@@ -28,6 +28,8 @@ const patreonId = env.PATREON_CLIENT_ID || '';
 const patreonSecret = env.PATREON_CLIENT_SECRET || '';
 const onRailway = !!(env.RAILWAY_ENVIRONMENT_NAME || env.RAILWAY_ENVIRONMENT);
 const production = env.NODE_ENV === 'production' || onRailway;
+/** The test site: BETA=1, or a Railway environment named "beta". */
+const beta = env.BETA ? env.BETA === '1' : (env.RAILWAY_ENVIRONMENT_NAME ?? '').toLowerCase() === 'beta';
 const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
 
 function defaultDbPath() {
@@ -44,6 +46,7 @@ export const config = {
   port,
   publicUrl,
   production,
+  beta,
   clientUrl: (env.CLIENT_URL || (production || env.PUBLIC_URL ? publicUrl : 'http://localhost:5173')).replace(/\/$/, ''),
   discord: discordId && discordSecret ? { clientId: discordId, clientSecret: discordSecret } : null,
   /** Never on by default in production. */

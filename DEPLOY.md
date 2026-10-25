@@ -75,7 +75,7 @@ Copy its Client ID and Client Secret into the variables above. The campaign id i
 Active patrons who link their account in Edit profile get premium for as long as they stay patrons.
 
 ## Everyday use
-- **Update the site:** push to `main` (or merge a pull request). Railway builds and deploys it.
+- **Update the site:** merge `beta` into `main` with a pull request (see Beta site below). Railway builds and deploys it.
   If the build fails, the old version keeps running.
 - **Rollback:** Railway → Deployments → pick an earlier one → Redeploy.
 - **Logs:** Railway → the service → Deployments → View logs.
@@ -83,6 +83,37 @@ Active patrons who link their account in Edit profile get premium for as long as
   Without the dashboard: install the Railway CLI, run `railway link` once, then `railway ssh` and
   inside it `npm run admin -- premium SomeHandle 30` (or `forever` / `off`), or `npm run admin -- admin SomeHandle on`.
 - Deploys restart the server for a few seconds; people in a room reconnect on their own.
+
+## Beta site (beta.doodlehive.net)
+
+A second copy of the site for trying changes before they go live. It runs from the `beta` branch,
+with its own database, so test accounts and rooms never touch doodlehive.net. Pages show a small
+**BETA** tag in the bottom-left corner and tell search engines not to index them.
+
+How changes move:
+1. Work lands on `beta` first. Every push to `beta` redeploys beta.doodlehive.net.
+2. Try it there.
+3. When it's good, open a pull request from `beta` into `main` and merge it. That deploys doodlehive.net.
+   Hotfixes that skip beta should be merged back into `beta` afterwards so the two don't drift.
+
+One-time setup (about 10 minutes):
+1. Railway → the Doodlehive project → environment switcher at the top (it says **production**) →
+   **New Environment** → name it `beta` → **Duplicate** production. Railway copies the service and its
+   variables. The name matters: the server turns on the beta tag when the environment is called `beta`
+   (or when `BETA=1` is set).
+2. In the `beta` environment, open the service → **Settings → Source** and set the branch to `beta`.
+3. Check it has its own volume mounted at `/data` (add one if the copy didn't). Don't share production's.
+4. **Variables:** set `PUBLIC_URL` to `https://beta.doodlehive.net`. Leave out `DOWNLOAD_*` and
+   `PATREON_*` unless you want to test those. Optional: `ADMIN_HANDLES=yourhandle` so you're admin on beta.
+5. **Settings → Networking → Custom Domain:** add `beta.doodlehive.net`. At your DNS provider add the
+   `CNAME` record Railway shows (name `beta`, plus the `TXT` record if it asks for one). If the DNS is on
+   Cloudflare, leave the record **DNS only** (grey cloud) until Railway shows the domain as active.
+6. Discord developer portal → the Doodlehive app → **OAuth2 → Redirects:** add
+   `https://beta.doodlehive.net/auth/discord/callback`. The same app and secret work for both sites.
+7. Click **Deploy** on the beta service (or push to `beta`), then open https://beta.doodlehive.net.
+
+Logins are separate: you sign in to beta on its own, and the first time you do, beta makes a new
+account for you.
 
 ## Limits to know about
 - One server instance holds all live rooms. That covers a lot of people drawing at once; going past
