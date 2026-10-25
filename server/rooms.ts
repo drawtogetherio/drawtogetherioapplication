@@ -3,7 +3,7 @@ import type { WebSocket } from 'ws';
 import { config } from './config.ts';
 import { db, getUser, hasBlocked, keepGuest, newId, publicProfile, UserRow } from './db.ts';
 import { areFriends, notifyFriends, touch } from './social.ts';
-import { validLive, validOp } from './validate.ts';
+import { validCoord, validLive, validOp } from './validate.ts';
 import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import type { PublicProfile } from '../src/shared/profile.ts';
@@ -13,11 +13,17 @@ import {
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
 
-interface Client { ws: WebSocket; userId: string; spectator: boolean; lastChat: number[]; msgs: number; msgsAt: number; bytes: number; bytesAt: number }
+interface Client {
+  ws: WebSocket; userId: string; spectator: boolean; lastChat: number[];
+  msgs: number; msgsAt: number; bytes: number; bytesAt: number; livePts: number; livePtsAt: number; cursorAt: number;
+}
 
 const KICK_BLOCK_MS = 10 * 60_000;
 const MSGS_PER_SEC = 80, MSG_BURST = 240;
 const BYTES_PER_MIN = 24 * 1024 * 1024;
+/** Live points everyone else must paint: a pen gives at most a few hundred a second. */
+const LIVE_PTS_PER_SEC = 600, LIVE_PTS_BURST = 4000;
+const CURSOR_MS = 40;
 const KICKED_MSG = 'You were removed from this room. Try again later.';
 const BLOCKED_MSG = 'You can’t join this room.';
 const ID_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -180,7 +186,7 @@ export class Room {
   private admit(ws: WebSocket, user: UserRow, spectator = false) {
     touch(user.id);
     const now = Date.now();
-    const c: Client = { ws, userId: user.id, spectator, lastChat: [], msgs: MSG_BURST, msgsAt: now, bytes: 0, bytesAt: now };
+    const c: Client = { ws, userId: user.id, spectator, lastChat: [], msgs: MSG_BURST, msgsAt: now, bytes: 0, bytesAt: now, livePts: LIVE_PTS_BURST, livePtsAt: now, cursorAt: 0 };
     const firstConnection = !this.connections(user.id);
     this.clients.add(c);
     if (user.id === this.info.ownerId && this.hostTimer) { clearTimeout(this.hostTimer); this.hostTimer = null; }
@@ -192,12 +198,13 @@ export class Room {
         folder: { id: fid, name: user.display_name, visible: true, owner: user.id, user: true, color: user.favorite_color },
       });
     }
-    const head = JSON.stringify({ type: 'welcome', room: this.infoFor(c), you: user.id, spectator, members: this.members(), chat: this.chat.slice(-50) });
+    const members = this.members();
+    const head = JSON.stringify({ type: 'welcome', room: this.infoFor(c), you: user.id, spectator, members, chat: this.chat.slice(-50) });
     ws.send(`${head.slice(0, -1)},"ops":[${this.ops.join(',')}]}`);
     const pendingLeave = this.leaving.get(user.id);
     if (pendingLeave) { clearTimeout(pendingLeave); this.leaving.delete(user.id); }
     else if (firstConnection) { this.systemChat(`${user.display_name} ${spectator ? 'is watching' : 'joined'}`); notifyFriends(user.id); }
-    this.broadcast({ type: 'members', members: this.members() }, c);
+    this.broadcast({ type: 'members', members }, c);
     if (this.isHost(user.id)) for (const w of this.waiting.values()) this.send(c, { type: 'join-request', user: publicProfile(w.user) });
 
     ws.on('message', (data) => {
@@ -240,6 +247,16 @@ export class Room {
     return true;
   }
 
+  /** Live previews past the allowance are dropped; the finished stroke still arrives as an op. */
+  private liveBudget(c: Client, pts: number) {
+    const now = Date.now();
+    c.livePts = Math.min(LIVE_PTS_BURST, c.livePts + ((now - c.livePtsAt) / 1000) * LIVE_PTS_PER_SEC);
+    c.livePtsAt = now;
+    if (c.livePts < pts) return false;
+    c.livePts -= pts;
+    return true;
+  }
+
   private handle(c: Client, msg: ClientMsg) {
     touch(c.userId);
     if (c.spectator && msg.type !== 'chat' && msg.type !== 'typing') {
@@ -258,14 +275,18 @@ export class Room {
         return;
       }
       case 'live':
-        if (validLive(msg.live) && this.can(c.userId, msg.live.layer)) this.broadcast({ type: 'live', from: c.userId, live: msg.live }, c);
+        if (validLive(msg.live) && this.can(c.userId, msg.live.layer) && this.liveBudget(c, msg.live.pts.length / 3)) this.broadcast({ type: 'live', from: c.userId, live: msg.live }, c);
         return;
       case 'live-end':
         this.broadcast({ type: 'live-end', from: c.userId, stroke: String(msg.stroke).slice(0, 48) }, c);
         return;
-      case 'cursor':
-        if (Number.isFinite(msg.x) && Number.isFinite(msg.y)) this.broadcast({ type: 'cursor', from: c.userId, x: msg.x, y: msg.y, drawing: !!msg.drawing }, c);
+      case 'cursor': {
+        const now = Date.now();
+        if (!validCoord(msg.x) || !validCoord(msg.y) || now - c.cursorAt < CURSOR_MS) return;
+        c.cursorAt = now;
+        this.broadcast({ type: 'cursor', from: c.userId, x: msg.x, y: msg.y, drawing: !!msg.drawing }, c);
         return;
+      }
       case 'typing':
         this.broadcast({ type: 'typing', from: c.userId, on: !!msg.on }, c);
         return;

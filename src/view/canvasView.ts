@@ -16,6 +16,8 @@ export class CanvasView {
   live: LiveLayer | null = null;
   readonly remoteLive = new Map<string, LiveLayer>();
   overlay: ((ctx: CanvasRenderingContext2D, m: DOMMatrix) => void) | null = null;
+  /** Runs before each frame composites; edits it makes land in the same frame. */
+  prepare: (() => void) | null = null;
 
   private comp = makeCanvas(1, 1);
   private compKey = '';
@@ -80,8 +82,11 @@ export class CanvasView {
 
   requestRender() {
     if (this.frame) return;
-    this.frame = requestAnimationFrame(() => { this.frame = 0; this.render(); });
+    this.frame = requestAnimationFrame(() => { this.prepare?.(); this.frame = 0; this.render(); });
   }
+
+  /** The part of the document on screen. */
+  visible(): Rect { const vp = this.viewport; return transformRect(vp.matrix().inverse(), { x: 0, y: 0, w: vp.w, h: vp.h }); }
 
   renderNow() { if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.render(); }
 
@@ -92,7 +97,7 @@ export class CanvasView {
     const D = new DOMMatrix().scaleSelf(dpr, dpr).multiplySelf(M);
 
     const docRect: Rect | null = doc.settings.infinite ? null : { x: 0, y: 0, w: doc.settings.width, h: doc.settings.height };
-    let visible: Rect | null = transformRect(M.inverse(), { x: 0, y: 0, w: vp.w, h: vp.h });
+    let visible: Rect | null = this.visible();
     if (docRect) visible = rectIntersect(visible, docRect);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);

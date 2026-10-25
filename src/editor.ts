@@ -347,6 +347,8 @@ export class Editor {
     if (!this.room || this.readOnly) return;
     const now = performance.now();
     if (drawing && now - this.lastCursor < 50) return;
+    // A brush stroke's live points already say where the pen is.
+    if (drawing && this.view.live && (this.toolId === 'brush' || this.toolId === 'eraser')) return;
     this.lastCursor = now;
     this.room.send({ type: 'cursor', x: Math.round(x), y: Math.round(y), drawing });
   }

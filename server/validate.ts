@@ -1,6 +1,6 @@
 import { BLEND_MODES, EFFECTS, type Op } from '../src/core/model.ts';
 import type { LiveStroke } from '../src/shared/protocol.ts';
-import { MAX_STROKE_PTS, validBrush } from '../src/shared/brush.ts';
+import { MAX_STROKE_PTS, strokeFits, validBrush } from '../src/shared/brush.ts';
 
 // Shape and size checks for everything clients send into a room. Anything that fails is dropped
 // before it reaches the op log or other people's browsers.
@@ -26,6 +26,16 @@ function nums(v: unknown, max: number, stride: number, min = stride): v is numbe
   return true;
 }
 
+/** x, y, pressure triples whose path is short enough to paint quickly. */
+function strokePts(v: unknown, max: number, size: number, min = 3): v is number[] {
+  if (!nums(v, max, 3, min)) return false;
+  let len = 0;
+  for (let i = 3; i < v.length; i += 3) len += Math.hypot(v[i] - v[i - 3], v[i + 1] - v[i - 2]);
+  return strokeFits(v.length, len, size);
+}
+
+export const validCoord = (v: unknown): v is number => isNum(v) && Math.abs(v) <= MAX_COORD;
+
 const isSel = (v: unknown) => obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6)
   && (v.holes === undefined || (Array.isArray(v.holes) && v.holes.length <= MAX_HOLES && v.holes.every((h) => nums(h, MAX_CLIP_PTS, 2, 6))));
 const isClip = (v: unknown) => v === undefined || isSel(v);
@@ -45,16 +55,16 @@ function propsOk(props: unknown, rules: Record<string, (v: unknown) => boolean>,
 }
 
 export function validLive(l: unknown): l is LiveStroke {
-  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && validBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && nums(l.pts, MAX_LIVE_PTS, 3, 0);
+  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && validBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && strokePts(l.pts, MAX_LIVE_PTS, l.brush.size, 0);
 }
 
 export function validOp(op: unknown): op is Op {
   if (!obj(op) || !isId(op.id) || !isMask(op.mask)) return false;
   switch (op.t) {
     case 'stroke':
-      return isId(op.layer) && isBool(op.erase) && validBrush(op.brush) && isColor(op.color) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
+      return isId(op.layer) && isBool(op.erase) && validBrush(op.brush) && isColor(op.color) && isClip(op.clip) && strokePts(op.pts, MAX_STROKE_PTS, op.brush.size);
     case 'smudge':
-      return isId(op.layer) && validBrush(op.brush) && isClip(op.clip) && nums(op.pts, MAX_STROKE_PTS, 3);
+      return isId(op.layer) && validBrush(op.brush) && isClip(op.clip) && strokePts(op.pts, MAX_STROKE_PTS, op.brush.size);
     case 'effect':
       return isId(op.layer) && EFFECTS.includes(op.effect as never) && inRange(op.amount, 0, 1) && (op.angle === undefined || inRange(op.angle, -7, 7)) && isClip(op.clip);
     case 'shape':

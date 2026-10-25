@@ -1,5 +1,5 @@
 import { uid } from '../core/geom';
-import { MAX_STROKE_PTS } from '../shared/brush';
+import { strokeFits } from '../shared/brush';
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
 import type { Editor } from '../editor';
@@ -9,6 +9,7 @@ export class BrushTool implements Tool {
   private buffer: TiledSurface | null = null;
   private renderer: StrokeRenderer | null = null;
   private pts: number[] = [];
+  private len = 0;
   private id = '';
   private sent = 0; // samples already streamed to the room
   private flushTimer = 0;
@@ -31,6 +32,7 @@ export class BrushTool implements Tool {
     this.buffer = new TiledSurface();
     this.renderer = new StrokeRenderer(this.buffer, params, this.erase ? '#000000' : this.ed.color);
     this.pts = [];
+    this.len = 0;
     this.tether = null;
     this.ed.view.live = {
       layerId: layer.props.id, buffer: this.buffer, bufferAlpha: params.opacity,
@@ -60,9 +62,11 @@ export class BrushTool implements Tool {
 
   private add(p: PointerInfo) {
     // A very long stroke is committed in pieces, so none grows past what the room accepts.
-    if (this.pts.length >= MAX_STROKE_PTS) { this.up(); this.down(p); return; }
     // Rounded samples are what gets rendered, so a replay matches exactly.
     const x = round(p.x), y = round(p.y), pr = round(p.pressure);
+    const n = this.pts.length;
+    if (n) this.len += Math.hypot(x - this.pts[n - 3], y - this.pts[n - 2]);
+    if (!strokeFits(n + 3, this.len, this.params.size, 0.8)) { this.up(); this.down(p); return; }
     this.pts.push(x, y, pr);
     const r = this.renderer!.add(x, y, pr);
     if (r) this.ed.view.invalidate(r);

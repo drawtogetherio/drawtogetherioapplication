@@ -1,6 +1,6 @@
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
-import { selPath } from '../core/geom';
+import { Rect, selPath } from '../core/geom';
 import type { Editor } from '../editor';
 import type { RoomClient, RoomEvent } from '../net/roomClient';
 import type { PublicProfile } from '../shared/profile';
@@ -12,7 +12,7 @@ import { confirmDialog, exportDialog, modal } from './dialogs';
 import { blockPerson, unblockPerson } from './blocks';
 import { api } from '../net/api';
 
-interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[] }
+interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[]; pad: number }
 interface Bubble { x: number; y: number; drawing: boolean; t: number }
 
 const BUBBLE_LINGER = 1200;
@@ -26,7 +26,8 @@ export class RoomUI {
   private chatInput: HTMLInputElement;
   private chatForm: HTMLFormElement;
   private strokes = new Map<string, RemoteStroke>();
-  private drawFrame = 0;
+  private drawn = 0;
+  private catchUp = 0;
   private bubbles = new Map<string, Bubble>();
   private unsub: (() => void) | null = null;
   private typingSent = 0;
@@ -45,6 +46,7 @@ export class RoomUI {
     this.chatInput.addEventListener('blur', () => this.typing(false));
     setInterval(() => this.tick(), 1000);
     ed.on((w) => { if (w === 'blocked') { this.renderMembers(); this.renderChat(); ed.view.requestRender(); } });
+    ed.view.prepare = () => this.drawRemote();
   }
 
   get room() { return this.ed.room; }
@@ -57,7 +59,7 @@ export class RoomUI {
     this.unsub = room.on((e) => this.handle(e));
     room.liveBuffer = (op) => {
       if (op.t !== 'stroke') return undefined;
-      const s = this.strokes.get(op.id);
+      const s = this.strokes.get(op.author + ':' + op.id);
       if (!s || s.count !== op.pts.length) return undefined;
       this.drawPending(s);
       s.renderer.end();
@@ -87,6 +89,32 @@ export class RoomUI {
     s.pending = [];
   }
 
+  /** Whether any waiting point of the stroke lands on screen. */
+  private inView(s: RemoteStroke, v: Rect) {
+    const p = s.pending, d = s.pad;
+    for (let i = 0; i + 2 < p.length; i += 3) {
+      if (p[i] + d >= v.x && p[i] - d <= v.x + v.w && p[i + 1] + d >= v.y && p[i + 1] - d <= v.y + v.h) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Paints other people's new points before each frame. Strokes off screen wait (they are painted
+   * at once when they commit), and while you draw, others' strokes catch up only ten times a second.
+   */
+  private drawRemote() {
+    const ed = this.ed;
+    if (!this.strokes.size) return;
+    const now = performance.now();
+    if (ed.view.live && now - this.drawn < 100) {
+      if (!this.catchUp) this.catchUp = window.setTimeout(() => { this.catchUp = 0; ed.view.requestRender(); }, 100);
+      return;
+    }
+    this.drawn = now;
+    const v = ed.view.visible();
+    for (const s of this.strokes.values()) if (s.pending.length && this.inView(s, v)) this.drawPending(s);
+  }
+
   /** Stops showing a live stroke; repaints just where it was when `repaint`. */
   private dropStroke(id: string, repaint = false) {
     const s = this.strokes.get(id);
@@ -101,7 +129,7 @@ export class RoomUI {
     const ed = this.ed;
     switch (e.kind) {
       case 'op':
-        this.dropStroke(e.op.id);
+        this.dropStroke(e.from + ':' + e.op.id);
         return;
       case 'members':
         this.renderMembers();
@@ -116,14 +144,14 @@ export class RoomUI {
         this.renderTyping();
         return;
       case 'live': {
-        const l = e.live;
-        let s = this.strokes.get(l.stroke);
+        const l = e.live, key = e.from + ':' + l.stroke;
+        let s = this.strokes.get(key);
         if (!s) {
           const buffer = new TiledSurface();
-          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), buffer, count: 0, touched: 0, pending: [] };
-          this.strokes.set(l.stroke, s);
+          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), buffer, count: 0, touched: 0, pending: [], pad: l.brush.size / 2 + 2 };
+          this.strokes.set(key, s);
           const layer = ed.doc.layer(l.layer);
-          ed.view.remoteLive.set(l.stroke, {
+          ed.view.remoteLive.set(key, {
             layerId: l.layer, buffer, bufferAlpha: l.brush.opacity,
             bufferOp: l.erase ? 'destination-out' : layer?.props.alphaLock && !l.mask ? 'source-atop' : 'source-over',
             clip: l.clip ? selPath(l.clip) : undefined, mask: l.mask,
@@ -131,15 +159,14 @@ export class RoomUI {
         }
         s.touched = Date.now();
         s.count += l.pts.length;
-        // Painted on the next frame, together with everyone else's, rather than inside the socket handler.
         for (const v of l.pts) s.pending.push(v);
-        if (!this.drawFrame) this.drawFrame = requestAnimationFrame(() => { this.drawFrame = 0; for (const x of this.strokes.values()) this.drawPending(x); });
         const n = l.pts.length;
         if (n >= 3) this.bubbles.set(e.from, { x: l.pts[n - 3], y: l.pts[n - 2], drawing: true, t: Date.now() });
+        if (this.inView(s, ed.view.visible())) ed.view.requestRender();
         return;
       }
       case 'live-end':
-        this.dropStroke(e.stroke, true);
+        this.dropStroke(e.from + ':' + e.stroke, true);
         return;
       case 'cursor':
         this.bubbles.set(e.from, { x: e.x, y: e.y, drawing: e.drawing, t: Date.now() });
@@ -153,9 +180,8 @@ export class RoomUI {
 
   private tick() {
     const now = Date.now();
-    for (const [id, s] of this.strokes) {
-      if (now - s.touched > 10_000) this.dropStroke(id, true);
-    }
+    // Not while you draw: others' commits wait until your pen lifts, and their previews stand in.
+    if (!this.ed.view.live) for (const [id, s] of this.strokes) if (now - s.touched > 10_000) this.dropStroke(id, true);
     if (this.room) {
       let changed = false;
       for (const [id, t] of this.room.typing) if (t < now) { this.room.typing.delete(id); changed = true; }

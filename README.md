@@ -270,6 +270,16 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   layers (moderation) and remove people (blocked from rejoining for 10 minutes).
 - Live strokes: you see others' strokes as they draw, with a name bubble (picture + display name)
   pointing at their pen. Bubbles can be turned off in the menu.
+- Your pen comes first (v0.27). Others' live points are painted just before each frame
+  (`CanvasView.prepare`), only when they land on screen; off-screen strokes wait and are painted in one
+  go when they commit. While your pen is down, others' previews catch up ten times a second and their
+  committed edits wait (`RoomClient.hold`), so a big fill or effect never lands mid-stroke. The brush
+  tool doesn't send cursor positions while streaming a stroke (the live points already say where it is).
+- Server limits on what a member can make everyone else paint: strokes are bounded by path length and
+  length × size (`strokeFits`, shared with the brush tool, which splits long strokes well before the
+  limit), live previews by points per second (600/s, burst 4000; a dropped preview still commits), and
+  cursors to 25/s with sane coordinates. Live strokes are keyed by sender, so nobody can end another
+  person's preview.
 - Setting to hide other people's folders from your Layers panel
 - Member list with badges: crown = owner, shield = host, star = premium (all shown together).
   Tap someone to see their profile and links. Badges are SVG, not emoji.
@@ -342,6 +352,8 @@ Timelapse…** makes a 1080p or 4K video in the browser, or saves the frames as 
 never takes a timelapse.
 
 ### Known limits (fine for now, worth revisiting)
+- Joining replays the whole op log (yielding every 24 ms). Long-lived rooms would load faster with a
+  periodic snapshot (`tiles` op) replacing old ops, as `LocalCopy.heavy` already does on devices.
 - Two hosts restructuring the same folder at the exact same moment can see different orders until reload.
 - Undoing a stroke restores whole 256px tiles, so it can also undo a host's edit in the same tile of your layer.
 - One server process holds all rooms; scaling out later needs sticky sessions or a shared pub/sub.

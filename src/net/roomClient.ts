@@ -34,6 +34,8 @@ export class RoomClient {
   doc: DrawDoc | null = null;
   /** Pixels already drawn by a live preview of this op, so it isn't rendered twice. */
   liveBuffer: (op: Op) => TiledSurface | undefined = () => undefined;
+  /** While true, other people's edits wait (e.g. mid-stroke), so the local pen never stutters. */
+  hold: () => boolean = () => false;
 
   private ws: WebSocket | null = null;
   private queue: Promise<void> = Promise.resolve();
@@ -110,6 +112,7 @@ export class RoomClient {
       case 'op':
         this.queue = this.queue.then(async () => {
           if (!this.doc) return;
+          while (this.hold()) await new Promise((r) => setTimeout(r, 50));
           await this.doc.prepare(m.op);
           this.doc.apply(m.op, { record: false, buffer: this.liveBuffer(m.op) });
           this.emit({ kind: 'op', op: m.op, from: m.from });

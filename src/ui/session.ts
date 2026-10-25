@@ -374,6 +374,7 @@ export class Session {
     this.watch = watch;
     const room = new RoomClient(id, watch);
     this.ed.room = room;
+    room.hold = () => !!this.ed.view.live;
     this.app.roomUI.attach(room);
     this.app.refreshRoom();
     let waitClose: (() => void) | null = null;

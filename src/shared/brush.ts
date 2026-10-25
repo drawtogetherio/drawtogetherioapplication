@@ -3,6 +3,13 @@ import type { BrushParams } from '../core/model';
 
 /** Numbers (x, y, pressure) one stroke op may carry; longer strokes are split. */
 export const MAX_STROKE_PTS = 120_000;
+/** A stroke's path length in px, and length × brush size: both bound how long everyone's browser spends painting it. */
+export const MAX_STROKE_PATH = 400_000, MAX_STROKE_INK = 20e6;
+
+/** Whether a stroke this long is still one the room accepts; `full` splits well before the limit. */
+export function strokeFits(pts: number, len: number, size: number, full = 1) {
+  return pts <= MAX_STROKE_PTS * full && len <= MAX_STROKE_PATH * full && len * size <= MAX_STROKE_INK * full;
+}
 
 export const MAX_BRUSH_SIZE = 500;
 

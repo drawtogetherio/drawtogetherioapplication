@@ -37,7 +37,9 @@ export function composite(
     ctx.fillRect(region.x, region.y, region.w, region.h);
   }
   const layers = doc.layers;
-  const livesOf = (id: string) => lives.filter((l) => l.layerId === id);
+  const byLayer = new Map<string, LiveLayer[]>();
+  for (const l of lives) byLayer.set(l.layerId, [...(byLayer.get(l.layerId) ?? []), l]);
+  const livesOf = (id: string) => byLayer.get(id) ?? [];
   const W = ctx.canvas.width, H = ctx.canvas.height;
   const t = ctx.getTransform();
   const d = transformRect(t, region);
