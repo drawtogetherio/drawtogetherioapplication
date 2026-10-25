@@ -95,6 +95,7 @@ export class RoomUI {
       if (r) this.ed.view.invalidate(r);
     }
     s.pending = [];
+    s.renderer.sync(); // the frame composites right after this, before any microtask
   }
 
   /** Whether any waiting point of the stroke lands on screen. */

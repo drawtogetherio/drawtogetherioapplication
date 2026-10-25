@@ -86,6 +86,19 @@ const pending = stroke(alice, line(400, 300, 700, 420), 700);
 await bob.waitForTimeout(500);
 const liveCount = await ed(bob, (e) => e.view.remoteLive.size);
 check(liveCount === 1, 'Bob sees Alice’s stroke while she draws');
+const gaps = await ed(bob, (e) => {
+  // What is on Bob's screen, not just in the buffer: columns without ink across the part drawn so far.
+  const live = [...e.view.remoteLive.values()][0], b = live.buffer.contentBounds();
+  if (!b) return -1;
+  const vp = e.view.viewport, p0 = vp.toScreen(b.x, b.y), p1 = vp.toScreen(b.x + b.w, b.y + b.h), dpr = e.view.dpr;
+  const x0 = Math.round(Math.min(p0.x, p1.x) * dpr) + 6, x1 = Math.round(Math.max(p0.x, p1.x) * dpr) - 6;
+  const y0 = Math.round(Math.min(p0.y, p1.y) * dpr), y1 = Math.round(Math.max(p0.y, p1.y) * dpr);
+  const d = e.view.canvas.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data, w = x1 - x0, h = y1 - y0;
+  let gaps = 0;
+  for (let x = 0; x < w; x++) { let ink = false; for (let y = 0; y < h && !ink; y++) ink = d[(y * w + x) * 4] < 128; if (!ink) gaps++; }
+  return gaps;
+});
+check(gaps === 0, `the live stroke is one continuous line (${gaps} empty columns)`);
 await bob.screenshot({ path: `${out}/02-bob-sees-bubble.png` });
 await pending;
 await bob.waitForFunction((id) => window.doodlehive.ed.doc.layer(id)?.surface.size > 0, aliceLayer);
