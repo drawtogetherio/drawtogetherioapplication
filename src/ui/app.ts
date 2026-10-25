@@ -25,6 +25,7 @@ import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
 import { accentColor, applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
+import { editLogDialog } from './editLog';
 import { KeyAction, actionFor, keyOf, applyPressure } from '../shared/prefs';
 import { Studio } from './panels';
 import { PREFS_KEY } from './session';
@@ -227,6 +228,7 @@ export class App {
     applyMode(p.mode);
     applyPressure(p, st.brush);
     applyPressure(p, st.eraser);
+    if (this.ed.room) this.ed.room.batchMs = p.remoteEvery * 1000;
     const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
     for (const t of TOOLS) {
       const b = this.toolButtons.get(t.id)!;
@@ -368,6 +370,7 @@ export class App {
         if (!this.invitePop.hidden) this.invitePanel.render(room);
       }));
     }
+    if (room.isHost) d.append(ib('log', 'Edit log', () => editLogDialog(this.ed)));
   }
 
   /** Where the open drawing lives: a cloud for the server, a warning for browser storage. */

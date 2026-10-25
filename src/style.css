@@ -201,7 +201,9 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .layer-props { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .layer-props .row { display: flex; gap: 4px; justify-content: space-between; }
 .blend-select { width: 100%; }
+.layer-actions { flex-wrap: wrap; justify-content: flex-start !important; }
 .layer-actions .icon-btn { width: 38px; height: 38px; }
+.layer-actions .icon-btn.danger:hover { color: #f06a6a; }
 
 /* Colour picker */
 .color-picker { width: 264px; display: flex; flex-direction: column; gap: 10px; }
@@ -790,6 +792,26 @@ button.friend-row:hover { background: var(--panel-2); }
 .presence-wrap { position: relative; display: inline-grid; flex: none; }
 .presence-wrap .presence-dot { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; box-shadow: 0 0 0 2px var(--panel); }
 .invite-empty { margin: 4px 2px; font-size: 13px; }
+
+/* Edit log (hosts) */
+.modal:has(.edit-log) { width: min(800px, 100%); }
+.edit-log { flex-direction: row; gap: 12px; min-height: 320px; }
+.log-people { width: 200px; flex: none; display: flex; flex-direction: column; gap: 2px; }
+.log-person { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); padding: 6px 8px; border-radius: 8px; text-align: left; cursor: pointer; font: inherit; }
+.log-person.active, .log-person:hover { background: var(--panel-2); }
+.log-person > small { margin-left: auto; color: var(--muted); }
+.log-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.log-entries { flex: 1; min-width: 0; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.log-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 8px; }
+.log-row:hover { background: var(--panel-2); }
+.log-what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-when { color: var(--muted); flex: none; }
+.log-row.busy .btn { visibility: hidden; }
+.log-row.removed { opacity: 0.5; }
+@media (max-width: 640px) {
+  .edit-log { flex-direction: column; }
+  .log-people { width: auto; flex-direction: row; flex-wrap: wrap; }
+}
 
 /* Join requests (hosts only), in the chat */
 .chat-msg.join-request { display: flex; align-items: center; gap: 8px; pointer-events: auto; background: rgba(20, 20, 24, 0.92); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }

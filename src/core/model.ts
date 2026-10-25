@@ -77,7 +77,7 @@ export interface Selection { pts: number[]; holes?: number[][] }
 export type ShapeKind = 'line' | 'rect' | 'ellipse';
 
 /** `mask: true` on a pixel edit aims it at the layer's mask instead of its pixels. */
-interface OpBase { id: string; author?: string; mask?: boolean }
+interface OpBase { id: string; author?: string; mask?: boolean; /** When the room took it (ms). */ at?: number }
 
 export type Op =
   | (OpBase & {

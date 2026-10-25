@@ -52,7 +52,7 @@ export class LayersPanel {
       onclick: () => { const l = this.ed.layer; if (l) this.setProps({ alphaLock: !l.props.alphaLock }); },
     });
 
-    const act = (name: string, title: string, fn: () => void) => h('button.icon-btn', { title, 'aria-label': title, html: icon(name, 18), onclick: fn });
+    const act = (name: string, title: string, fn: () => void, cls = '') => h('button.icon-btn', { title, 'aria-label': title, class: cls, html: icon(name, 18), onclick: fn });
     this.clipBtn = act('clipMask', 'Clip to the layer below', () => this.ed.toggleClip());
     this.maskBtn = act('maskIc', 'Add mask', () => this.ed.setMask(!this.ed.layer?.mask));
     this.applyMaskBtn = act('check', 'Apply mask to pixels', () => this.ed.applyMask());
@@ -66,7 +66,7 @@ export class LayersPanel {
         act('sparkle', 'Layer effects', () => effectsBar(this.ed)),
         this.lockBtn, this.clipBtn, this.maskBtn, this.applyMaskBtn,
         act('clear', 'Clear layer', () => { this.ed.commitPending(); if (this.ed.layer) this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer, mask: this.ed.onMask }); }),
-        act('trash', 'Delete layer', () => this.removeLayer()),
+        act('trash', 'Delete layer', () => this.removeLayer(), 'danger'),
       ),
       this.maskHint,
     );
@@ -75,7 +75,7 @@ export class LayersPanel {
         act('rename', 'Rename folder', () => this.renameFolder()),
         act('plus', 'New layer in this folder', () => this.ed.addLayer()),
         act('folderPlus', 'New folder inside', () => this.ed.addFolder()),
-        act('trash', 'Delete folder and its layers', () => this.removeFolder()),
+        act('trash', 'Delete folder and its layers', () => this.removeFolder(), 'danger'),
       ),
     );
     this.el = h('div.panel.layers-panel', {},

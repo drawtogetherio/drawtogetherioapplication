@@ -110,6 +110,27 @@ check(!canEdit, 'Bob cannot edit Alice’s layer');
 const hostCan = await ed(alice, (e, id) => e.canEdit(id), bobLayer.id);
 check(hostCan, 'Alice (owner) can edit Bob’s layer');
 // Bob tries anyway via a raw op; server must reject it.
+
+// ---- A refused edit is taken back locally, without a reconnect ----
+await ed(alice, (e) => { e._status0 = e.room.status; });
+await ed(bob, (e, id) => e.run([{ t: 'layer.props', id: 'op_test_reject', layer: id, props: { opacity: 0.5 } }], 'test'), aliceLayer);
+await bob.waitForSelector('.toast:has-text("belongs to someone else")', { timeout: 4000 }).then(() => check(true, 'a refused edit shows its reason'), () => check(false, 'a refused edit shows its reason'));
+await bob.waitForTimeout(300);
+check(await ed(bob, (e, id) => e.doc.layer(id).props.opacity === 1 && e.room.status === 'open' && e.doc.history.done.length === 0, aliceLayer), 'the refused edit is rolled back without a reconnect');
+await bob.waitForTimeout(600);
+check(await ed(bob, (e, id) => e.doc.layer(id).props.opacity === 1 && e.room.status === 'open', aliceLayer), 'still in step a moment later');
+
+// ---- Performance preferences: no live strokes, edits in batches ----
+await ed(bob, (e) => { e.prefs.showLive = false; e.room.batchMs = 2000; });
+const boundsBefore = JSON.stringify(await ed(bob, (e, id) => e.doc.layer(id).surface.contentBounds(), aliceLayer));
+const pending2 = stroke(alice, line(400, 500, 700, 520), 600);
+await bob.waitForTimeout(500);
+check(await ed(bob, (e) => e.view.remoteLive.size) === 0, 'with live strokes off, Bob sees only the bubble');
+await pending2;
+await alice.waitForTimeout(300);
+check(JSON.stringify(await ed(bob, (e, id) => e.doc.layer(id).surface.contentBounds(), aliceLayer)) === boundsBefore, 'the finished stroke waits for the batch window');
+await bob.waitForFunction(([id, b0]) => JSON.stringify(window.doodlehive.ed.doc.layer(id).surface.contentBounds()) !== b0, [aliceLayer, boundsBefore], { timeout: 5000 }).then(() => check(true, 'and lands within the window'), () => check(false, 'and lands within the window'));
+await ed(bob, (e) => { e.prefs.showLive = true; e.room.batchMs = 0; });
 await bob.evaluate((id) => window.doodlehive.ed.room.send({ type: 'op', op: { t: 'layer.props', id: 'hack1', layer: id, props: { visible: false } } }), aliceLayer);
 await alice.waitForTimeout(400);
 check(await ed(alice, (e, id) => e.doc.layer(id).props.visible, aliceLayer), 'server rejects edits to someone else’s layer');
@@ -186,6 +207,9 @@ await alice.locator('.modal [title="Close"]').click();
 // ---- Blocking ----
 const cara = await person('Cara', '#4f7cff', `${url}?room=${roomId}`);
 await cara.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+// Enough happened before Cara joined (SNAPSHOT_EVERY=5) that her welcome carried a snapshot, not every stroke.
+const caraLog = await ed(cara, (e) => e.doc.log.map((o) => o.t));
+check(caraLog.includes('tiles') && caraLog.filter((t) => t === 'stroke').length <= 3, `joining replays a snapshot, not every stroke (${caraLog.join(' ')})`);
 await cara.locator('canvas.stage').hover();
 await cara.keyboard.press('Enter');
 await cara.keyboard.type('hi from cara');
@@ -233,7 +257,26 @@ check(await bob.locator('.folder-row').count() === 3, 'all folders listed again 
 await alice.locator('[aria-label="Layers (L)"]').click();
 await alice.waitForTimeout(200);
 await alice.screenshot({ path: `${out}/06-alice-layers.png` });
+check(await alice.locator('.layer-actions [aria-label="Delete layer"]').isVisible(), 'Delete layer is visible in the Layers panel');
 await alice.locator('[aria-label="Layers (L)"]').click();
+
+// ---- Edit log: the host removes one of Alice's strokes ----
+await bob.locator('canvas.stage').hover();
+await stroke(bob, line(200, 600, 500, 650));
+await alice.waitForFunction((id) => window.doodlehive.ed.doc.layer(id)?.surface.size > 0, bobLayer.id);
+check(await alice.locator('[aria-label="Edit log"]').count() === 1 && await bob.locator('[aria-label="Edit log"]').count() === 0, 'only hosts see the edit log button');
+await alice.locator('[aria-label="Edit log"]').click();
+await alice.waitForSelector('.edit-log');
+await alice.screenshot({ path: `${out}/07-edit-log.png` });
+await alice.locator('.log-person', { hasText: 'Bob' }).click();
+const bobRows = await alice.locator('.log-row:has-text("Stroke")').count();
+check(bobRows >= 1 && (await alice.locator('.log-row').count()) === (await alice.locator('.log-row:has-text("Stroke"), .log-row:has-text("Layer"), .log-row:has-text("Pixels")').count()), `Bob's edits are listed (${bobRows} strokes)`);
+await alice.locator('.log-row:has-text("Stroke") .btn', { hasText: 'Remove' }).first().click();
+await alice.locator('.modal .btn.primary', { hasText: 'Remove' }).click();
+await alice.waitForSelector('.log-row.removed', { timeout: 20000 }).then(() => check(true, 'the stroke is removed'), () => check(false, 'the stroke is removed'));
+await bob.waitForFunction((id) => !window.doodlehive.ed.doc.layer(id).surface.contentBounds(), bobLayer.id, { timeout: 5000 }).then(() => check(true, 'Bob’s layer is empty again for Bob too'), () => check(false, 'Bob’s layer is empty again for Bob too'));
+check(await ed(alice, (e) => e.doc.history.done.at(-1)?.label === 'Remove edit'), 'the removal is one undoable edit for the host');
+await alice.locator('.modal-head .icon-btn').click();
 
 await alice.locator('[aria-label="Menu"]').click();
 await alice.waitForTimeout(150);

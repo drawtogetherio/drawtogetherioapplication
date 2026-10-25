@@ -8,7 +8,7 @@ import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import type { PublicProfile } from '../src/shared/profile.ts';
 import {
-  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
+  CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, LogEntry, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, Visibility, userFolderId,
 } from '../src/shared/protocol.ts';
 
 interface NodeInfo { owner?: string; parent: string | null; user?: boolean; kind: 'layer' | 'folder' }
@@ -19,6 +19,8 @@ interface Client {
 }
 
 const KICK_BLOCK_MS = 10 * 60_000;
+/** How long a client asked for a snapshot gets before someone else is asked. */
+const SNAPSHOT_WAIT_MS = 120_000;
 const MSGS_PER_SEC = 80, MSG_BURST = 240;
 const BYTES_PER_MIN = 24 * 1024 * 1024;
 /** Live points everyone else must paint: a pen gives at most a few hundred a second. */
@@ -62,7 +64,11 @@ export function flushOps() {
 
 export class Room {
   readonly clients = new Set<Client>();
+  /** A snapshot of the canvas (as ops) at `snapSeq`, then every op after it. Joining replays just these. */
+  private snap: string[] = [];
+  private snapSeq = 0;
   private ops: string[] = [];
+  private snapAsked: { userId: string; at: number } | null = null;
   private nodes = new Map<string, NodeInfo>();
   private rootCount = 0;
   private chat: ChatMsg[] = [];
@@ -79,8 +85,93 @@ export class Room {
   constructor(public info: RoomInfo, hosts: string[], private watchKey: string, private invited: string[] = []) {
     this.hosts = new Set(hosts);
     this.allowed = new Set(invited);
-    const rows = db.prepare('SELECT op FROM room_ops WHERE room_id = ? ORDER BY seq').all(info.id) as { op: string }[];
-    for (const r of rows) { this.ops.push(r.op); this.track(JSON.parse(r.op)); }
+    const snap = db.prepare('SELECT seq, ops FROM room_snapshots WHERE room_id = ?').get(info.id) as { seq: number; ops: string } | undefined;
+    if (snap) { this.snapSeq = snap.seq; this.snap = JSON.parse(snap.ops); }
+    const rows = db.prepare('SELECT seq, op FROM room_ops WHERE room_id = ? AND seq > ? ORDER BY seq').all(info.id, this.snapSeq) as { seq: number; op: string }[];
+    this.seq = rows.length ? rows[rows.length - 1].seq : this.snapSeq;
+    for (const r of rows) this.ops.push(r.op);
+    this.retrack();
+  }
+
+  private retrack() {
+    this.nodes.clear();
+    this.rootCount = 0;
+    for (const j of this.snap) this.track(JSON.parse(j));
+    for (const j of this.ops) this.track(JSON.parse(j));
+  }
+
+  /**
+   * Replaces the snapshot with one a client built at `seq`: ops that rebuild the canvas as it looked
+   * then. The tree it describes must match what the room knows, so nobody can hand themselves a layer.
+   */
+  takeSnapshot(userId: string, seq: number, ops: Op[]): string | null {
+    if (this.snapAsked?.userId !== userId) return 'Not asked.';
+    this.snapAsked = null;
+    if (!Number.isInteger(seq) || seq < this.snapSeq || seq > this.seq) return 'Out of date.';
+    if (!ops.every(validOp)) return 'Invalid snapshot.';
+    const seen = new Map<string, NodeInfo>();
+    for (const op of ops) {
+      if (op.t === 'layer.add') seen.set(op.layer.id, { kind: 'layer', owner: op.layer.owner, parent: op.parent });
+      else if (op.t === 'folder.add') seen.set(op.folder.id, { kind: 'folder', owner: op.folder.owner, parent: op.parent, user: op.folder.user });
+      else if (op.t !== 'tiles') return 'Invalid snapshot.';
+    }
+    // The tree at `seq`: what the room has now, minus structure that came after.
+    const want = new Map(this.nodes);
+    for (let i = this.ops.length - 1; i >= 0 && this.snapSeq + 1 + i > seq; i--) {
+      const op = JSON.parse(this.ops[i]) as Op;
+      if (op.t === 'layer.add') want.delete(op.layer.id);
+      else if (op.t === 'folder.add') want.delete(op.folder.id);
+      else if (op.t === 'layer.remove' || op.t === 'layer.merge' || op.t === 'folder.remove' || op.t === 'node.move') return 'Try again.';
+    }
+    if (seen.size !== want.size) return 'Invalid snapshot.';
+    for (const [id, n] of want) {
+      const s = seen.get(id);
+      if (!s || s.kind !== n.kind || s.owner !== n.owner || !!s.user !== !!n.user) return 'Invalid snapshot.';
+    }
+    const json = ops.map((op) => JSON.stringify(op));
+    db.prepare('INSERT OR REPLACE INTO room_snapshots (room_id, seq, ops) VALUES (?, ?, ?)').run(this.info.id, seq, JSON.stringify(json));
+    this.ops = this.ops.slice(seq - this.snapSeq);
+    this.snap = json;
+    this.snapSeq = seq;
+    this.retrack();
+    return null;
+  }
+
+  /** Asks the owner (else a host, else anyone drawing) for a snapshot once enough has happened since the last. */
+  private maybeAskSnapshot() {
+    const now = Date.now();
+    if (this.ops.length < config.snapshotEvery || (this.snapAsked && now - this.snapAsked.at < SNAPSHOT_WAIT_MS)) return;
+    const drawing = [...this.clients].filter((c) => !c.spectator && c.ws.readyState === 1);
+    const pick = drawing.find((c) => c.userId === this.info.ownerId) ?? drawing.find((c) => this.isHost(c.userId)) ?? drawing[0];
+    if (!pick) return;
+    this.snapAsked = { userId: pick.userId, at: now };
+    this.send(pick, { type: 'snapshot-request' });
+  }
+
+  /** The whole edit log, oldest first, for the hosts' log view; the pixels stay out. */
+  log(): { entries: LogEntry[]; people: PublicProfile[] } {
+    flushOps();
+    // `layer` / `folder` hold an id, except in the ops that add one, where they hold the node itself.
+    const node = (k: string) => `CASE WHEN json_type(op, '$.${k}') = 'object' THEN json_extract(op, '$.${k}.id') ELSE json_extract(op, '$.${k}') END`;
+    const entries = db.prepare(`SELECT seq, json_extract(op, '$.id') AS id, json_extract(op, '$.t') AS t, json_extract(op, '$.author') AS author,
+      json_extract(op, '$.at') AS at, ${node('layer')} AS layer, ${node('folder')} AS folder FROM room_ops WHERE room_id = ? ORDER BY seq`).all(this.info.id) as unknown as LogEntry[];
+    const people = [...new Set(entries.map((e) => e.author))].map(getUser).filter((u): u is UserRow => !!u).map(publicProfile);
+    return { entries, people };
+  }
+
+  /**
+   * Every op up to `upto` that shaped `layer`, or all of them when `layer` is empty. `complete` is
+   * false when a layer's pixels also came from another layer (a merge or a copy), so only the full log tells.
+   */
+  history(upto: number, layer: string | null): { ops: Op[]; complete: boolean } {
+    flushOps();
+    const rows = layer
+      ? db.prepare(`SELECT op FROM room_ops WHERE room_id = ? AND seq <= ? AND (json_extract(op, '$.layer') = ? OR json_extract(op, '$.layer.id') = ?) ORDER BY seq`).all(this.info.id, upto, layer, layer) as { op: string }[]
+      : db.prepare('SELECT op FROM room_ops WHERE room_id = ? AND seq <= ? ORDER BY seq').all(this.info.id, upto) as { op: string }[];
+    const ops = rows.map((r) => JSON.parse(r.op) as Op);
+    const mixed = !!layer && (ops.some((op) => op.t === 'layer.add' && !!op.copyOf)
+      || !!db.prepare(`SELECT 1 FROM room_ops WHERE room_id = ? AND seq <= ? AND json_extract(op, '$.t') = 'layer.merge' LIMIT 1`).get(this.info.id, upto));
+    return { ops, complete: !mixed };
   }
 
   role(userId: string): Role {
@@ -199,8 +290,8 @@ export class Room {
       });
     }
     const members = this.members();
-    const head = JSON.stringify({ type: 'welcome', room: this.infoFor(c), you: user.id, spectator, members, chat: this.chat.slice(-50) });
-    ws.send(`${head.slice(0, -1)},"ops":[${this.ops.join(',')}]}`);
+    const head = JSON.stringify({ type: 'welcome', room: this.infoFor(c), you: user.id, spectator, members, chat: this.chat.slice(-50), seq: this.seq });
+    ws.send(`${head.slice(0, -1)},"ops":[${[...this.snap, ...this.ops].join(',')}]}`);
     const pendingLeave = this.leaving.get(user.id);
     if (pendingLeave) { clearTimeout(pendingLeave); this.leaving.delete(user.id); }
     else if (firstConnection) { this.systemChat(`${user.display_name} ${spectator ? 'is watching' : 'joined'}`); notifyFriends(user.id); }
@@ -269,6 +360,7 @@ export class Room {
         const why = this.check(c.userId, op);
         if (why) { this.send(c, { type: 'reject', opId: String((op as { id?: unknown })?.id ?? ''), reason: why }); return; }
         op.author = c.userId;
+        op.at = Date.now();
         if (op.t === 'layer.add') op.layer.owner = c.userId;
         if (op.t === 'folder.add') { op.folder.owner = c.userId; delete op.folder.user; }
         this.commit(op, c);
@@ -413,12 +505,14 @@ export class Room {
     }
     const json = JSON.stringify(op);
     this.ops.push(json);
-    if (!this.seq) this.seq = (db.prepare('SELECT max(seq) AS s FROM room_ops WHERE room_id = ?').get(this.info.id) as { s: number | null }).s ?? 0;
+    const seq = ++this.seq;
     // Relay first; the write joins a batch that goes to disk in one transaction a moment later.
-    this.broadcastRaw(`{"type":"op","op":${json},"from":${JSON.stringify(from?.userId ?? 'server')}}`, from);
-    queueOp(this.info.id, ++this.seq, json);
+    this.broadcastRaw(`{"type":"op","op":${json},"from":${JSON.stringify(from?.userId ?? 'server')},"seq":${seq}}`, from);
+    if (from) this.send(from, { type: 'ack', id: op.id, seq });
+    queueOp(this.info.id, seq, json);
     const now = Date.now();
     if (now - this.savedAt > 5000) { this.savedAt = now; updatedAt.run(now, this.info.id); }
+    this.maybeAskSnapshot();
   }
 
   private pushChat(m: ChatMsg) {
@@ -549,5 +643,6 @@ export function deleteRoom(id: string) {
   rooms.get(id)?.close();
   rooms.delete(id);
   db.prepare('DELETE FROM room_ops WHERE room_id = ?').run(id);
+  db.prepare('DELETE FROM room_snapshots WHERE room_id = ?').run(id);
   db.prepare('DELETE FROM rooms WHERE id = ?').run(id);
 }

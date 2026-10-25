@@ -1,6 +1,6 @@
 import type { DocSettings, Op } from '../core/model';
 import type { ImageCrop, MyProfile, Presence, PresenceMode, PublicProfile } from '../shared/profile';
-import type { ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
+import type { LogEntry, ProjectInfo, RoomInfo, ShareSettings } from '../shared/protocol';
 import type { Notice } from '../shared/notices';
 import type { SiteNotice } from '../shared/site';
 import type { Prefs } from '../shared/prefs';
@@ -32,6 +32,9 @@ export type LiveEvent =
 export interface FriendsList { friends: Friend[]; incoming: PublicProfile[]; outgoing: PublicProfile[] }
 
 export const api = {
+  roomLog: (room: string) => call<{ entries: LogEntry[]; people: PublicProfile[] }>('GET', `/api/rooms/${room}/log`),
+  roomHistory: (room: string, upto: number, layer: string | null) => call<{ ops: Op[]; complete: boolean }>('GET', `/api/rooms/${room}/history?upto=${upto}${layer ? '&layer=' + encodeURIComponent(layer) : ''}`),
+  roomSnapshot: (room: string, seq: number, ops: Op[]) => call<{ ok: true }>('POST', `/api/rooms/${room}/snapshot`, { seq, ops }),
   async config(): Promise<ServerConfig | null> {
     try {
       const res = await fetch('/api/config', { credentials: 'same-origin' });

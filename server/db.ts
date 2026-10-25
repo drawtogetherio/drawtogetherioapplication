@@ -50,6 +50,12 @@ db.exec(`
     op TEXT NOT NULL,
     PRIMARY KEY (room_id, seq)
   );
+  -- The canvas as it looked after op seq, so joining replays only what came after.
+  CREATE TABLE IF NOT EXISTS room_snapshots (
+    room_id TEXT PRIMARY KEY,
+    seq INTEGER NOT NULL,
+    ops TEXT NOT NULL
+  );
 `);
 
 // Columns added after the first release.

@@ -10,6 +10,7 @@ import {
 } from './db.ts';
 import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare } from './rooms.ts';
 import { validOp } from './validate.ts';
+import type { Op } from '../src/core/model.ts';
 import { HiveFileError, canvasOps, unzip } from '../src/shared/hivecanvas.ts';
 import { FriendError, acceptFriend, areFriends, blockUser, forget, listBlocked, listFriends, notifyFriends, removeFriend, requestFriend, touch, unblockUser } from './social.ts';
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
@@ -550,6 +551,24 @@ async function route(req: Req, res: Res) {
     sendTo(to, { type: 'invite', room: { id: r.info.id, name: r.info.name }, from: { id: u.id, displayName: u.display_name } });
     notify(to, 'invite', `${u.display_name} invited you to ${r.info.name}`, { room: { id: r.info.id, name: r.info.name }, from: u.id }, `invite-${r.info.id}-${u.id}`);
     return json(res, 200, { ok: true });
+  }
+  // ---- Hosts: the edit log, a layer's history, and snapshots for fast joins ----
+  mm = /^\/api\/rooms\/([a-z0-9]+)\/(log|history|snapshot)$/.exec(p);
+  if (mm) {
+    const u = requireUser(req);
+    const r = getRoom(mm[1]);
+    if (!r) throw new HttpError(404, 'That canvas doesn’t exist.');
+    if (mm[2] === 'snapshot' && m === 'POST') {
+      const b = await jsonBody(req, 96 * 1024 * 1024);
+      const ops = Array.isArray(b.ops) ? b.ops as Op[] : [];
+      if (ops.length > 20_000) throw new HttpError(400, 'Invalid snapshot.');
+      const why = r.takeSnapshot(u.id, Number(b.seq), ops);
+      if (why) throw new HttpError(400, why);
+      return json(res, 200, { ok: true });
+    }
+    if (!r.isHost(u.id)) throw new HttpError(403, 'Only hosts can see the edit log.');
+    if (mm[2] === 'log' && m === 'GET') return json(res, 200, r.log());
+    if (mm[2] === 'history' && m === 'GET') return json(res, 200, r.history(Number(url.searchParams.get('upto') ?? 0), url.searchParams.get('layer')));
   }
   mm = /^\/api\/rooms\/([a-z0-9]+)$/.exec(p);
   if (mm && m === 'PATCH') {

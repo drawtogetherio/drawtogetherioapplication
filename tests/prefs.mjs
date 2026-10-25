@@ -49,8 +49,16 @@ check(await banner.isHidden(), 'it stays closed after a reload');
 // ---- Groups ----
 await openPrefs();
 const groups = await page.locator('.pref-group').evaluateAll((els) => els.map((e) => e.textContent));
-check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Shortcuts,About', 'groups down the left: appearance, layout, canvas, pressure, shortcuts, about');
+check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Performance,Shortcuts,About', 'groups down the left: appearance, layout, canvas, pressure, performance, shortcuts, about');
 check((await page.locator('.pref-page h3').textContent()) === 'Appearance', 'opens on appearance');
+
+// ---- Performance ----
+await group('Performance');
+await page.locator('.segmented button', { hasText: 'every 5s' }).click();
+check(await page.evaluate(() => window.doodlehive.ed.prefs.remoteEvery === 5), 'others’ edits can land every 5 s');
+await page.locator('.switch-row', { hasText: 'as they draw' }).locator('input').click();
+check(await page.evaluate(() => window.doodlehive.ed.prefs.showLive === false), 'live strokes can be turned off');
+await group('Appearance');
 
 // ---- Appearance ----
 await page.locator('.theme-swatch[aria-label^="Lavender"]').click();

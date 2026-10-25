@@ -467,6 +467,23 @@ function rectOfKeys(keys: string[]): Rect | null {
   return r;
 }
 
+/** Characters of PNG one `tiles` op may carry on the wire; bigger edits go in pieces. */
+const WIRE_CHARS = 4_000_000;
+
+/** The op as sent to the room: a big `tiles` op is split so each piece fits the room's limits. */
+export function wireOps(op: Op): Op[] {
+  const w = toWire(op);
+  if (w.t !== 'tiles') return [w];
+  const out: Op[] = [];
+  let tiles: Record<string, string | null> = {}, n = 0, chars = 0;
+  for (const [k, v] of Object.entries(w.tiles)) {
+    if (n && (n >= TILES_PER_OP || chars + (v?.length ?? 0) > WIRE_CHARS)) { out.push({ ...w, id: out.length ? uid() : w.id, tiles }); tiles = {}; n = 0; chars = 0; }
+    tiles[k] = v; n++; chars += v?.length ?? 0;
+  }
+  out.push({ ...w, id: out.length ? uid() : w.id, tiles });
+  return out;
+}
+
 export function toWire(op: Op): Op {
   if (op.t !== 'tiles' || !op.img) return op;
   const tiles: Record<string, string | null> = {};

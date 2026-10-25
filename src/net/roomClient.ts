@@ -17,6 +17,8 @@ export type RoomEvent =
   | { kind: 'status' }
   | { kind: 'room' }
   | { kind: 'requests' }
+  | { kind: 'reject'; opId: string; reason: string }
+  | { kind: 'snapshot' }
   | { kind: 'error'; message: string };
 
 const YIELD_MS = 24;
@@ -36,6 +38,16 @@ export class RoomClient {
   liveBuffer: (op: Op) => TiledSurface | undefined = () => undefined;
   /** While true, other people's edits wait (e.g. mid-stroke), so the local pen never stutters. */
   hold: () => boolean = () => false;
+  /** Held for good reason: a snapshot or a rebuild is reading the canvas. */
+  freeze = false;
+  /** Other people's edits land in batches this far apart (0: as they come). */
+  batchMs = 0;
+  /** The room's order number of the last edit applied here; own edits count once the server places them. */
+  lastSeq = 0;
+  /** Own edits the server hasn't placed yet. */
+  inflight = 0;
+  private gateAt = 0;
+  private gateP: Promise<void> | null = null;
 
   private ws: WebSocket | null = null;
   private queue: Promise<void> = Promise.resolve();
@@ -101,6 +113,8 @@ export class RoomClient {
             }
           }
           this.doc = doc;
+          this.lastSeq = m.seq;
+          this.inflight = 0;
           this.status = 'open';
           const first = !this.everReady;
           this.everReady = true;
@@ -112,16 +126,22 @@ export class RoomClient {
       case 'op':
         this.queue = this.queue.then(async () => {
           if (!this.doc) return;
-          while (this.hold()) await new Promise((r) => setTimeout(r, 50));
+          while (this.hold() || this.freeze) await new Promise((r) => setTimeout(r, 50));
+          if (this.batchMs) await this.gate();
           await this.doc.prepare(m.op);
           this.doc.apply(m.op, { record: false, buffer: this.liveBuffer(m.op) });
+          this.lastSeq = m.seq;
           this.emit({ kind: 'op', op: m.op, from: m.from });
         });
         return;
-      case 'reject':
-        this.emit({ kind: 'error', message: m.reason });
-        this.resync();
+      case 'ack':
+        this.queue = this.queue.then(() => { this.lastSeq = m.seq; this.inflight = Math.max(0, this.inflight - 1); });
         return;
+      case 'reject':
+        this.inflight = Math.max(0, this.inflight - 1);
+        this.emit({ kind: 'reject', opId: m.opId, reason: m.reason });
+        return;
+      case 'snapshot-request': this.emit({ kind: 'snapshot' }); return;
       case 'room':
         this.info = m.room;
         this.emit({ kind: 'room' });
@@ -173,7 +193,24 @@ export class RoomClient {
 
   admit(user: string, allow: boolean) { this.send({ type: 'admit', user, allow }); }
 
-  sendOp(op: Op) { this.send({ type: 'op', op: toWire(op) }); }
+  sendOp(op: Op) { this.inflight++; this.send({ type: 'op', op: toWire(op) }); }
+
+  /** Edits wait for the end of the current batch window, then land together. */
+  private gate(): Promise<void> {
+    const now = Date.now();
+    if (this.gateAt <= now) this.gateAt = now + this.batchMs;
+    return this.gateP ??= new Promise((r) => setTimeout(() => { this.gateP = null; r(); }, this.gateAt - now));
+  }
+
+  /** Resolves once everything the room sent is applied and every own edit is placed: the canvas equals the room at `lastSeq`. */
+  async settled() {
+    for (;;) {
+      const q = this.queue;
+      await q;
+      if (this.queue === q && !this.inflight && !this.hold() && !this.freeze) return;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
 
   /** Our state diverged (an edit was refused): rebuild from the server. */
   resync() { this.ws?.close(); }

@@ -375,6 +375,7 @@ export class Session {
     const room = new RoomClient(id, watch);
     this.ed.room = room;
     room.hold = () => !!this.ed.view.live;
+    room.batchMs = this.ed.prefs.remoteEvery * 1000;
     this.app.roomUI.attach(room);
     this.app.refreshRoom();
     let waitClose: (() => void) | null = null;
@@ -403,6 +404,12 @@ export class Session {
         this.scheduleThumb();
         this.local?.push(e.op);
         this.local?.thumb(this.ed.doc);
+      } else if (e.kind === 'reject') {
+        // Taking the edit back here keeps everyone in step; only when that's impossible is the canvas reloaded.
+        if (this.ed.rollback(e.opId)) this.app.toast(e.reason);
+        else { this.app.toast(`${e.reason} Reloading the canvas.`); room.resync(); }
+      } else if (e.kind === 'snapshot') {
+        this.sendSnapshot(room);
       } else if (e.kind === 'error') {
         if (e.message === PRIVATE_ROOM_MSG) { location.replace('/404'); return; }
         const ended = room.status === 'closed';
@@ -414,6 +421,24 @@ export class Session {
         this.app.refreshRoom();
       }
     });
+  }
+
+  /**
+   * The room asked for the canvas as it looks now, so people joining later replay a snapshot instead
+   * of every stroke. Pixels are read in one go once the canvas is exactly the room's state at `lastSeq`
+   * (nothing held, nothing of ours in flight), then encoded in slices so the pen stays smooth.
+   */
+  private async sendSnapshot(room: RoomClient) {
+    await room.settled();
+    if (this.ed.room !== room || room.doc !== this.ed.doc) return;
+    const seq = room.lastSeq, ops = this.ed.doc.snapshot();
+    const wire: Op[] = [];
+    let t = performance.now();
+    for (const op of ops) {
+      wire.push(toWire(op));
+      if (performance.now() - t > 30) { await new Promise((r) => setTimeout(r)); t = performance.now(); }
+    }
+    await api.roomSnapshot(room.id, seq, wire).catch(() => {});
   }
 
   /** Server thumbnails, for canvases kept there. */

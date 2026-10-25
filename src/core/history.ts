@@ -35,6 +35,8 @@ export class History {
   }
 
   clear() { this.done = []; this.undone = []; this.onChange(); }
+  /** Forgets one entry wherever it sits, e.g. an edit the room refused. */
+  drop(e: HistoryEntry) { this.done = this.done.filter((x) => x !== e); this.undone = this.undone.filter((x) => x !== e); this.onChange(); }
   get canUndo() { return this.done.length > 0; }
   get canRedo() { return this.undone.length > 0; }
 }

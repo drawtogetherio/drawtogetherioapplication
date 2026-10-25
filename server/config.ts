@@ -59,5 +59,7 @@ export const config = {
   staticDir: env.STATIC_DIR || path.join(here, '..', 'dist'),
   /** How long a free host's room waits for them to come back before it closes. */
   ephemeralGraceMs: Number(env.EPHEMERAL_GRACE_MS) || 2 * 60_000,
+  /** Edits since the last snapshot before a client is asked for a new one. */
+  snapshotEvery: Number(env.SNAPSHOT_EVERY) || 400,
   secureCookies: publicUrl.startsWith('https://'),
 };

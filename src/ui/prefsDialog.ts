@@ -1,4 +1,4 @@
-import { DEFAULT_KEYS, KEY_ACTIONS, KeyAction, MODES, Mode, PANELS, actionFor, keyOf } from '../shared/prefs';
+import { DEFAULT_KEYS, KEY_ACTIONS, KeyAction, MODES, Mode, PANELS, REMOTE_EVERY, actionFor, keyOf } from '../shared/prefs';
 import { DEFAULT_CURVE } from '../shared/curve';
 import type { App } from './app';
 import { curveEditor } from './curveEditor';
@@ -8,7 +8,7 @@ import { Slider } from './slider';
 import { native } from '../io/native';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
-const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Shortcuts', 'About'] as const;
+const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'About'] as const;
 
 export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'Appearance') {
   const ed = app.ed, p = ed.prefs;
@@ -20,7 +20,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     box.addEventListener('change', () => { set(box.checked); changed(); });
     return h('label.switch-row', {}, h('span', {}, label), box);
   };
-  const segmented = <T extends string>(items: T[], label: (v: T) => string, get: () => T, set: (v: T) => void) => {
+  const segmented = <T extends string | number>(items: T[], label: (v: T) => string, get: () => T, set: (v: T) => void) => {
     const el = h('div.segmented');
     const render = () => {
       clear(el);
@@ -111,13 +111,19 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       h('button.btn.small', { type: 'button', onclick: () => { p.keys = {}; changed(); renderKeys(); } }, 'Reset'))];
   };
 
+  const performance = () => [
+    h('small.muted', {}, 'For slow devices in busy rooms. Your own drawing is never delayed.'),
+    toggle('Show others’ strokes as they draw', () => p.showLive, (v) => { p.showLive = v; }),
+    row('Others’ edits land', segmented([...REMOTE_EVERY], (v) => (v ? `every ${v}s` : 'at once'), () => p.remoteEvery, (v) => { p.remoteEvery = v; })),
+  ];
+
   const about = () => {
     const rows = [row('Doodlehive', h('span.muted', {}, `v${__APP_VERSION__}`))];
     if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
     return rows;
   };
 
-  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Shortcuts: shortcuts, About: about };
+  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Performance: performance, Shortcuts: shortcuts, About: about };
   const page = h('div.pref-page');
   const nav = h('nav.pref-nav', { 'aria-label': 'Preference groups' });
   const show = (g: (typeof GROUPS)[number]) => {

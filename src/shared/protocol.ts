@@ -78,10 +78,17 @@ export type ClientMsg =
   | { type: 'admit'; user: string; allow: boolean }
   | { type: 'count'; what: 'undo' | 'redo' };
 
+/** One row of a room's edit log: who did what, when, without the edit's pixels. */
+export interface LogEntry { seq: number; id: string; t: Op['t']; author: string; at: number | null; layer: string | null; folder: string | null }
+
 export type ServerMsg =
-  | { type: 'welcome'; room: RoomInfo; you: string; spectator: boolean; members: Member[]; ops: Op[]; chat: ChatMsg[] }
-  | { type: 'op'; op: Op; from: string }
+  | { type: 'welcome'; room: RoomInfo; you: string; spectator: boolean; members: Member[]; ops: Op[]; chat: ChatMsg[]; seq: number }
+  | { type: 'op'; op: Op; from: string; seq: number }
+  /** Your own edit's place in the room's order. */
+  | { type: 'ack'; id: string; seq: number }
   | { type: 'reject'; opId: string; reason: string }
+  /** The server would like this client to upload the canvas as it looks now. */
+  | { type: 'snapshot-request' }
   | { type: 'members'; members: Member[] }
   | { type: 'room'; room: RoomInfo }
   | { type: 'live'; from: string; live: LiveStroke }

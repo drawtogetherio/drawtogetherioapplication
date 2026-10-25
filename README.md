@@ -275,6 +275,23 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   go when they commit. While your pen is down, others' previews catch up ten times a second and their
   committed edits wait (`RoomClient.hold`), so a big fill or effect never lands mid-stroke. The brush
   tool doesn't send cursor positions while streaming a stroke (the live points already say where it is).
+- Fast joins (v0.28). Every `config.snapshotEvery` (400) edits the server asks one client (the owner,
+  else a host, else anyone drawing) for a snapshot: the canvas as ops (`DrawDoc.snapshot`), uploaded
+  to `/api/rooms/:id/snapshot` with the room's `seq` it stands for. The server checks the tree it
+  describes matches what it knows (no handing yourself a layer), stores it in `room_snapshots`, and
+  from then on a welcome is the snapshot plus the edits after it. `room_ops` keeps the full history.
+  Every `op` message and the sender's `ack` carry `seq`, so a client knows exactly which state it
+  holds (`RoomClient.lastSeq`, `settled()`).
+- A refused edit is taken back locally (`Editor.rollback`, from the inverse kept for recent sends)
+  instead of reconnecting and replaying the room; only an edit too old to roll back reloads.
+  Big undo pixels go out as several `tiles` ops (`wireOps`), each within the room's limits.
+- Hosts get an **Edit log** (dock button): every edit by person, with a Remove on anything that
+  touched pixels. Removing rebuilds the layer from its history without that edit (`removeEdit`,
+  `/api/rooms/:id/history`), and sends the tiles that differ as an ordinary edit everyone gets
+  and the host can undo. Later edits on the layer stay. Ops carry `at`, set by the server.
+- Preferences → Performance: turn off others' strokes as they draw (only the bubble shows; the
+  finished stroke still lands), and have others' finished edits land in batches every 2, 5 or
+  10 s (`RoomClient.batchMs`). Your own drawing is never delayed.
 - Server limits on what a member can make everyone else paint: strokes are bounded by path length and
   length × size (`strokeFits`, shared with the brush tool, which splits long strokes well before the
   limit), live previews by points per second (600/s, burst 4000; a dropped preview still commits), and
@@ -390,6 +407,7 @@ node tests/smudge.mjs                         # smudge: drags paint, undo, selec
 DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
 DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
 DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete, site settings
+DB_PATH=... node tests/room.mjs               # start the server with SNAPSHOT_EVERY=5 so the snapshot check passes
 DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
 DB_PATH=... node tests/hivecanvas.mjs         # .hivecanvas export/open/move to server, log compaction, timelapse + video (HIVE_OPS=ops.jsonl adds a real canvas)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation

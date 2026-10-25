@@ -157,6 +157,11 @@ export class RoomUI {
         return;
       case 'live': {
         const l = e.live, key = e.from + ':' + l.stroke;
+        if (!ed.prefs.showLive) { // just the bubble; the finished stroke arrives as an edit
+          const n = l.pts.length;
+          if (n >= 3) { this.bubbles.set(e.from, { x: l.pts[n - 3], y: l.pts[n - 2], drawing: true, t: Date.now() }); ed.view.requestRender(); }
+          return;
+        }
         let s = this.strokes.get(key);
         if (!s) {
           const buffer = new TiledSurface();

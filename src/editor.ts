@@ -1,4 +1,4 @@
-import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, toWire } from './core/document';
+import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, wireOps } from './core/document';
 import { Point, Rect, selPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
 import { BrushPreset, DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
@@ -8,6 +8,7 @@ import type { RoomClient } from './net/roomClient';
 import type { MyProfile } from './shared/profile';
 import { userFolderId } from './shared/protocol';
 import type { ApplyOptions } from './core/document';
+import type { HistoryEntry } from './core/history';
 import type { TiledSurface } from './core/tiles';
 import { Prefs, cleanPrefs } from './shared/prefs';
 
@@ -218,32 +219,52 @@ export class Editor {
   run(ops: Op[], label = 'Edit', opts: ApplyOptions = {}) {
     if (this.readOnly) return;
     const inverse: Op[] = [];
+    const entry: HistoryEntry = { label, undo: inverse, redo: [], cost: 0 };
     ops.forEach((op, i) => {
       op.author = this.room?.you;
       const inv = this.doc.apply(op, i === 0 ? opts : {});
       if (!inv.length) return;
-      this.share(op);
+      this.share(op, inv, entry);
       inverse.unshift(...inv);
     });
-    if (inverse.length) this.doc.history.record({ label, undo: inverse, redo: [], cost: opsCost(inverse) });
+    entry.cost = opsCost(inverse);
+    if (inverse.length) this.doc.history.record(entry);
   }
 
   apply(op: Op, opts: ApplyOptions = {}) { this.run([op], op.t, opts); }
 
+  /** Recent edits sent to the room with what undoes them, in case the room refuses one. */
+  private sent = new Map<string, { inv: Op[]; entry: HistoryEntry }>();
+
   /** Send an op to the room and the device copy; undo's tile images are PNG-encoded once for both. */
-  private share(op: Op) {
+  private share(op: Op, inv: Op[], entry: HistoryEntry) {
     if (!this.room && !this.onOp) return;
-    const wire = toWire(op);
-    this.room?.send({ type: 'op', op: wire });
-    this.onOp?.(wire);
+    for (const wire of wireOps(op)) {
+      this.room?.sendOp(wire);
+      this.onOp?.(wire);
+      if (this.room) {
+        this.sent.set(wire.id, { inv, entry });
+        if (this.sent.size > 60) this.sent.delete(this.sent.keys().next().value!);
+      }
+    }
   }
 
-  private replay(ops: Op[]): Op[] {
+  /** The room refused an edit: take it back here, without a reconnect. False when it's too late. */
+  rollback(opId: string): boolean {
+    const s = this.sent.get(opId);
+    if (!s) return false;
+    this.sent.delete(opId);
+    for (const op of s.inv) this.doc.apply(op, { record: false });
+    this.doc.history.drop(s.entry);
+    return true;
+  }
+
+  private replay(ops: Op[], entry: HistoryEntry): Op[] {
     const inverse: Op[] = [];
     for (const op of ops) {
       const inv = this.doc.apply(op);
       if (!inv.length) continue;
-      this.share(op);
+      this.share(op, inv, entry);
       inverse.unshift(...inv);
     }
     return inverse;
@@ -255,7 +276,7 @@ export class Editor {
     const e = this.doc.history.takeUndo();
     if (!e) return;
     this.room?.send({ type: 'count', what: 'undo' });
-    e.redo = this.replay(e.undo);
+    e.redo = this.replay(e.undo, e);
     e.cost = opsCost(e.redo);
     this.doc.history.putUndone(e);
   }
@@ -266,7 +287,7 @@ export class Editor {
     const e = this.doc.history.takeRedo();
     if (!e) return;
     this.room?.send({ type: 'count', what: 'redo' });
-    e.undo = this.replay(e.redo);
+    e.undo = this.replay(e.redo, e);
     e.cost = opsCost(e.undo);
     this.doc.history.putDone(e);
   }

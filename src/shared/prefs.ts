@@ -48,6 +48,9 @@ export interface Prefs {
   showBubbles: boolean;
   /** A chime when someone @mentions you in chat. */
   chime: boolean;
+  /** Performance: paint other people's strokes as they draw, and how often their finished edits land (seconds, 0 = at once). */
+  showLive: boolean;
+  remoteEvery: number;
   pressureGamma: number;
   /** Advanced pressure: a curve through points instead of the exponent. */
   pressureMode: 'simple' | 'advanced';
@@ -72,8 +75,11 @@ export interface Prefs {
   panels: Record<PanelId, PanelState>;
 }
 
+/** Seconds between batches of other people's edits, as offered in Preferences. */
+export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
+
 export const DEFAULT_PREFS: Prefs = {
-  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
+  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
   fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
 };
 
@@ -123,6 +129,8 @@ export function cleanPrefs(raw: unknown): Prefs {
     hoverPreview: typeof r.hoverPreview === 'boolean' ? r.hoverPreview : DEFAULT_PREFS.hoverPreview,
     showBubbles: typeof r.showBubbles === 'boolean' ? r.showBubbles : DEFAULT_PREFS.showBubbles,
     chime: r.chime !== false,
+    showLive: r.showLive !== false,
+    remoteEvery: REMOTE_EVERY.includes(r.remoteEvery as number) ? r.remoteEvery as number : 0,
     pressureGamma: gamma >= 0.4 && gamma <= 2.5 ? gamma : DEFAULT_PREFS.pressureGamma,
     pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
