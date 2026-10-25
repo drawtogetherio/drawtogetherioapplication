@@ -164,10 +164,14 @@ function drawer(id: string) {
 
 // ---- Site: signup badge and the home screen message ----
 async function sitePage() {
-  const site = await call<SiteSettings>('GET', '/api/admin/site');
+  const [site, sync] = await Promise.all([call<SiteSettings>('GET', '/api/admin/site'), call<{ on: boolean; from: string | null; last: number | null; hours: number }>('GET', '/api/admin/sync')]);
   if (stale('Site')) return;
   const nt = site.notice;
-  page.innerHTML = `
+  page.innerHTML = `${sync.on ? `
+    <h2>Beta data</h2>
+    <p class="fine">A copy of ${esc(sync.from!)}, refreshed every ${sync.hours} hours. Last copied ${sync.last ? when(sync.last) : 'never'}.
+      Copying replaces everything on beta, including test rooms, and restarts it for a moment.</p>
+    <button class="btn small" id="sync-now">Copy live data now</button>` : ''}
     <h2>New accounts</h2>
     <label class="site-row"><input type="checkbox" id="early-badge" ${site.earlyBadge ? 'checked' : ''}> Every new account gets the ${esc(BADGES.early)} badge</label>
     <h2>Home screen message</h2>
@@ -179,6 +183,10 @@ async function sitePage() {
       <div class="notice-preview"><div class="site-notice"></div><div class="fake-home"><span></span><span></span></div></div>
       <button class="btn small primary" type="submit">Save</button>
     </form>`;
+  page.querySelector('#sync-now')?.addEventListener('click', async () => {
+    if (!confirm('Replace everything on beta with a fresh copy of live?')) return;
+    try { await call('POST', '/api/admin/sync'); say('Copying… beta restarts, reload in a minute'); } catch (ex) { failing(ex); }
+  });
   page.querySelector('#early-badge')!.addEventListener('change', async (e) => {
     try { await call('PATCH', '/api/admin/site', { earlyBadge: (e.target as HTMLInputElement).checked }); say('Saved'); } catch (ex) { failing(ex); }
   });

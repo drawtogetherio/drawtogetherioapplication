@@ -75,7 +75,7 @@ Copy its Client ID and Client Secret into the variables above. The campaign id i
 Active patrons who link their account in Edit profile get premium for as long as they stay patrons.
 
 ## Everyday use
-- **Update the site:** push to `main` (or merge a pull request). Railway builds and deploys it.
+- **Update the site:** merge `beta` into `main` with a pull request (see Beta site below). Railway builds and deploys it.
   If the build fails, the old version keeps running.
 - **Rollback:** Railway → Deployments → pick an earlier one → Redeploy.
 - **Logs:** Railway → the service → Deployments → View logs.
@@ -83,6 +83,80 @@ Active patrons who link their account in Edit profile get premium for as long as
   Without the dashboard: install the Railway CLI, run `railway link` once, then `railway ssh` and
   inside it `npm run admin -- premium SomeHandle 30` (or `forever` / `off`), or `npm run admin -- admin SomeHandle on`.
 - Deploys restart the server for a few seconds; people in a room reconnect on their own.
+
+## Pictures on Cloudflare R2 (optional, recommended)
+
+Profile pictures, animated pictures and banners can live on Cloudflare R2 instead of in the database.
+They then load from Cloudflare's network near each person, and the database stays small. Without the
+variables below, pictures stay in the database as before. Canvas thumbnails stay on the server,
+because private canvases' previews need a permission check.
+
+Cost: R2 storage is about $0.015 per GB a month, with the first 10 GB free and no download fees.
+
+One-time setup:
+1. Cloudflare → R2 → **Create bucket** `doodlehive-media`.
+2. Bucket → **Settings → Custom Domains → Connect Domain**: `media.doodlehive.net`. This makes the bucket
+   publicly readable at that address. Cloudflare adds the DNS record itself if doodlehive.net is on Cloudflare.
+3. R2 → **Manage API tokens → Create API token**: permission **Object Read & Write**, limited to
+   `doodlehive-media`. Copy the Access Key ID and Secret Access Key. The Account ID is on the R2 overview page.
+4. Railway variables, in **both** the production and beta environments:
+
+| Name | Value |
+| --- | --- |
+| `R2_ACCOUNT_ID` | your Cloudflare account id |
+| `R2_ACCESS_KEY_ID` | from the token |
+| `R2_SECRET_ACCESS_KEY` | from the token (keep it only here) |
+| `R2_MEDIA_BUCKET` | `doodlehive-media` |
+| `MEDIA_URL` | `https://media.doodlehive.net` |
+
+Beta uses the same bucket and puts its pictures under `beta/` on its own (set `MEDIA_PREFIX` to
+change that). Each site only ever deletes pictures it made itself, so a beta running on a copy of the
+live data can't remove live pictures.
+
+On the first start with R2 set up, the server moves the pictures already in the database to R2 in the
+background (the deploy log says `Moved N pictures to R2.`). Old picture links keep working by
+redirecting to R2.
+
+## Beta site (beta.doodlehive.net)
+
+A second copy of the site for trying changes before they go live. It runs from the `beta` branch on
+a **copy** of the live database, so your real accounts and canvases are there, but nothing done on beta
+ever reaches doodlehive.net. Pages show a small
+**BETA** tag in the bottom-left corner and tell search engines not to index them.
+
+How changes move:
+1. Work lands on `beta` first. Every push to `beta` redeploys beta.doodlehive.net.
+2. Try it there.
+3. When it's good, open a pull request from `beta` into `main` and merge it. That deploys doodlehive.net.
+   Hotfixes that skip beta should be merged back into `beta` afterwards so the two don't drift.
+
+One-time setup (about 10 minutes):
+1. Railway → the Doodlehive project → environment switcher at the top (it says **production**) →
+   **New Environment** → name it `beta` → **Duplicate** production. Railway copies the service and its
+   variables. The server knows it's beta when the environment is called `beta`, `PUBLIC_URL` starts with
+   `https://beta.`, or `BETA=1` is set. The deploy log then says `(beta)` on its first line.
+2. In the `beta` environment, open the service → **Settings → Source** and set the branch to `beta`.
+3. Check it has its own volume mounted at `/data` (add one if the copy didn't). Don't share production's.
+4. **Variables:** set `PUBLIC_URL` to `https://beta.doodlehive.net`. Leave out `DOWNLOAD_*` and
+   `PATREON_*` unless you want to test those. Optional: `ADMIN_HANDLES=yourhandle` so you're admin on beta.
+5. **Settings → Networking → Custom Domain:** add `beta.doodlehive.net`. At your DNS provider add the
+   `CNAME` record Railway shows (name `beta`, plus the `TXT` record if it asks for one). If the DNS is on
+   Cloudflare, leave the record **DNS only** (grey cloud) until Railway shows the domain as active.
+6. Discord developer portal → the Doodlehive app → **OAuth2 → Redirects:** add
+   `https://beta.doodlehive.net/auth/discord/callback`. The same app and secret work for both sites.
+7. **Live data on beta:** make a long random secret (for example `openssl rand -hex 32` in a terminal).
+   Add it as `SYNC_SECRET` in **both** environments. In beta only, also add `SYNC_FROM=https://doodlehive.net`.
+8. Click **Deploy** on the beta service (or push to `beta`), then open https://beta.doodlehive.net.
+
+How the copy works:
+- Beta copies live when it starts and its copy is more than a day old (`SYNC_HOURS` changes that), and
+  restarts itself once a day at a quiet moment (nobody connected) to refresh. Deploys within the day keep
+  beta's data.
+- **Copy now:** beta's admin page → **Site → Beta data → Copy live data now**. Beta restarts with a fresh copy.
+- Every refresh replaces everything on beta, including rooms made there.
+- The copy leaves out logins and Patreon tokens, so you sign in to beta again (same Discord account,
+  same profile). Only beta ever replaces its database: the live site ignores `SYNC_FROM`, and hands its
+  data only to a request carrying `SYNC_SECRET`.
 
 ## Limits to know about
 - One server instance holds all live rooms. That covers a lot of people drawing at once; going past

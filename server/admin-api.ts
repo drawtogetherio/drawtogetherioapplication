@@ -3,9 +3,12 @@ import { db, getSite, getUser, isAdmin, publicProfile, setSite, USER_COLS, UserR
 import { HttpError, Req, Res, json, jsonBody } from './http.ts';
 import { deleteRoom, disconnectUser, liveRooms } from './rooms.ts';
 import { closeStreams } from './live.ts';
+import { deleteMedia } from './media.ts';
 import { forget, onlineIds } from './social.ts';
 import { readStats } from './stats.ts';
 import { sweep } from './sweep.ts';
+import { askForSync, lastSync } from './sync.ts';
+import { config } from './config.ts';
 import { cleanBadges, sanitizeDisplayName, validateDisplayName } from '../src/shared/profile.ts';
 
 // Admin-only API under /api/admin. Addresses are kept in memory per signed-in person so an admin can
@@ -85,6 +88,7 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
       db.prepare('DELETE FROM friendships WHERE user_a = ? OR user_b = ?').run(u.id, u.id);
       db.prepare('DELETE FROM notices WHERE user_id = ?').run(u.id);
       db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+      deleteMedia(u.avatar_key, u.avatar_anim_key, u.banner_key);
       log(me, 'delete', '@' + u.handle);
       return json(res, 200, { ok: true });
     }
@@ -107,7 +111,7 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
       log(me, 'rename', '@' + u.handle);
     }
     if (b.clearStatus) { set(`status = ''`); log(me, 'clear status', '@' + u.handle); }
-    if (b.removeAvatar) { set('avatar = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_version = avatar_version + 1'); log(me, 'remove avatar', '@' + u.handle); }
+    if (b.removeAvatar) { set('avatar = NULL, avatar_key = NULL, avatar_type = NULL, avatar_anim = NULL, avatar_anim_key = NULL, avatar_version = avatar_version + 1'); deleteMedia(u.avatar_key, u.avatar_anim_key); log(me, 'remove avatar', '@' + u.handle); }
     if (b.admin !== undefined) {
       if (self) throw new HttpError(400, 'You can’t change your own admin access.');
       if (u.provider === 'guest') throw new HttpError(400, 'Guests can’t be admins.');
@@ -152,6 +156,15 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
     const site = setSite(b);
     log(me, `site: early badge ${site.earlyBadge ? 'on' : 'off'}, notice ${site.notice.on ? 'on' : 'off'}`);
     return json(res, 200, site);
+  }
+  if (p === '/api/admin/sync' && m === 'GET') return json(res, 200, { on: !!(config.sync.from && config.sync.secret), from: config.sync.from, last: lastSync(), hours: config.sync.hours });
+  if (p === '/api/admin/sync' && m === 'POST') {
+    if (!config.sync.from || !config.sync.secret) throw new HttpError(400, 'Copying live data is only set up on beta.');
+    askForSync();
+    log(me, 'copy live data');
+    json(res, 200, { ok: true });
+    setTimeout(() => process.kill(process.pid, 'SIGTERM'), 500);
+    return;
   }
   if (p === '/api/admin/sweep' && m === 'POST') { const r = sweep(); log(me, `sweep: ${r.guests} guests`); return json(res, 200, r); }
 

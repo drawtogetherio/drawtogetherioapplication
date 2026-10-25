@@ -414,6 +414,8 @@ node tests/security.mjs                       # cross-site requests, rate limits
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback
 DB_PATH=... node tests/pins.mjs               # pinned canvases: limits, ownership, public thumbnails, picker, lightbox
 DB_PATH=... node tests/profile.mjs            # profile dialog: premium states, GIF picture with crop, banner, colour/gradient picker
+node tests/media.mjs                          # pictures on R2 against a signature-checking mock: upload, replace, remove, move at startup, beta prefix (starts its own servers)
+node tests/sync.mjs                           # beta on a copy of live: secret, scrubbed sessions/tokens, daily refresh, admin copy-now (starts its own servers)
 node tests/patreon.mjs                        # Patreon linking against a mock (server needs PATREON_CLIENT_ID=test-client PATREON_CLIENT_SECRET=test-secret PATREON_CAMPAIGN_ID=c1 PATREON_API=http://localhost:8799)
 ```
 
