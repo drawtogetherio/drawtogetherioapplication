@@ -2,6 +2,9 @@ import { clamp } from '../core/geom';
 import { hexToRgb } from '../engine/brush';
 import type { Editor } from '../editor';
 import { h } from './dom';
+import { icon } from './icons';
+import { HARMONIES, Harmony, MAX_PALETTE_COLORS, Palette, harmonyColors, importPaletteFile } from '../shared/palettes';
+import { textDialog } from './dialogs';
 
 /** Wheel geometry as fractions of the wrap: the ring's inner radius and the side of the square inside it (matches .wheel .cp-sv). */
 const INNER = 0.78, SQUARE = 0.53;
@@ -51,6 +54,11 @@ export class ColorPicker {
   private current: HTMLElement;
   private previous: HTMLElement;
   private recent: HTMLElement;
+  private palette: HTMLElement;
+  private paletteSel: HTMLSelectElement;
+  private paletteTools: HTMLElement;
+  private harmony: HTMLElement;
+  private harmonyMode: Harmony = 'off';
   private internal = false;
 
   constructor(private ed: Editor) {
@@ -62,13 +70,32 @@ export class ColorPicker {
     this.current = h('div.cp-swatch-big');
     this.previous = h('div.cp-swatch-big', { title: 'Previous colour' });
     this.recent = h('div.cp-swatches');
-    const palette = h('div.cp-swatches');
-    for (const c of PALETTE) palette.append(this.swatch(c));
+    this.palette = h('div.cp-swatches');
+    this.paletteSel = h('select.cp-palette-sel', { 'aria-label': 'Palette' });
+    this.paletteSel.addEventListener('change', () => { ed.prefs.palette = this.paletteSel.value; ed.emit('prefs'); this.renderPalette(); });
+    const tool = (name: string, title: string, fn: () => void) => h('button.icon-btn.small', { type: 'button', title, 'aria-label': title, html: icon(name, 16), onclick: fn });
+    this.paletteTools = h('span.cp-palette-tools', {},
+      tool('plus', 'Add the current colour', () => this.addToPalette()),
+      tool('file', 'Import a palette (.aco, .ase, .swatches, .gpl, .txt)', () => this.importPalette()),
+      tool('rename', 'Rename palette', () => this.renamePalette()),
+      tool('trash', 'Delete palette', () => this.deletePalette()),
+    );
+    this.harmony = h('div.cp-swatches');
+    const harmonySeg = h('div.segmented.cp-harmony');
+    for (const [id, label] of HARMONIES) harmonySeg.append(h('button', { type: 'button', class: id === this.harmonyMode ? 'active' : '', onclick: () => {
+      this.harmonyMode = id;
+      for (const b of harmonySeg.children) b.classList.toggle('active', b.textContent === label);
+      this.renderHarmony();
+    } }, label));
 
     this.ring = h('canvas.cp-ring', { width: 320, height: 320 });
     this.svWrap = h('div.cp-svwrap', {}, this.ring, this.sv, this.svThumb);
     this.pickerEl = h('div.cp-main', {}, this.svWrap, this.hueBar, h('div.cp-row', {}, h('div.cp-compare', {}, this.previous, this.current), this.hex));
-    this.swatchesEl = h('div.cp-swatches-wrap', {}, h('div.cp-section', {}, 'Palette'), palette, h('div.cp-section', {}, 'Recent'), this.recent);
+    this.swatchesEl = h('div.cp-swatches-wrap', {},
+      h('div.cp-section.cp-palette-head', {}, this.paletteSel, this.paletteTools), this.palette,
+      h('div.cp-section', {}, 'Harmony'), harmonySeg, this.harmony,
+      h('div.cp-section', {}, 'Recent'), this.recent);
+    this.renderPalette();
     this.el = h('div.color-picker', {}, this.pickerEl, this.swatchesEl);
 
     this.previous.addEventListener('click', () => this.ed.setColor(this.previous.dataset.c!, true));
@@ -82,7 +109,7 @@ export class ColorPicker {
         this.ed.setColor('#' + [r, g, b].map((x) => x.toString(16).padStart(2, '0')).join(''), true);
       } else this.sync();
     });
-    ed.on((w) => { if (w === 'color' && !this.internal) this.sync(); });
+    ed.on((w) => { if (w === 'color' && !this.internal) this.sync(); else if (w === 'prefs') this.renderPalette(); });
     this.sync();
   }
 
@@ -90,6 +117,7 @@ export class ColorPicker {
     this.previous.dataset.c = this.ed.color;
     this.previous.style.background = this.ed.color;
     this.renderRecent();
+    this.renderPalette();
   }
 
   /** A hue ring around the square instead of the bar below it. */
@@ -114,12 +142,70 @@ export class ColorPicker {
     this.ring.dataset.drawn = '1';
   }
 
-  private swatch(c: string) {
-    return h('button.cp-swatch', { style: `background:${c}`, title: c, 'aria-label': c, onclick: () => this.ed.setColor(c, true) });
+  private swatch(c: string, onAlt?: () => void) {
+    return h('button.cp-swatch', { style: `background:${c}`, title: onAlt ? `${c} (Alt+click removes)` : c, 'aria-label': c, onclick: (e: Event) => { if ((e as MouseEvent).altKey && onAlt) onAlt(); else this.ed.setColor(c, true); } });
+  }
+
+  private get active(): Palette | null { return this.ed.prefs.palettes.find((p) => p.id === this.ed.prefs.palette) ?? null; }
+
+  private savePrefs() { this.ed.emit('prefs'); this.renderPalette(); }
+
+  private renderPalette() {
+    const pf = this.ed.prefs, cur = this.active;
+    this.paletteSel.replaceChildren(h('option', { value: '' }, 'Default'), ...pf.palettes.map((p) => h('option', { value: p.id }, p.name)));
+    this.paletteSel.value = cur?.id ?? '';
+    for (const b of this.paletteTools.querySelectorAll('button')) b.hidden = !cur && b.title !== 'Import a palette (.aco, .ase, .swatches, .gpl, .txt)';
+    this.palette.replaceChildren(...(cur ? cur.colors.map((c, i) => this.swatch(c, () => { cur.colors.splice(i, 1); this.savePrefs(); })) : PALETTE.map((c) => this.swatch(c))));
+  }
+
+  private renderHarmony() {
+    const cols = harmonyColors(this.harmonyMode, this.hue, this.sat, this.val);
+    this.harmony.hidden = !cols.length;
+    this.harmony.replaceChildren(...cols.map((c) => this.swatch(c)));
+  }
+
+  private addPalette(name: string, colors: string[]) {
+    const pf = this.ed.prefs, p = { id: Math.random().toString(36).slice(2, 10), name, colors };
+    pf.palettes.push(p);
+    pf.palette = p.id;
+    this.savePrefs();
+    return p;
+  }
+
+  private addToPalette() {
+    const cur = this.active ?? this.addPalette('My palette', []);
+    if (cur.colors.includes(this.ed.color) || cur.colors.length >= MAX_PALETTE_COLORS) return;
+    cur.colors.push(this.ed.color);
+    this.savePrefs();
+  }
+
+  private importPalette() {
+    const input = h('input', { type: 'file', accept: '.aco,.ase,.swatches,.gpl,.txt,.hex' });
+    input.addEventListener('change', async () => {
+      let n = 0;
+      for (const f of input.files ?? []) for (const set of await importPaletteFile(f)) { this.addPalette(set.name, set.colors); n += set.colors.length; }
+      this.ed.toast(n ? `Imported ${n} colours` : 'No colours found in that file');
+    });
+    input.click();
+  }
+
+  private async renamePalette() {
+    const cur = this.active;
+    if (!cur) return;
+    const name = await textDialog('Rename palette', cur.name);
+    if (name) { cur.name = name; this.savePrefs(); }
+  }
+
+  private deletePalette() {
+    const pf = this.ed.prefs;
+    pf.palettes = pf.palettes.filter((p) => p.id !== pf.palette);
+    pf.palette = '';
+    this.savePrefs();
   }
 
   private renderRecent() {
     this.recent.replaceChildren(...this.ed.recentColors.map((c) => this.swatch(c)));
+    this.renderHarmony();
   }
 
   /** `onRing` decides at pointer-down whether the drag turns the hue ring instead. */

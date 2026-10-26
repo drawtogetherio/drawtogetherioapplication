@@ -1,4 +1,5 @@
 // Per-account preferences, saved with the profile so they follow the person across devices.
+import { MAX_PALETTES, MAX_PALETTE_COLORS, Palette, isHex } from './palettes';
 import { DEFAULT_CURVE, curveAt, validCurve } from './curve';
 import { cleanBrush } from './brush';
 import type { BrushParams } from '../core/model';
@@ -76,6 +77,9 @@ export interface Prefs {
   customBrushes: CustomBrush[];
   /** Categories the person added to the brush library. */
   brushCategories: string[];
+  /** Saved colour palettes, and which one the picker shows ('' for the built-in one). */
+  palettes: Palette[];
+  palette: string;
   layout: 'classic' | 'studio';
   /** Where each studio panel sits. */
   panels: Record<PanelId, PanelState>;
@@ -86,7 +90,7 @@ export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, minimap: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, quickShape: true, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
+  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, quickShape: true, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], palettes: [], palette: '', layout: 'classic', panels: DEFAULT_PANELS,
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
@@ -129,6 +133,11 @@ export function cleanPrefs(raw: unknown): Prefs {
     const cat = cleanName(b.cat, 20);
     brushes.push({ id: b.id, name, cat: BUILTIN_CATEGORIES.includes(cat) || cats.includes(cat) ? cat : 'General', params });
   }
+  const palettes: Palette[] = [];
+  for (const p of list(r.palettes) as Record<string, unknown>[]) {
+    const name = cleanName(p?.name, 30), colors = list(p?.colors).filter(isHex).slice(0, MAX_PALETTE_COLORS);
+    if (name && isBrushId(p.id) && !palettes.some((x) => x.id === p.id) && palettes.length < MAX_PALETTES) palettes.push({ id: p.id, name, colors });
+  }
   return {
     keys,
     mode: MODES.includes(r.mode as Mode) ? r.mode as Mode : DEFAULT_PREFS.mode,
@@ -152,6 +161,8 @@ export function cleanPrefs(raw: unknown): Prefs {
     favoriteBrushes: list(r.favoriteBrushes).filter(isBrushId).slice(0, 40),
     customBrushes: brushes,
     brushCategories: cats,
+    palettes,
+    palette: palettes.some((p) => p.id === r.palette) ? r.palette as string : '',
     layout: r.layout === 'studio' ? 'studio' : 'classic',
     panels: cleanPanels(r.panels),
   };
