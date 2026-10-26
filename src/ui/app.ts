@@ -23,7 +23,7 @@ import { ReferencePanel } from './reference';
 import { Minimap } from './minimap';
 import { isNativeApp } from '../io/native';
 import { frameBar } from './frame';
-import { EFFECTS } from '../core/model';
+import { EFFECTS, POINT_SHAPES } from '../core/model';
 import { EFFECT_INFO } from '../engine/effects';
 import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme, customTheme } from '../shared/themes';
@@ -58,6 +58,7 @@ export class App {
   ed: Editor;
   input: InputController;
   private select: SelectTool;
+  private shape: ShapeTool;
   private toolButtons = new Map<ToolId, HTMLElement>();
   private options = h('div.optionsbar');
   private sliders: Slider[] = []; // size and opacity, vertical for the classic sidebar and flat for the studio panel
@@ -103,9 +104,10 @@ export class App {
     this.ed = new Editor(doc, stage);
     const ed = this.ed;
     this.select = new SelectTool(ed);
+    this.shape = new ShapeTool(ed);
     ed.tools = {
       brush: new BrushTool(ed, false), eraser: new BrushTool(ed, true), smudge: new SmudgeTool(ed), fill: new FillTool(ed),
-      select: this.select, shape: new ShapeTool(ed), eyedropper: new EyedropperTool(ed),
+      select: this.select, shape: this.shape, eyedropper: new EyedropperTool(ed),
     };
     this.input = new InputController(ed, ed.view.canvas);
     ed.view.onCanvas = (c) => this.input.bind(c);
@@ -651,6 +653,7 @@ export class App {
       if (!smudge) {
         o.append(toggle('Stabilizer', pf.stabilizerOn, (v) => { pf.stabilizerOn = v; pref(); this.renderOptions(); }));
         if (pf.stabilizerOn) o.append(range('', pf.stabilizer, 0, 1, (v) => { pf.stabilizer = v; pref(); }));
+        if (tool === 'brush') o.append(toggle('QuickShape', pf.quickShape, (v) => { pf.quickShape = v; pref(); }));
       }
       o.append(label('Pressure:'));
       if (smudge) o.append(
@@ -690,11 +693,15 @@ export class App {
         o.append(h('span.hint', {}, ed.selection ? 'Drag to move, corners scale, dot rotates' : 'Drag to select'));
       }
     } else if (ed.toolId === 'shape') {
-      o.append(
-        this.modeButton(SHAPE_KINDS.find((m) => m[0] === st.shape)!),
-        toggle('Filled', st.shapeFill, (v) => { st.shapeFill = v; }),
-        h('span.hint', {}, 'Shift constrains, Alt from centre'),
+      const points = POINT_SHAPES.includes(st.shape);
+      o.append(this.modeButton(SHAPE_KINDS.find((m) => m[0] === st.shape)!));
+      if (st.shape !== 'line' && st.shape !== 'arrow' && st.shape !== 'arc') o.append(toggle('Filled', st.shapeFill, (v) => { st.shapeFill = v; }));
+      if (st.shape === 'polygon' || st.shape === 'star') o.append(range(st.shape === 'star' ? 'Points' : 'Sides', st.shapeSides, 3, 12, (v) => { st.shapeSides = Math.round(v); }, (v) => String(Math.round(v))));
+      if (points) o.append(
+        h('span.hint', {}, st.shape === 'arc' ? 'Click the start, a point on the arc, then the end' : 'Click to add points, double-click or Enter to finish'),
+        h('button.btn.small', { onclick: () => this.shape.commit() }, 'Done'),
       );
+      else o.append(h('span.hint', {}, 'Shift constrains, Alt from centre'));
     } else if (ed.toolId === 'eyedropper') {
       o.append(h('span.hint', {}, 'Tap to pick. Alt + brush also works'));
     }
@@ -811,7 +818,8 @@ export class App {
         return;
       }
       if (e.key === 'Enter') {
-        if (this.select.xf || !ed.room) this.select.commit();
+        if (ed.toolId === 'shape' && this.shape.placing) this.shape.commit();
+        else if (this.select.xf || !ed.room) this.select.commit();
         else { e.preventDefault(); this.roomUI.toggleChat(true); }
         return;
       }
@@ -819,6 +827,7 @@ export class App {
         const pop = document.querySelector<HTMLElement>('.popover:not([hidden])');
         if (!this.toolPop.hidden) this.closePicker();
         else if (pop) pop.hidden = true;
+        else if (this.shape.placing) this.shape.cancel();
         else if (this.roomUI.chatOpen) this.roomUI.toggleChat(false);
         else if (this.select.xf) this.select.cancel(); else this.select.deselect();
         return;

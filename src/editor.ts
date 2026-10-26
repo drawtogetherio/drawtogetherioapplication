@@ -34,6 +34,7 @@ export interface EditorSettings {
   shape: ShapeKind;
   guides: GuideSettings;
   shapeFill: boolean;
+  shapeSides: number;
   hideOthersFolders: boolean; // layers panel shows only your own folder
 }
 
@@ -70,7 +71,7 @@ export class Editor {
     eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
     smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, fillMode: 'bucket', lassoInside: true,
-    selectMode: 'rect', shape: 'rect', shapeFill: false,
+    selectMode: 'rect', shape: 'rect', shapeFill: false, shapeSides: 6,
     guides: structuredClone(DEFAULT_GUIDES),
     hideOthersFolders: false,
   };

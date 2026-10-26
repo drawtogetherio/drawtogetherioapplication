@@ -3,12 +3,16 @@ import type { Op } from '../core/model';
 import { strokeFits } from '../shared/brush';
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
+import { recognizeShape } from '../engine/quickShape';
+import { ShapeSpec, mapShape, renderShape } from '../engine/shapes';
 import type { Editor } from '../editor';
 import { mapPts, symmetryMaps } from '../ui/guides';
 import { PointerInfo, Tool } from './tool';
 
 export class BrushTool implements Tool {
   private buffer: TiledSurface | null = null;
+  /** The freehand stroke's own pixels, kept while a QuickShape stands in for it. */
+  get stroke() { return this.buffer; }
   private renderer: StrokeRenderer | null = null;
   private pts: number[] = [];
   private len = 0;
@@ -21,6 +25,10 @@ export class BrushTool implements Tool {
   private ahead: PointerInfo[] = [];
   /** Symmetry copies: each has its own buffer and renderer, and becomes its own stroke op. */
   private mirrors: { m: DOMMatrix; buffer: TiledSurface; renderer: StrokeRenderer; id: string; sent: number }[] = [];
+  /** QuickShape: the stroke snapped to a shape after the pen held still; moving on lets go of it. */
+  private quick: { spec: ShapeSpec; buffer: TiledSurface; copies: { spec: ShapeSpec; buffer: TiledSurface }[]; sx: number; sy: number } | null = null;
+  private holdTimer = 0;
+  private live!: (buffer: TiledSurface) => NonNullable<Editor['view']['live']>;
 
   constructor(private ed: Editor, private erase: boolean) {}
 
@@ -40,11 +48,12 @@ export class BrushTool implements Tool {
     this.pts = [];
     this.len = 0;
     this.tether = null;
-    const live = (buffer: TiledSurface) => ({
+    const live = this.live = (buffer: TiledSurface) => ({
       layerId: layer.props.id, buffer, bufferAlpha: params.opacity,
       bufferOp: this.erase ? 'destination-out' : layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over',
       clip: this.ed.clipPath(), mask: this.ed.onMask,
     } as const);
+    this.quick = null;
     this.ed.view.live = live(this.buffer);
     this.mirrors = symmetryMaps(this.ed).map((m, i) => {
       const buffer = new TiledSurface();
@@ -56,6 +65,13 @@ export class BrushTool implements Tool {
 
   move(p: PointerInfo) {
     if (!this.buffer) return;
+    if (this.quick) {
+      if (Math.hypot(p.sx - this.quick.sx, p.sy - this.quick.sy) < 20) return;
+      this.quick = null;
+      this.ed.view.live = this.live(this.buffer);
+      this.ed.view.extraLive = this.mirrors.map((c) => this.live(c.buffer));
+      this.ed.view.invalidate(null);
+    }
     this.ahead = [];
     this.add(this.pull(p));
     // The rope moves even when the brush doesn't.
@@ -115,6 +131,22 @@ export class BrushTool implements Tool {
       if (mr) this.ed.view.invalidate(mr);
     }
     if (this.ed.room && !this.flushTimer) this.flushTimer = window.setTimeout(() => this.flush(), 33);
+    clearTimeout(this.holdTimer);
+    if (!this.erase && this.ed.prefs.quickShape) this.holdTimer = window.setTimeout(() => this.snapShape(p), HOLD_MS);
+  }
+
+  /** Swaps the live stroke for the shape it looks like. */
+  private snapShape(p: PointerInfo) {
+    if (!this.buffer || this.quick) return;
+    const spec = recognizeShape(this.pts, this.params.size, this.ed.color);
+    if (!spec) return;
+    const buffer = new TiledSurface();
+    renderShape(buffer, spec);
+    const copies = this.mirrors.flatMap((c) => { const sp = mapShape(c.m, spec); if (!sp) return []; const buf = new TiledSurface(); renderShape(buf, sp); return [{ spec: sp, buffer: buf }]; });
+    this.quick = { spec, buffer, copies, sx: p.sx, sy: p.sy };
+    this.ed.view.live = this.live(buffer);
+    this.ed.view.extraLive = copies.map((c) => this.live(c.buffer));
+    this.ed.view.invalidate(null);
   }
 
   private flush() {
@@ -133,6 +165,8 @@ export class BrushTool implements Tool {
 
   up() {
     if (!this.buffer) return;
+    clearTimeout(this.holdTimer);
+    if (this.quick) return this.commitQuick();
     // The line ends where the brush is, not where the cursor was.
     this.tether = null;
     this.ahead = [];
@@ -154,8 +188,25 @@ export class BrushTool implements Tool {
     this.ed.run([op(this.id, this.pts), ...mirrors.map((c) => op(c.id, mapPts(c.m, this.pts)))], 'stroke', [{ buffer }, ...mirrors.map((c) => ({ buffer: c.buffer }))]);
   }
 
+  private commitQuick() {
+    const q = this.quick!, ids = [this.id, ...this.mirrors.map((c) => c.id)];
+    this.quick = null; this.buffer = null; this.mirrors = []; this.tether = null; this.ahead = [];
+    clearTimeout(this.flushTimer); this.flushTimer = 0;
+    for (const id of ids) this.ed.room?.send({ type: 'live-end', stroke: id });
+    this.ed.view.live = null;
+    this.ed.view.extraLive = [];
+    this.ed.pushRecent(this.ed.color);
+    const op = (sp: ShapeSpec): Op => ({
+      t: 'shape', id: uid(), layer: this.ed.activeLayer, ...sp, opacity: this.params.opacity, erase: false,
+      clip: this.ed.selection ?? undefined, mask: this.ed.onMask,
+    });
+    this.ed.run([op(q.spec), ...q.copies.map((c) => op(c.spec))], 'shape', [{ buffer: q.buffer }, ...q.copies.map((c) => ({ buffer: c.buffer }))]);
+  }
+
   cancel() {
     if (!this.buffer) return;
+    clearTimeout(this.holdTimer);
+    this.quick = null;
     clearTimeout(this.flushTimer);
     this.flushTimer = 0;
     this.ed.room?.send({ type: 'live-end', stroke: this.id });
@@ -173,3 +224,5 @@ export class BrushTool implements Tool {
 const round = (v: number) => Math.round(v * 100) / 100;
 /** Rope length in screen px at the stabilizer's maximum. */
 const ROPE_MAX = 160;
+/** How long the pen holds still before QuickShape snaps the stroke. */
+const HOLD_MS = 650;

@@ -64,6 +64,8 @@ export interface Prefs {
   /** Brush stabilizer: on, and 0..1 how long the rope between cursor and brush is. */
   stabilizerOn: boolean;
   stabilizer: number;
+  /** Holding still at the end of a stroke snaps it to a shape. */
+  quickShape: boolean;
   /** Whether pressure drives brush size and opacity; applied to every brush picked. */
   pressureSize: boolean;
   pressureOpacity: boolean;
@@ -84,7 +86,7 @@ export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, minimap: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
+  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, quickShape: true, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
@@ -142,6 +144,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
     fingerDraws: r.fingerDraws !== false,
     stabilizerOn: r.stabilizerOn === true,
+    quickShape: r.quickShape !== false,
     stabilizer: typeof r.stabilizer === 'number' ? Math.min(1, Math.max(0, r.stabilizer)) : DEFAULT_PREFS.stabilizer,
     pressureSize: r.pressureSize !== false,
     pressureOpacity: r.pressureOpacity === true,

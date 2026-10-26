@@ -1,4 +1,4 @@
-import { BLEND_MODES, EFFECTS, type Op } from '../src/core/model.ts';
+import { BLEND_MODES, EFFECTS, POINT_SHAPES, SHAPE_KINDS_ALL, type Op } from '../src/core/model.ts';
 import type { LiveStroke } from '../src/shared/protocol.ts';
 import { MAX_STROKE_PTS, strokeFits, validBrush } from '../src/shared/brush.ts';
 
@@ -68,8 +68,9 @@ export function validOp(op: unknown): op is Op {
     case 'effect':
       return isId(op.layer) && EFFECTS.includes(op.effect as never) && inRange(op.amount, 0, 1) && (op.angle === undefined || inRange(op.angle, -7, 7)) && isClip(op.clip);
     case 'shape':
-      return isId(op.layer) && ['line', 'rect', 'ellipse'].includes(op.shape as string) && nums([op.x0, op.y0, op.x1, op.y1], 4, 4)
-        && inRange(op.width, 0, MAX_BRUSH) && isBool(op.fill) && isColor(op.color) && inRange(op.opacity, 0, 1) && isBool(op.erase) && isClip(op.clip);
+      return isId(op.layer) && SHAPE_KINDS_ALL.includes(op.shape as never) && nums([op.x0, op.y0, op.x1, op.y1], 4, 4)
+        && inRange(op.width, 0, MAX_BRUSH) && isBool(op.fill) && isColor(op.color) && inRange(op.opacity, 0, 1) && isBool(op.erase) && isClip(op.clip)
+        && (op.sides === undefined || inRange(op.sides, 3, 24)) && (op.pts === undefined ? !POINT_SHAPES.includes(op.shape as never) : nums(op.pts, MAX_CLIP_PTS, 2, 4));
     case 'fill': {
       const r = op.region;
       return isId(op.layer) && nums([op.x, op.y], 2, 2) && isColor(op.color) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && inRange(op.expand, 0, 16)

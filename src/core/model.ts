@@ -74,7 +74,10 @@ export type EffectId = (typeof EFFECTS)[number];
 /** A polygon; `holes` are rings cut out of it (magic wand). */
 export interface Selection { pts: number[]; holes?: number[][] }
 
-export type ShapeKind = 'line' | 'rect' | 'ellipse';
+export type ShapeKind = 'line' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'arrow' | 'bubble' | 'polyline' | 'curve' | 'arc';
+export const SHAPE_KINDS_ALL: ShapeKind[] = ['line', 'rect', 'ellipse', 'polygon', 'star', 'arrow', 'bubble', 'polyline', 'curve', 'arc'];
+/** Shapes drawn by clicking points rather than dragging a box. */
+export const POINT_SHAPES: ShapeKind[] = ['polyline', 'curve', 'arc'];
 
 /** `mask: true` on a pixel edit aims it at the layer's mask instead of its pixels. */
 interface OpBase { id: string; author?: string; mask?: boolean; /** When the room took it (ms). */ at?: number }
@@ -92,6 +95,8 @@ export type Op =
   | (OpBase & {
       t: 'shape'; layer: string; shape: ShapeKind; x0: number; y0: number; x1: number; y1: number;
       width: number; fill: boolean; color: string; opacity: number; erase: boolean; clip?: Selection;
+      /** Corners of a polygon or points of a star. */ sides?: number;
+      /** x,y pairs for point shapes; an arc is start, a point on it, end. */ pts?: number[];
     })
   | (OpBase & {
       t: 'fill'; layer: string; x: number; y: number; color: string; tolerance: number;

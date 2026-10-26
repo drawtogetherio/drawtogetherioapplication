@@ -13,7 +13,10 @@ import { icon } from './icons';
 
 export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse'], ['wand', 'Magic wand', 'wand']];
 export const FILL_MODES: [FillMode, string, string][] = [['bucket', 'Bucket', 'fill'], ['lasso', 'Fill lasso', 'lassoFill']];
-export const SHAPE_KINDS: [ShapeKind, string, string][] = [['line', 'Line', 'line'], ['rect', 'Rectangle', 'rect'], ['ellipse', 'Ellipse', 'ellipse']];
+export const SHAPE_KINDS: [ShapeKind, string, string][] = [
+  ['line', 'Line', 'line'], ['arrow', 'Arrow', 'arrow'], ['rect', 'Rectangle', 'rect'], ['ellipse', 'Ellipse', 'ellipse'], ['polygon', 'Polygon', 'polygon'],
+  ['star', 'Star', 'star'], ['bubble', 'Speech bubble', 'bubble'], ['polyline', 'Polyline', 'polyline'], ['curve', 'Curve', 'curve'], ['arc', 'Arc', 'arc'],
+];
 
 const previewCache = new Map<string, HTMLCanvasElement>();
 
