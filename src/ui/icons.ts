@@ -8,6 +8,7 @@ const P: Record<string, string> = {
   shape: '<rect x="3" y="11" width="10" height="10" rx="1"/><circle cx="16" cy="8" r="5"/>',
   eyedropper: '<path d="M14.5 6.5l3 3"/><path d="M19.4 4.6a2.1 2.1 0 0 0-3 0l-2.4 2.4 3 3 2.4-2.4a2.1 2.1 0 0 0 0-3z"/><path d="M15.5 9.5L7 18l-3 1 1-3 8.5-8.5"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
   redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>',
   flipH: '<path d="M12 3v18"/><path d="M8 7L3 12l5 5z"/><path d="M16 7l5 5-5 5z"/>',

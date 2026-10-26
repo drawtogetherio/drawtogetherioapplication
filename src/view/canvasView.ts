@@ -20,6 +20,8 @@ export class CanvasView {
   private ctx!: CanvasRenderingContext2D;
   dpr = 1;
   live: LiveLayer | null = null;
+  /** Symmetry copies of the stroke in progress. */
+  extraLive: LiveLayer[] = [];
   readonly remoteLive = new Map<string, LiveLayer>();
   overlay: ((ctx: CanvasRenderingContext2D, m: DOMMatrix) => void) | null = null;
   /** Runs before each frame composites; edits it makes land in the same frame. */
@@ -162,7 +164,7 @@ export class CanvasView {
         this.rowsDone = 0;
       }
       const lives = [...this.remoteLive.values()];
-      if (this.live) lives.push(this.live);
+      if (this.live) lives.push(this.live, ...this.extraLive);
       const cc = ctx2d(this.comp);
       const draw = (region: Rect) => {
         const px0 = Math.floor((region.x - ox) * s), py0 = Math.floor((region.y - oy) * s);

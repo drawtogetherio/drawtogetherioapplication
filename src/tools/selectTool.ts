@@ -6,6 +6,7 @@ import { fillRegion } from './fillTool';
 import { Selection } from '../core/model';
 import { Floating, liftSelection, transformSel } from '../engine/transform';
 import type { Editor } from '../editor';
+import { snap } from '../ui/guides';
 import { accentColor } from '../ui/theme';
 import { PointerInfo, Tool } from './tool';
 
@@ -135,7 +136,8 @@ export class SelectTool implements Tool {
       }
     }
     this.commit();
-    this.drag = { kind: 'select', x0: p.x, y0: p.y, pts: [p.x, p.y] };
+    const sp = this.ed.settings.selectMode === 'lasso' ? p : snap(this.ed, p.x, p.y);
+    this.drag = { kind: 'select', x0: sp.x, y0: sp.y, pts: [sp.x, sp.y] };
   }
 
   move(p: PointerInfo) {
@@ -146,7 +148,7 @@ export class SelectTool implements Tool {
       if (this.ed.settings.selectMode === 'lasso') {
         const n = d.pts.length;
         if (dist(d.pts[n - 2], d.pts[n - 1], p.x, p.y) * this.ed.view.viewport.zoom > 2) d.pts.push(p.x, p.y);
-      } else d.pts = [d.x0, d.y0, p.x, p.y];
+      } else { const sp = snap(this.ed, p.x, p.y); d.pts = [d.x0, d.y0, sp.x, sp.y]; }
       if (p.shift && this.ed.settings.selectMode !== 'lasso') {
         const dx = p.x - d.x0, dy = p.y - d.y0, m = Math.max(Math.abs(dx), Math.abs(dy));
         d.pts = [d.x0, d.y0, d.x0 + Math.sign(dx || 1) * m, d.y0 + Math.sign(dy || 1) * m];

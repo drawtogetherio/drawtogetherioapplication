@@ -3,7 +3,6 @@ import { BLEND_LABELS, BLEND_MODES, BlendMode, LayerProps } from '../core/model'
 import type { DocNode, Folder, Layer } from '../core/document';
 import type { Editor } from '../editor';
 import { h } from './dom';
-import { effectsBar } from './effectsBar';
 import { icon } from './icons';
 import { Slider } from './slider';
 import { textDialog } from './dialogs';
@@ -63,7 +62,6 @@ export class LayersPanel {
         act('rename', 'Rename layer', () => this.renameLayer()),
         act('copy', 'Duplicate layer', () => this.ed.duplicateLayer()),
         act('merge', 'Merge down', () => this.merge()),
-        act('sparkle', 'Layer effects', () => effectsBar(this.ed)),
         this.lockBtn, this.clipBtn, this.maskBtn, this.applyMaskBtn,
         act('clear', 'Clear layer', () => { this.ed.commitPending(); if (this.ed.layer) this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer, mask: this.ed.onMask }); }),
         act('trash', 'Delete layer', () => this.removeLayer(), 'danger'),

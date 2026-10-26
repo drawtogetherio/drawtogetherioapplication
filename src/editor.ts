@@ -1,6 +1,7 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, wireOps } from './core/document';
 import { Point, Rect, selPath, uid } from './core/geom';
 import { BrushParams, Op, Selection, ShapeKind } from './core/model';
+import { DEFAULT_GUIDES, GuideSettings } from './ui/guides';
 import { BrushPreset, DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
 import { CanvasView } from './view/canvasView';
 import type { Tool } from './tools/tool';
@@ -31,6 +32,7 @@ export interface EditorSettings {
   lassoInside: boolean;
   selectMode: SelectMode;
   shape: ShapeKind;
+  guides: GuideSettings;
   shapeFill: boolean;
   hideOthersFolders: boolean; // layers panel shows only your own folder
 }
@@ -69,6 +71,7 @@ export class Editor {
     smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, fillMode: 'bucket', lassoInside: true,
     selectMode: 'rect', shape: 'rect', shapeFill: false,
+    guides: structuredClone(DEFAULT_GUIDES),
     hideOthersFolders: false,
   };
   private listeners = new Set<Listener>();
@@ -220,13 +223,14 @@ export class Editor {
     return { parent: null, index: this.doc.children(null).length };
   }
 
-  run(ops: Op[], label = 'Edit', opts: ApplyOptions = {}) {
+  /** `opts` for the first op, or one per op. */
+  run(ops: Op[], label = 'Edit', opts: ApplyOptions | ApplyOptions[] = {}) {
     if (this.readOnly) return;
     const inverse: Op[] = [];
     const entry: HistoryEntry = { label, undo: inverse, redo: [], cost: 0 };
     ops.forEach((op, i) => {
       op.author = this.room?.you;
-      const inv = this.doc.apply(op, i === 0 ? opts : {});
+      const inv = this.doc.apply(op, Array.isArray(opts) ? opts[i] ?? {} : i === 0 ? opts : {});
       if (!inv.length) return;
       this.share(op, inv, entry);
       inverse.unshift(...inv);

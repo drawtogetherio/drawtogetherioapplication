@@ -18,6 +18,8 @@ import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { MemoryMeter } from './memory';
 import { HistoryPanel } from './historyPanel';
+import { drawGuides, guidesPanel } from './guides';
+import { ReferencePanel } from './reference';
 import { Minimap } from './minimap';
 import { isNativeApp } from '../io/native';
 import { frameBar } from './frame';
@@ -79,6 +81,7 @@ export class App {
   readonly session: Session;
   memory!: MemoryMeter;
   minimap!: Minimap;
+  reference!: ReferencePanel;
   readonly home: Home;
   private menuDyn = h('div.menu-dyn');
   private menuDot = h('span.red-dot', { hidden: true });
@@ -134,6 +137,16 @@ export class App {
     }, '.edit-only');
     dismissOnOutside(effectsPop, [effectsBtn], () => { effectsPop.hidden = true; });
 
+    const guidesPop = h('div.popover.guides-pop', { hidden: true });
+    const guidesBtn = btn('grid', 'Guides: symmetry, grid, reference', () => {
+      guidesPop.style.left = `${guidesBtn.getBoundingClientRect().left}px`;
+      guidesPop.hidden = !guidesPop.hidden;
+      if (!guidesPop.hidden) guidesPop.replaceChildren(guidesPanel(this));
+    }, '.edit-only');
+    dismissOnOutside(guidesPop, [guidesBtn], () => { guidesPop.hidden = true; });
+    this.reference = new ReferencePanel(ed);
+    stage.append(this.reference.el);
+
     const left = h('div.bar-group', {},
       menuBtn,
       btn('download', 'Export (Ctrl+Shift+E)', () => this.export(), '.edit-only'),
@@ -142,6 +155,7 @@ export class App {
       btn('flipV', 'Flip canvas vertically (V)', () => ed.view.viewport.flip(false)),
       btn('fit', 'Fit to screen (0)', () => ed.fitView()),
       effectsBtn,
+      guidesBtn,
       this.zoomLabel,
     );
     this.zoomLabel.addEventListener('click', () => ed.fitView());
@@ -205,7 +219,7 @@ export class App {
     stage.append(this.minimap.el);
     this.studio = new Studio(ed, stage);
 
-    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, guidesPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -744,6 +758,7 @@ export class App {
 
   private drawOverlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) {
     const ed = this.ed;
+    drawGuides(ctx, M, ed);
     this.select.overlay(ctx, M);
     if (ed.currentTool !== this.select) ed.currentTool.overlay?.(ctx, M);
     this.roomUI.drawBubbles(ctx, M);
@@ -801,7 +816,9 @@ export class App {
         return;
       }
       if (e.key === 'Escape') {
+        const pop = document.querySelector<HTMLElement>('.popover:not([hidden])');
         if (!this.toolPop.hidden) this.closePicker();
+        else if (pop) pop.hidden = true;
         else if (this.roomUI.chatOpen) this.roomUI.toggleChat(false);
         else if (this.select.xf) this.select.cancel(); else this.select.deselect();
         return;
