@@ -107,6 +107,37 @@ const sel = await ed((e) => e.selection?.pts ?? null);
 check(sel && sel.length >= 8 && sel.every(onGrid), `rect selection corners sit on the grid (${sel?.slice(0, 4)})`);
 await page.keyboard.press('Control+d');
 
+// ---- A 2x display (iPad): the grid still covers exactly the canvas ----
+{
+  const hi = await browser.newPage({ viewport: { width: 1000, height: 700 }, deviceScaleFactor: 2 });
+  await hi.goto(url);
+  await hi.selectOption('#canvas-preset', 'square');
+  await hi.getByText('Create canvas').click();
+  await hi.evaluate(() => { const e = window.doodlehive.ed; e.settings.guides.grid = { mode: 'square', size: 64, snap: false, rulers: false }; e.view.invalidate(null); });
+  await hi.waitForTimeout(200);
+  const r = await hi.evaluate(() => {
+    const e = window.doodlehive.ed, c = e.view.canvas, dpr = e.view.dpr, M = e.view.viewport.matrix(), d = e.doc.settings;
+    const g = document.createElement('canvas'); g.width = c.width; g.height = c.height;
+    const x = g.getContext('2d'); x.drawImage(c, 0, 0);
+    const px = x.getImageData(0, 0, g.width, g.height).data;
+    const blue = (i) => px[i + 2] > px[i] + 40 && px[i + 3] > 0; // grid lines are blue
+    const tl = M.transformPoint({ x: 0, y: 0 }), br = M.transformPoint({ x: d.width, y: d.height });
+    const inside = (sx, sy) => sx > tl.x * dpr + 4 && sx < br.x * dpr - 4 && sy > tl.y * dpr + 4 && sy < br.y * dpr - 4;
+    const out = { inRight: 0, inBottom: 0, outside: 0 };
+    for (let sy = 0; sy < g.height; sy += 3) for (let sx = 0; sx < g.width; sx += 3) {
+      if (!blue((sy * g.width + sx) * 4)) continue;
+      if (inside(sx, sy)) { if (sx > (tl.x + br.x) * dpr / 2) out.inRight++; if (sy > (tl.y + br.y) * dpr / 2) out.inBottom++; }
+      else if (sx < tl.x * dpr - 4 || sy < tl.y * dpr - 4 || sx > br.x * dpr + 4 || sy > br.y * dpr + 4) out.outside++;
+    }
+    return { ...out, dpr };
+  });
+  check(r.dpr === 2, 'page runs at 2x');
+  check(r.inRight > 50 && r.inBottom > 50, `grid reaches the canvas's right and bottom halves at 2x (${r.inRight}, ${r.inBottom})`);
+  check(r.outside === 0, `no grid outside the canvas at 2x (${r.outside})`);
+  await hi.screenshot({ path: `${out}/04-grid-2x.png` });
+  await hi.close();
+}
+
 // ---- Reference panel ----
 await ed((e) => { e.settings.guides.grid.mode = 'off'; e.settings.guides.grid.rulers = false; e.view.invalidate(null); });
 const ref = page.locator('.ref-panel');

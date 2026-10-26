@@ -67,7 +67,8 @@ export function drawGuides(ctx: CanvasRenderingContext2D, M: DOMMatrix, ed: Edit
     // Thin out lines closer than 8 screen px.
     const step = s * Math.max(1, 2 ** Math.ceil(Math.log2(8 / px)));
     ctx.save();
-    if (!d.infinite) { ctx.beginPath(); const p = new Path2D(); p.rect(0, 0, d.width, d.height); ctx.setTransform(M); ctx.clip(p); ctx.setTransform(1, 0, 0, 1, 0, 0); }
+    // The context is already scaled for the device pixel ratio; the clip composes with it.
+    if (!d.infinite) { const T = ctx.getTransform(); ctx.setTransform(T.multiply(M)); ctx.beginPath(); ctx.rect(0, 0, d.width, d.height); ctx.clip(); ctx.setTransform(T); }
     ctx.strokeStyle = 'rgba(80,140,255,0.45)';
     ctx.lineWidth = 1;
     ctx.beginPath();
