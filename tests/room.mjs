@@ -147,7 +147,8 @@ const digest = (page, id) => ed(page, (e, id) => {
   return JSON.stringify(o, Object.keys(o).sort());
 }, id);
 const bobBefore = await digest(bob, aliceLayer);
-await stroke(alice, line(400, 500, 700, 520));
+// Over the first stroke's tiles, so the undo's strips sit beside pixels that must survive.
+await stroke(alice, line(400, 340, 700, 460));
 await bob.waitForTimeout(300);
 const before = await ed(bob, (e, id) => e.doc.log.length, aliceLayer);
 await alice.keyboard.press('Control+z');

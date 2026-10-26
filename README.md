@@ -47,6 +47,16 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 ## Features
 
+**Performance (v0.32)**
+- Fills, effects, PNG/JPG encoding, thumbnails and `.hivecanvas` zips run in a Web Worker
+  (`src/engine/offload.ts`); the page falls back to doing them inline if the worker fails to start.
+- Undo snapshots only the strip of each 256 px tile a stroke touched (`tiles` keys like `3,2@0,160`);
+  history cost counts area. Device logs past 8 MB of undo pixels squash to a snapshot once the pen is up.
+- A view-wide recomposite (zooming out on a big canvas with many layers) is spread over frames within a
+  10 ms budget, with the previous composite shown scaled under the rows still to come
+  (`src/view/canvasView.ts`). `tests/compbench.mjs` has the numbers.
+- `src/ui/memory.ts` watches canvas memory and caps undo history as it nears the device budget.
+
 **Branding (v0.31)**
 - Logo by [Logocraftz](https://www.fiverr.com/logocraftz), credited in Preferences → About. The kit's
   originals are in `src/assets/brand/kit`; `src/site/brand.ts` inlines copies with plain fills. The mark
@@ -166,6 +176,17 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Procreate-style brush library (tap the selected brush/eraser) with pressure-stroke previews; icon drop-downs for selection and shape modes
 - R + drag rotates the view (Shift snaps 15°), Z + drag zooms
 - Flip/pan/zoom/rotate view, undo/redo (incl. two/three-finger taps), HSV colour picker
+- **History** panel (sidebar, beside undo): every edit in order; click one to jump there
+- **Minimap** in the stage corner: the whole drawing with the view on it; drag the window to pan,
+  click outside it to recentre (Preferences → Layout turns it off)
+- **Focus mode** (F): fullscreen with the UI hidden; Tab or a four-finger tap hides and shows the UI
+- Pen: predicted and coalesced samples, a low-latency canvas (Preferences → Performance), tilt and
+  azimuth read into the brush, a pen test pad under Preferences → Pressure (pressure, tilt, express keys)
+- Touch: touch-and-hold opens the eyedropper, pinch-rotate snaps to 0°
+- **Canvas memory** meter in the layers panel head: pixels plus undo history against the device's
+  budget; undo history is kept shorter as it climbs and a warning shows before the browser gives up
+- Installable (PWA): a service worker keeps the app shell offline; home offers to pick up the
+  canvas that was open last time after a relaunch or a crash
 - Layers with 17 blend modes, opacity, lock transparency, merge, clear; folders
 - Export PNG, JPG and layered PSD (folders become PSD groups)
 
@@ -331,7 +352,8 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 ```
 src/core/      document model: ops, layers + folders, tiled surfaces, undo history
-src/engine/    brush dabs, flood fill, shapes, selection transforms, layer compositing
+src/engine/    brush dabs, flood fill, shapes, selection transforms, layer compositing; worker.ts +
+               offload.ts run fills, effects, image encoding and .hivecanvas zips in a Web Worker
 src/view/      viewport (pan/zoom/rotate/flip), screen renderer, pointer + gesture input
 src/tools/     brush/eraser, smudge, fill, select/transform, shapes, eyedropper
 src/ui/        app shell, layers panel, dialogs, profile editor, room UI (members, chat, bubbles), session
@@ -415,6 +437,9 @@ node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer 
 node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to simple
 node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
 node tests/tools.mjs http://localhost:4180/app.html     # fill lasso (inside lines or not), magic wand with holes, rope stabilizer, long strokes split
+node tests/undo.mjs http://localhost:4180/app.html      # partial-tile undo, memory meter, history panel, minimap
+node tests/pwa.mjs http://localhost:4180                # manifest, icons, service worker precache, offline /app
+node tests/compbench.mjs --layers 20                    # compositor timings at 4K with N layers
 
 # Two people in a room (server with dev login + vite):
 DB_PATH=/tmp/dw-test.db npm run dev

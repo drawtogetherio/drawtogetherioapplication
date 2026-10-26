@@ -237,6 +237,20 @@ export class Editor {
 
   apply(op: Op, opts: ApplyOptions = {}) { this.run([op], op.t, opts); }
 
+  private prepQueue: Promise<void> = Promise.resolve();
+
+  /** Fills and effects: worked out in the worker from the canvas as it is now, then applied as one op, in the order asked. */
+  applyPrepared(op: Op) {
+    return this.prepQueue = this.prepQueue.then(async () => {
+      const doc = this.doc, room = this.room;
+      if (room) room.freeze = true;
+      try {
+        const opts = await doc.prepared(op);
+        if (this.doc === doc) this.apply(op, opts);
+      } finally { if (room) room.freeze = false; }
+    });
+  }
+
   /** Recent edits sent to the room with what undoes them, in case the room refuses one. */
   private sent = new Map<string, { inv: Op[]; entry: HistoryEntry }>();
 

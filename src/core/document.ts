@@ -46,6 +46,8 @@ export class DrawDoc {
   private kids = new Map<string, string[]>();
   layers: Layer[] = [];
   readonly history = new History();
+  /** Counts applied ops, so work prepared from the canvas can tell when it has gone stale. */
+  rev = 0;
   readonly log: Op[] = [];
   private listeners = new Set<(c: DocChange) => void>();
   private record = true;
@@ -131,12 +133,25 @@ export class DrawDoc {
       const el = new Image();
       el.src = url;
       await el.decode();
-      const c = makeCanvas(TILE, TILE);
+      const c = makeCanvas(el.naturalWidth, el.naturalHeight);
       const ctx = ctx2d(c, true);
       ctx.drawImage(el, 0, 0);
-      img[k] = ctx.getImageData(0, 0, TILE, TILE);
+      img[k] = ctx.getImageData(0, 0, c.width, c.height);
     }));
     op.img = img;
+    return {};
+  }
+
+  /**
+   * prepare(), redone if an edit landed meanwhile: a fill or effect worked out from older pixels
+   * would differ from what everyone else computes at the op's place in the log. After a few tries
+   * the op is worked out on the thread at apply time instead.
+   */
+  async prepared(op: Op): Promise<ApplyOptions> {
+    for (let i = 0; i < 4; i++) {
+      const rev = this.rev, opts = await this.prepare(op);
+      if (this.rev === rev) return opts;
+    }
     return {};
   }
 
@@ -169,7 +184,7 @@ export class DrawDoc {
     this.record = opts.record !== false;
     const inv = this.applyInner(op, opts);
     this.record = true;
-    if (inv) this.log.push(op);
+    if (inv) { this.log.push(op); this.rev++; }
     return inv ?? [];
   }
 
@@ -285,10 +300,9 @@ export class DrawDoc {
       case 'tiles': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
         if (!layer || !surface || !op.img) return null;
-        return this.pixelEdit(layer, surface, Object.keys(op.img), () => {
-          surface.restore(new Map(Object.entries(op.img!)));
-          return rectOfKeys(Object.keys(op.img!));
-        });
+        const img = op.img, keys = Object.keys(img);
+        const parts = new Map(keys.map((k) => [k, { key: k, w: img[k]?.width ?? TILE, h: img[k]?.height ?? TILE }]));
+        return this.pixelEdit(layer, surface, keys, () => { surface.restore(new Map(Object.entries(img))); return rectOfKeys(keys); }, true, undefined, true, parts);
       }
       case 'layer.clear': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
@@ -538,7 +552,8 @@ export function toWire(op: Op): Op {
   const ctx = ctx2d(c);
   for (const [k, d] of Object.entries(op.img)) {
     if (!d) { tiles[k] = null; continue; }
-    ctx.clearRect(0, 0, TILE, TILE);
+    // A partial tile is encoded at its own size, so it lands back on just its strip.
+    c.width = d.width; c.height = d.height;
     ctx.putImageData(d, 0, 0);
     tiles[k] = c.toDataURL('image/png');
   }

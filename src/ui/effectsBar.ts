@@ -89,14 +89,7 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
     if (e.key === 'Enter') apply();
   };
   /** Bakes it in: the pixels are worked out in the worker, then land as one op. */
-  const apply = async () => {
-    const o = op(), doc = ed.doc, room = ed.room;
-    if (room) room.freeze = true;
-    try {
-      const effect = await doc.prepareEffect(o);
-      if (ed.doc === doc && effect) ed.apply(o, { effect });
-    } finally { if (room) room.freeze = false; }
-  };
+  const apply = () => ed.applyPrepared(op());
   const onDraw = (e: PointerEvent) => { if (!bar.contains(e.target as Node)) close(); };
   document.addEventListener('keydown', onKey, true);
   view.canvas.addEventListener('pointerdown', onDraw, true);

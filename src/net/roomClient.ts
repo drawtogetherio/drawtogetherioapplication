@@ -104,7 +104,7 @@ export class RoomClient {
           let t = performance.now();
           for (let i = 0; i < m.ops.length; i++) {
             const op = m.ops[i];
-            doc.apply(op, { ...await doc.prepare(op), record: false });
+            doc.apply(op, { ...await doc.prepared(op), record: false });
             if (performance.now() - t > YIELD_MS) {
               this.emit({ kind: 'progress', done: i + 1, total: m.ops.length });
               await new Promise((r) => setTimeout(r));
@@ -127,7 +127,7 @@ export class RoomClient {
           if (!this.doc) return;
           while (this.hold() || this.freeze) await new Promise((r) => setTimeout(r, 50));
           if (this.batchMs) await this.gate();
-          const pre = await this.doc.prepare(m.op);
+          const pre = await this.doc.prepared(m.op);
           this.doc.apply(m.op, { ...pre, record: false, buffer: this.liveBuffer(m.op) });
           this.lastSeq = m.seq;
           this.emit({ kind: 'op', op: m.op, from: m.from });

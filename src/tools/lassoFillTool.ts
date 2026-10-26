@@ -1,6 +1,6 @@
 import { dist, rectFromPoints, rectIntersect, rectRoundOut, uid } from '../core/geom';
 import type { Editor } from '../editor';
-import { applyFill, fillRegion } from './fillTool';
+import { fillRegion } from './fillTool';
 import { drawAnts } from './selectTool';
 import { PointerInfo, Tool } from './tool';
 
@@ -35,7 +35,7 @@ export class LassoFillTool implements Tool {
     const region = rectIntersect(box, fillRegion(ed, box.x + box.w / 2, box.y + box.h / 2));
     if (!region || region.w < 1 || region.h < 1) return;
     ed.pushRecent(ed.color);
-    applyFill(ed, {
+    ed.applyPrepared({
       t: 'fillPoly', id: uid(), layer: ed.activeLayer, pts: pts.map((v) => Math.round(v * 100) / 100), color: ed.color, inside: st.lassoInside,
       tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, expand: st.fillExpand, region, clip: ed.selection ?? undefined, mask: ed.onMask,
     });

@@ -164,6 +164,7 @@ check(await ed((e) => !!e.view.live?.floating && !!e.view.live.hole), 'the effec
 await page.waitForTimeout(150);
 await page.screenshot({ path: `${out}/03-effects.png` });
 await page.getByRole('button', { name: 'Apply' }).click();
+await page.waitForFunction((n) => window.doodlehive.ed.doc.log.length === n + 1, before); // the bake comes back from the worker
 check(await ed((e, n) => e.doc.log.length === n + 1 && e.doc.log.at(-1).t === 'effect' && e.doc.log.at(-1).effect === 'mosaic', before), 'mosaic baked in as one effect op');
 await page.locator('.layers-pop').count();
 for (const effect of ['glitch', 'blur', 'chroma', 'motion']) {
@@ -172,6 +173,7 @@ for (const effect of ['glitch', 'blur', 'chroma', 'motion']) {
   await page.waitForSelector('.effect-bar');
   await page.getByRole('button', { name: 'Apply' }).click();
 }
+await page.waitForFunction(() => window.doodlehive.ed.doc.log.filter((o) => o.t === 'effect').length === 5, null, { timeout: 60000 });
 await page.screenshot({ path: `${out}/04-after-effects.png` });
 const replay = await ed((e) => {
   const Doc = e.doc.constructor, copy = new Doc({ ...e.doc.settings });
