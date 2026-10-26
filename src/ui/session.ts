@@ -27,6 +27,8 @@ export const PREFS_KEY = 'doodlehive.prefs';
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const THUMB_DELAY_MS = 15_000;
 const SQUASH_DELAY_MS = 3_000;
+export const LAST_KEY = 'doodlehive.last';
+export interface LastOpen { canvas?: string; room?: string; name: string; at: number }
 /** About 6 MB of undo pixels. */
 const HEAVY_UPLOAD_TILES = 200;
 const settingsOf = (info: RoomInfo) => ({ width: info.settings.width, height: info.settings.height, infinite: info.settings.infinite, background: info.settings.background });
@@ -58,6 +60,11 @@ export class Session {
     const u = new URL(location.href);
     for (const k of ['room', 'watch', 'canvas', 'by', 'patreon'] as const) { const v = p[k]; if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
     history.replaceState(null, '', u);
+  }
+
+  /** What was open, so home can offer to pick it up after a crash or a relaunch. */
+  private remember(last: Omit<LastOpen, 'at'> | null) {
+    try { if (last) localStorage.setItem(LAST_KEY, JSON.stringify({ ...last, at: Date.now() })); else localStorage.removeItem(LAST_KEY); } catch { /* storage blocked */ }
   }
 
   /** `by` names who shared it, for the link's embed. */
@@ -241,6 +248,7 @@ export class Session {
     this.ed.setDoc(doc);
     this.ed.fitView(savedTurn(copy.meta.id));
     this.attachCopy(copy);
+    this.remember({ canvas: copy.meta.id, name: copy.meta.name });
     lapse.attach(doc, copy.meta.id, copy.meta.name);
     if (!copy.meta.thumb && doc.log.length > 1) copy.thumb(doc);
     this.app.refreshRoom();
@@ -259,7 +267,7 @@ export class Session {
 
   async openLocal(id: string) {
     const opened = await LocalCopy.open(id).catch(() => null);
-    if (!opened) { this.showHome(); return; }
+    if (!opened) { this.remember(null); this.showHome(); return; }
     const { copy, ops } = opened;
     if (copy.meta.room) {
       const live = await api.room(copy.meta.room).catch(() => null);
@@ -414,6 +422,7 @@ export class Session {
         if (e.first) this.ed.fitView(savedTurn(id));
         this.ed.ensureOwnLayer();
         if (!room.spectator) lapse.attach(e.doc, opts.copy?.meta.id ?? this.local?.meta.id ?? roomLapseKey(id), room.info?.name ?? '');
+        if (e.first && !watch) this.remember({ room: id, name: room.info?.name ?? '' });
         this.app.refreshRoom();
         this.booted();
         if (e.first && (room.spectator || !room.info?.private)) this.app.toast(`${room.spectator ? 'Watching' : 'Joined'} ${room.info?.name ?? 'room'}`);
@@ -504,6 +513,7 @@ export class Session {
     if (!this.ed.room && !this.local) { if (toHome) this.showHome(); return; }
     const saving = this.closeAll(null);
     this.setUrl();
+    this.remember(null);
     this.ed.setDoc(blankDoc());
     this.app.refreshRoom();
     if (toHome) { await saving; this.showHome(); }

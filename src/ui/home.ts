@@ -18,9 +18,11 @@ import { PeopleTab, peopleDialog } from './blocks';
 import { deleteLapse, roomLapseKey } from '../io/lapse';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
+import { LAST_KEY, LastOpen } from './session';
 
 // Fallback to the live event stream.
 const BANNER_KEY = 'doodlehive.support';
+const RESUME_MS = 7 * 24 * 3600_000;
 const FRIENDS_POLL_MS = 60_000;
 
 const VIS_LABEL: Record<Visibility, string> = { private: 'Just you', open: 'Open link', friends: 'Friends', unlisted: 'Unlisted' };
@@ -58,6 +60,7 @@ export class Home {
   private timer = 0;
   private friendsPanel: HTMLElement;
   private projectsHead = h('h1', {}, 'Recent');
+  private resume = h('div.resume', { hidden: true });
   private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
   private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 20) });
@@ -114,6 +117,7 @@ export class Home {
         ),
         h('main.projects', {},
           this.start,
+          this.resume,
           h('section.home-sec', {}, this.projectsHead, this.recent),
           this.sharedSec,
           this.promo,
@@ -136,6 +140,7 @@ export class Home {
     this.start.hidden = guest;
     this.renderPromo();
     if (guest) { this.renderGuest(); return; }
+    this.renderResume();
     this.projectsHead.textContent = 'Recent';
     this.loadProjects();
     this.loadVisits();
@@ -149,6 +154,23 @@ export class Home {
     this.el.hidden = true;
     this.accountPop.hidden = this.noticesPop.hidden = true;
     clearInterval(this.timer);
+  }
+
+  /** Offers the canvas that was open last time, until it is opened or dismissed. */
+  private renderResume() {
+    let last: LastOpen | null = null;
+    try { last = JSON.parse(localStorage.getItem(LAST_KEY) ?? 'null'); } catch { /* storage blocked */ }
+    const r = this.resume, s = this.app.session;
+    r.hidden = !last || Date.now() - last.at > RESUME_MS;
+    if (r.hidden) return;
+    const { canvas, room, name, at } = last!;
+    const forget = () => { try { localStorage.removeItem(LAST_KEY); } catch { /* storage blocked */ } r.hidden = true; };
+    r.replaceChildren(
+      h('span.muted', { html: icon('undo', 18) }),
+      h('span.grow', {}, h('b', {}, name || 'Untitled'), h('small', {}, ` · open ${timeAgo(at)}`)),
+      h('button.btn.small.primary', { type: 'button', onclick: () => { r.hidden = true; if (canvas) s.openLocal(canvas); else if (room) s.joinRoom(room); } }, 'Pick up where you left off'),
+      h('button.icon-btn', { type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss', html: icon('x', 16), onclick: forget }),
+    );
   }
 
   /** The admin's announcement, then the Patreon banner once per browser session until it is closed for good. */

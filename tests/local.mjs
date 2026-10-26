@@ -67,8 +67,16 @@ check(await strokes(ren) === 2, 'reload reopens the canvas with both strokes');
 const rot = await dh(ren, (dh) => dh.ed.view.viewport.rot * 180 / Math.PI);
 check(Math.abs(rot - 90) < 1, `and holds it the way it was left (${rot.toFixed(1)}°)`);
 await dh(ren, (dh) => dh.ed.fitView());
+// Relaunching at the plain app address (an app icon, or after a crash) offers the canvas that was open.
+await ren.goto(base + '/app');
+await ren.waitForSelector('.home:not([hidden]) .resume:not([hidden])');
+check((await ren.locator('.resume b').textContent()) === 'Fox study', 'relaunching offers to pick up the canvas that was open');
+await ren.locator('.resume .btn').click();
+await ren.waitForFunction(() => window.doodlehive?.session.local && window.doodlehive.ed.doc.log.length > 1);
+check(await strokes(ren) === 2, 'and opens it');
 await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await ren.waitForSelector('.home:not([hidden]) .project-tile img');
+check(await ren.locator('.resume').isHidden(), 'going home on purpose drops the offer');
 check(await ren.locator('.tile-meta', { hasText: 'On this device' }).count() === 1, 'home shows it as on this device, with a thumbnail');
 check(await ren.locator('.tile-meta .save-mark.cache').count() === 1, 'the tile carries the cache warning too');
 await ren.screenshot({ path: `${out}/01-home-local.png` });
