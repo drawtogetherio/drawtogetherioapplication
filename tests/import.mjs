@@ -1,4 +1,5 @@
-// Brush import: Photoshop .abr (v2 and v6) and a Procreate .brushset, each built here, through the library's Import button.
+// Brush import: Photoshop .abr (v2 and v6) and a Procreate .brushset, each built here, through the library's Import button;
+// imported brushes give out no share code until the owner confirms the rights.
 // Usage: node tests/import.mjs http://localhost:4180/app.html
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
@@ -208,11 +209,49 @@ await file.setInputFiles({ name: 'empty.brushset', mimeType: 'application/octet-
 check((await toast()).includes('No brushes'), 'a set with no brushes says so');
 check((await brushes()).length === 6, 'six brushes imported in all');
 
+// ---- No share code until the owner confirms the rights ----
+const imported = () => ed((e) => e.prefs.customBrushes.filter((b) => b.imported).map((b) => b.name));
+check((await imported()).length === 6, 'every imported brush is flagged');
+await page.getByRole('tab', { name: 'sample' }).click();
+const share = page.locator('.modal[aria-label="Share this brush?"]');
+const copyCode = async (name) => {
+  await page.locator('.brush-row', { hasText: name }).hover();
+  await page.locator(`[aria-label="More for ${name}"]`).click();
+  await page.locator('.brush-menu .menu-item', { hasText: 'Copy code' }).click();
+};
+await copyCode('Scatter Star');
+await share.waitFor();
+check((await share.locator('.btn.primary').textContent()) === 'I have the rights', 'Copy code on an imported brush asks about the rights first');
+await share.locator('.btn', { hasText: 'Cancel' }).click();
+check((await imported()).includes('Scatter Star') && !/copied|hive-/.test(await page.locator('.toast').textContent()), 'cancelling copies nothing and keeps the flag');
+await copyCode('Scatter Star');
+await share.locator('.btn.primary').click();
+await page.waitForFunction(() => /copied|hive-/.test(document.querySelector('.toast')?.textContent ?? ''));
+check(!(await imported()).includes('Scatter Star'), 'confirming hands out the code and clears the flag for good');
+await copyCode('Scatter Star');
+check(await share.count() === 0, 'the question is asked once per brush');
+await page.locator('.brush-row', { hasText: 'Hard Round' }).hover();
+await page.locator('[aria-label="More for Hard Round"]').click();
+await page.locator('.brush-menu .menu-item', { hasText: 'Edit' }).click();
+await page.waitForSelector('.brush-edit');
+check(await page.locator('.brush-edit .brush-code').isHidden() && await page.locator('.brush-edit button', { hasText: 'Get a share code' }).isVisible(), 'the editor shows no code for an imported brush, only the share button');
+await page.locator('.brush-edit button', { hasText: 'Get a share code' }).click();
+await share.locator('.btn.primary').click();
+check(await page.locator('.brush-edit .brush-code').isVisible() && (await page.locator('.brush-edit .brush-code').inputValue()).startsWith('hive-'), 'confirming there reveals the code');
+await page.locator('.modal-actions .btn', { hasText: 'Cancel' }).click();
+await page.getByRole('tab', { name: 'myset' }).click();
+await page.locator('.brush-row', { hasText: 'Wet Ink' }).hover();
+await page.locator('[aria-label="More for Wet Ink"]').click();
+await page.locator('.brush-menu .menu-item', { hasText: 'Clone' }).click();
+await page.waitForSelector('.brush-edit');
+check(await page.locator('.brush-edit .brush-code').isHidden(), 'a clone of an imported brush is still imported');
+await page.locator('.modal-actions .btn', { hasText: 'Cancel' }).click();
+
 // Persistence
 await page.waitForTimeout(700);
 await page.reload();
 await page.waitForSelector('#canvas-preset');
-check((await brushes()).length === 6 && (await ed((e) => e.prefs.brushCategories)).join() === 'sample,old,myset', 'brushes and categories survive a reload');
+check((await brushes()).length === 6 && (await ed((e) => e.prefs.brushCategories)).join() === 'sample,old,myset' && (await imported()).length === 4, 'brushes, categories and the imported flags survive a reload');
 
 await page.screenshot({ path: `${out}/library.png` });
 check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));

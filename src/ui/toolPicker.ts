@@ -4,9 +4,9 @@ import { BRUSH_LIBRARY, BrushCategory, BrushPreset, renderStroke, smudgeParams }
 import { brushCode, parseBrushCode } from '../shared/brush';
 import { BUILTIN_CATEGORIES, CustomBrush, MAX_CATEGORIES, MAX_CUSTOM_BRUSHES, applyPressure, cleanName } from '../shared/prefs';
 import type { App } from './app';
-import { brushEditor, newCategory, removeBrush } from './brushEditor';
+import { brushEditor, newCategory, removeBrush, shareable } from './brushEditor';
 import { importBrushFile } from '../io/brushImport';
-import { ensureAssets, uploadAssets } from '../engine/brushAssets';
+import { ensureAssets } from '../engine/brushAssets';
 import { brushAssets } from '../shared/brushAssets';
 import { confirmDialog, textDialog } from './dialogs';
 import type { Editor, FillMode, SelectMode, ToolId } from '../editor';
@@ -100,7 +100,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
   const edit = (b: CustomBrush) => brushEditor(app, b, () => { tab = Math.max(0, cats().findIndex((c) => c.name === b.cat)); render(); });
   const clone = (b: BrushPreset) => {
     const c = cats()[tab];
-    edit({ id: uid('c'), name: b.name + ' copy', cat: c.user || BUILTIN_CATEGORIES.includes(c.name) ? c.name : 'General', params: { ...b.params } });
+    edit({ id: uid('c'), name: b.name + ' copy', cat: c.user || BUILTIN_CATEGORIES.includes(c.name) ? c.name : 'General', params: { ...b.params }, ...(custom(b)?.imported ? { imported: true as const } : {}) });
   };
   const more = (b: BrushPreset, at: HTMLElement) => {
     const mine = custom(b);
@@ -108,7 +108,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
     menu.replaceChildren(
       item('copy', 'Clone', () => clone(b)),
       mine ? item('rename', 'Edit', () => edit(mine)) : '',
-      item('link', 'Copy code', () => app.copyText(brushCode(b.name, b.params), 'Brush code copied')),
+      item('link', 'Copy code', async () => { if (await shareable(app, mine)) app.copyText(brushCode(b.name, b.params), 'Brush code copied'); }),
       mine ? item('trash', 'Delete', async () => { if (await confirmDialog('Delete brush', `Delete “${b.name}”?`, 'Delete')) { removeBrush(app, mine); ed.emit('prefs'); render(); } }) : '',
     );
     menu.style.top = `${at.offsetTop + at.offsetHeight}px`;
@@ -129,8 +129,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
       if (p.brushCategories.includes(stem)) catName = stem;
     }
     const room = Math.max(0, MAX_CUSTOM_BRUSHES - p.customBrushes.length), added = got.slice(0, room);
-    for (const b of added) p.customBrushes.push({ id: uid('c'), name: b.name, cat: catName, params: b.params });
-    void uploadAssets(added.flatMap((b) => brushAssets(b.params)));
+    for (const b of added) p.customBrushes.push({ id: uid('c'), name: b.name, cat: catName, params: b.params, imported: true });
     ed.emit('prefs');
     app.toast(added.length < got.length ? `Added ${added.length} of ${got.length} brushes; the library holds ${MAX_CUSTOM_BRUSHES}` : `Added ${added.length} brush${added.length === 1 ? '' : 'es'}`);
     tab = Math.max(0, cats().findIndex((c) => c.name === catName));

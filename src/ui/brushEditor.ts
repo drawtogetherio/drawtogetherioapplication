@@ -108,14 +108,18 @@ export function brushEditor(app: App, brush: CustomBrush, onDone: () => void) {
     return sec;
   });
   const copy = h('button.btn.small', { type: 'button', onclick: () => app.copyText(code.value, 'Brush code copied') }, 'Copy');
+  const codeRow = h('div.row', {}, code, copy), codeHint = h('small.muted', {}, 'Friends paste the code into their library to get this brush.');
+  const share = h('button.btn.small', { type: 'button', onclick: async () => { if (await shareable(app, brush)) showCode(); } }, 'Get a share code…');
+  const shareRow = h('div.row', {}, share, h('small.muted', {}, 'Imported from another app.'));
+  const showCode = () => { const ok = !brush.imported; codeRow.hidden = codeHint.hidden = !ok; shareRow.hidden = ok; };
+  showCode();
   const body = h('div.modal-body.brush-edit', {},
     preview,
     h('div.row', {}, name, cat),
     h('div.pref-row', {}, h('span', {}, 'Tip'), h('span.row', {}, tipThumb, shape)),
     ...groups,
     file,
-    h('div.row', {}, code, copy),
-    h('small.muted', {}, 'Friends paste the code into their library to get this brush.'),
+    codeRow, codeHint, shareRow,
   );
   const done = () => { ed.emit('prefs'); close(); onDone(); };
   const save = h('button.btn.primary', { type: 'button', onclick: () => {
@@ -126,7 +130,7 @@ export function brushEditor(app: App, brush: CustomBrush, onDone: () => void) {
       p.customBrushes.push(brush);
     }
     brush.name = n;
-    void uploadAssets(brushAssets(params)); // so a room or a friend with the code can fetch them
+    if (!brush.imported) void uploadAssets(brushAssets(params)); // so a friend with the code can fetch them; imported images only go up when drawn in a room
     done();
   } }, 'Save');
   const del = isNew ? null : h('button.btn.danger', { type: 'button', onclick: async () => {
@@ -136,6 +140,15 @@ export function brushEditor(app: App, brush: CustomBrush, onDone: () => void) {
   } }, 'Delete');
   const close = modal(isNew ? 'New brush' : 'Edit brush', body, [del, h('button.btn', { type: 'button', onclick: () => close() }, 'Cancel'), save].filter((x): x is HTMLButtonElement => !!x));
   refresh();
+}
+
+/** Whether this brush's code may be handed out; an imported brush asks its owner to confirm the rights first, once. */
+export async function shareable(app: App, brush: CustomBrush | undefined): Promise<boolean> {
+  if (!brush?.imported) return true;
+  if (!(await confirmDialog('Share this brush?', 'It was imported from another app. Only share it if you made it or its licence lets you pass it on.', 'I have the rights'))) return false;
+  delete brush.imported;
+  app.ed.emit('prefs');
+  return true;
 }
 
 export function removeBrush(app: App, brush: CustomBrush) {

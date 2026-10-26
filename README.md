@@ -89,7 +89,10 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - **Import** (`src/io/brushImport.ts`): the library's Import button reads Photoshop `.abr` (versions 1, 2 and
   6+, `src/shared/abr.ts`: sampled tips, computed tips, scatter, texture, dual brush, colour dynamics) and
   Procreate `.brush` / `.brushset` (`src/shared/bplist.ts` unarchives the `Brush.archive` plist; `Shape.png`
-  and `Grain.png` become the tip and texture). A set lands in a category named after the file.
+  and `Grain.png` become the tip and texture). A set lands in a category named after the file. Imported
+  brushes are flagged (`CustomBrush.imported`) and have no share code: Copy code or the editor's share
+  button first asks the owner to confirm they hold the rights, once per brush, and their images are only
+  uploaded when they are drawn in a room.
   Procreate is a trademark of Savage Interactive; Photoshop is a trademark of Adobe. Doodlehive reads
   their file formats and is not affiliated with or endorsed by either.
 

@@ -27,7 +27,8 @@ export type Mode = 'dark' | 'light' | 'system';
 export const MODES: Mode[] = ['dark', 'light', 'system'];
 
 /** A brush someone made; `cat` is a library category or one of their own. */
-export interface CustomBrush { id: string; name: string; cat: string; params: BrushParams }
+/** `imported` brushes came from another app's file and have no share code until the owner confirms they hold the rights. */
+export interface CustomBrush { id: string; name: string; cat: string; params: BrushParams; imported?: true }
 export const BUILTIN_CATEGORIES = ['General', 'Pencil', 'Pen', 'Eraser'];
 export const MAX_CUSTOM_BRUSHES = 80, MAX_CATEGORIES = 12;
 
@@ -137,7 +138,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     const params = b && cleanBrush(b.params), name = cleanName(b?.name, 30);
     if (!params || !name || !isBrushId(b.id) || brushes.some((x) => x.id === b.id) || brushes.length >= MAX_CUSTOM_BRUSHES) continue;
     const cat = cleanName(b.cat, 20);
-    brushes.push({ id: b.id, name, cat: BUILTIN_CATEGORIES.includes(cat) || cats.includes(cat) ? cat : 'General', params });
+    brushes.push({ id: b.id, name, cat: BUILTIN_CATEGORIES.includes(cat) || cats.includes(cat) ? cat : 'General', params, ...(b.imported === true ? { imported: true as const } : {}) });
   }
   const palettes: Palette[] = [];
   for (const p of list(r.palettes) as Record<string, unknown>[]) {
