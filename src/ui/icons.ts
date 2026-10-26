@@ -76,7 +76,7 @@ export function icon(name: keyof typeof P | string, size = 22): string {
 }
 
 export const CROWN_SVG = '<svg class="badge crown" viewBox="0 0 24 24" width="14" height="14" aria-label="Room owner" role="img"><path fill="#f5b301" stroke="#9a6b00" stroke-width="1.2" stroke-linejoin="round" d="M3 18l1.6-10 4.6 4.3L12 5l2.8 7.3L19.4 8 21 18z"/><rect x="3" y="18.5" width="18" height="2.5" rx="1" fill="#f5b301" stroke="#9a6b00" stroke-width="1.2"/></svg>';
-export const STAR_SVG = '<svg class="badge star" viewBox="0 0 24 24" width="14" height="14" aria-label="Premium" role="img"><path fill="#7c5cff" stroke="#4b33c9" stroke-width="1.2" stroke-linejoin="round" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>';
+export const STAR_SVG = '<svg class="badge star" viewBox="0 0 24 24" width="14" height="14" aria-label="Premium" role="img"><path fill="#fdb302" stroke="#fdb302" stroke-width="1.4" stroke-linejoin="round" d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 17.4l-5.8 3 1.1-6.4-4.7-4.6 6.5-.9z"/></svg>';
 /** Badges an admin hands out (see BADGES in shared/profile). */
 export const BADGE_SVGS: Record<string, string> = {
   // Honey mark from the logo kit (src/assets/brand/kit/staffbadgeicon.svg).
