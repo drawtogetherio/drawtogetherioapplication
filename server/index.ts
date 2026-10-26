@@ -661,9 +661,9 @@ async function route(req: Req, res: Res) {
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png',
-  '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.txt': 'text/plain',
+  '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.txt': 'text/plain',
 };
-const COMPRESSIBLE = /\.(html|js|css|svg|json)$/;
+const COMPRESSIBLE = /\.(html|js|css|svg|json|webmanifest)$/;
 interface Cached { mtime: number; etag: string; raw: Buffer; gz: Buffer | null }
 const fileCache = new Map<string, Cached>();
 

@@ -1,7 +1,8 @@
-import { defineConfig, type Plugin } from 'vite';
+import { build, defineConfig, type Plugin } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -19,6 +20,28 @@ const prettyUrls: Plugin = {
   },
 };
 
+/** After the build, compiles src/sw.ts to dist/sw.js with the list of files to keep offline. */
+const serviceWorker: Plugin = {
+  name: 'service-worker',
+  apply: 'build',
+  async closeBundle() {
+    const dist = path.resolve(import.meta.dirname, 'dist');
+    const files: string[] = [];
+    for (const f of readdirSync(dist, { recursive: true }) as string[]) {
+      if (/\.(html|js|css|svg|png|webmanifest)$/.test(f) && !/^(og\.png|sw\.js)$/.test(f)) files.push('/' + f.split(path.sep).join('/'));
+    }
+    const hash = createHash('sha1').update(files.join()).digest('hex').slice(0, 8);
+    const out = await build({
+      configFile: false, logLevel: 'warn',
+      define: { __PRECACHE__: JSON.stringify(files.sort()), __VERSION__: JSON.stringify(`${version}-${hash}`) },
+      build: { write: false, minify: true, target: 'es2020', lib: { entry: path.resolve(import.meta.dirname, 'src/sw.ts'), formats: ['es'], fileName: () => 'sw.js' } },
+    });
+    const chunk = (Array.isArray(out) ? out[0] : out as { output: { code: string }[] }).output[0];
+    writeFileSync(path.join(dist, 'sw.js'), chunk.code);
+    console.log(`  sw.js keeps ${files.length} files offline`);
+  },
+};
+
 // Pages: / landing (index.html), /login (login.html), /app (app.html, the drawing app), /admin (admin.html), 404.html for everything else.
 // Keep page files at the top level: Railway builds in a folder called /app, so an app/ folder of pages
 // makes Vite resolve /app/index.html to the wrong file and silently drop the landing page.
@@ -26,7 +49,7 @@ const prettyUrls: Plugin = {
 export default defineConfig(({ mode }) => ({
   base: mode === 'single' ? './' : '/',
   define: { __APP_VERSION__: JSON.stringify(version) },
-  plugins: mode === 'single' ? [viteSingleFile()] : [prettyUrls],
+  plugins: mode === 'single' ? [viteSingleFile()] : [prettyUrls, serviceWorker],
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',
     target: 'es2020',

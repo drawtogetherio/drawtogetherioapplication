@@ -6,7 +6,7 @@
     "build": "tsc && vite build && node scripts/check-build.mjs",
     "build:single": "tsc && vite build --mode single",
     "preview": "vite preview --host",
-    "typecheck": "tsc && tsc -p server",
+    "typecheck": "tsc && tsc -p tsconfig.sw.json && tsc -p server",
     "build:preview": "npm run build:single && node scripts/make-preview.mjs",
     "dev:web": "vite --host",
     "dev:server": "tsx watch server/index.ts",
