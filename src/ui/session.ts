@@ -26,6 +26,7 @@ export const PREFS_KEY = 'doodlehive.prefs';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const THUMB_DELAY_MS = 15_000;
+const SQUASH_DELAY_MS = 3_000;
 /** About 6 MB of undo pixels. */
 const HEAVY_UPLOAD_TILES = 200;
 const settingsOf = (info: RoomInfo) => ({ width: info.settings.width, height: info.settings.height, infinite: info.settings.infinite, background: info.settings.background });
@@ -40,6 +41,7 @@ export class Session {
   private watch: string | null = null;
   /** The copy of the open canvas kept in this browser (free accounts; everyone in a live-only room). */
   local: LocalCopy | null = null;
+  private squashTimer = 0;
 
   constructor(private app: App) {}
 
@@ -215,7 +217,21 @@ export class Session {
 
   private attachCopy(copy: LocalCopy) {
     this.local = copy;
-    this.ed.onOp = (op) => { copy.push(op); copy.thumb(this.ed.doc); };
+    this.ed.onOp = (op) => {
+      copy.push(op);
+      copy.thumb(this.ed.doc);
+      if (copy.bloated && !this.ed.room) this.squashSoon(copy);
+    };
+  }
+
+  /** Rewrite a log heavy with old undo pixels as a snapshot, once the pen is up. */
+  private squashSoon(copy: LocalCopy) {
+    clearTimeout(this.squashTimer);
+    this.squashTimer = window.setTimeout(() => {
+      if (this.local !== copy || this.ed.room) return;
+      if (this.ed.view.live) { this.squashSoon(copy); return; }
+      copy.replaceWith(this.ed.doc.compactLog());
+    }, SQUASH_DELAY_MS);
   }
 
   private startLocal(copy: LocalCopy, doc: DrawDoc) {

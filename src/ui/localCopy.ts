@@ -8,12 +8,16 @@ const THUMB_DELAY_MS = 5_000, YIELD_MS = 30;
 const HEAVY_TILE_BYTES = 8 * 1024 * 1024, HEAVY_OPS = 20_000;
 type Settings = LocalCanvas['settings'];
 
+const tileBytes = (op: Op) => op.t === 'tiles' ? Object.values(op.tiles).reduce((n, v) => n + (v?.length ?? 0), 0) : 0;
+
 /** A canvas kept in this browser, written as ops happen. */
 export class LocalCopy {
   private pending: Op[] = [];
   private writing = Promise.resolve();
   private thumbTimer = 0;
   private thumbDoc: DrawDoc | null = null;
+  /** Undo pixels written since the log was last squashed. */
+  private grown = 0;
 
   constructor(public meta: LocalCanvas, private seq: number) {}
 
@@ -43,13 +47,16 @@ export class LocalCopy {
 
   /** A log carrying many old undo pixels (or very long) is worth rewriting as a snapshot of the canvas. */
   static heavy(ops: Op[]) {
-    let bytes = 0;
-    for (const op of ops) if (op.t === 'tiles') for (const v of Object.values(op.tiles)) bytes += v?.length ?? 0;
-    return bytes > HEAVY_TILE_BYTES || ops.length > HEAVY_OPS;
+    return ops.reduce((n, op) => n + tileBytes(op), 0) > HEAVY_TILE_BYTES || ops.length > HEAVY_OPS;
   }
 
+  /** The log has grown heavy again since it was last squashed. */
+  get bloated() { return this.grown > HEAVY_TILE_BYTES; }
+
   push(op: Op) {
-    this.pending.push(toWire(op));
+    const wire = toWire(op);
+    this.pending.push(wire);
+    this.grown += tileBytes(wire);
     if (this.pending.length === 1) queueMicrotask(() => this.flush());
   }
 
@@ -64,6 +71,7 @@ export class LocalCopy {
   replaceWith(ops: Op[]) {
     const wire = ops.map(toWire);
     this.pending = [];
+    this.grown = 0;
     this.seq = wire.length;
     return this.writing = this.writing.then(() => replaceOps(this.meta.id, wire)).catch(() => {});
   }

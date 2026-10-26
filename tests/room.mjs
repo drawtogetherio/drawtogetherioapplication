@@ -136,12 +136,25 @@ await alice.waitForTimeout(400);
 check(await ed(alice, (e, id) => e.doc.layer(id).props.visible, aliceLayer), 'server rejects edits to someone else’s layer');
 
 // ---- Undo syncs ----
+const digest = (page, id) => ed(page, (e, id) => {
+  const o = {};
+  for (const [k, t] of e.doc.layer(id).surface.tiles) {
+    const d = t.getContext('2d').getImageData(0, 0, t.width, t.height).data;
+    let s = 0, any = false;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3]) { any = true; s = (s * 31 + d[i] + d[i + 1] * 7 + d[i + 2] * 13 + d[i + 3] * 17) >>> 0; }
+    if (any) o[k] = s;
+  }
+  return JSON.stringify(o, Object.keys(o).sort());
+}, id);
+const bobBefore = await digest(bob, aliceLayer);
 await stroke(alice, line(400, 500, 700, 520));
 await bob.waitForTimeout(300);
 const before = await ed(bob, (e, id) => e.doc.log.length, aliceLayer);
 await alice.keyboard.press('Control+z');
 await bob.waitForFunction((n) => window.doodlehive.ed.doc.log.length > n, before);
-check(true, 'Alice’s undo reached Bob');
+const undoOp = await ed(bob, (e) => { const o = e.doc.log.at(-1); return { t: o.t, keys: Object.keys(o.tiles) }; });
+check(undoOp.t === 'tiles' && undoOp.keys.some((k) => k.includes('@')), `Alice’s undo reached Bob as changed tile parts (${undoOp.keys.slice(0, 2)})`);
+check((await digest(bob, aliceLayer)) === bobBefore, 'and put Bob’s copy of her layer back exactly');
 
 // ---- Effects bar survives other people's strokes ----
 await bob.locator('[aria-label="Effects"]').click();

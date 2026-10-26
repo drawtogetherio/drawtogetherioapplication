@@ -409,6 +409,7 @@ export class StrokeRenderer extends DabPath {
         px[i] = cr; px[i + 1] = cg; px[i + 2] = cb; px[i + 3] = v;
       }
       ctx2d(this.target.ensure(tx, ty)).putImageData(img, lx, ly);
+      this.target.mark(TiledSurface.key(tx, ty), { x: lx, y: ly, w, h });
     }
   }
 }

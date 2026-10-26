@@ -124,6 +124,18 @@ check(gone === 404, 'the room is gone from the server');
 await ren.locator('.tile-open').click();
 await ren.waitForFunction(() => window.doodlehive.session.local && !window.doodlehive.ed.room && window.doodlehive.ed.doc.log.length > 4);
 check(await strokes(ren) === 4 && !(await dh(ren, (dh) => dh.session.local.meta.room)), 'the host’s copy has everyone’s strokes and no room link');
+// A log heavy with undo pixels is squashed to a snapshot once the pen is up (threshold lowered for the test).
+const squash = await dh(ren, async (dh) => {
+  const copy = dh.session.local, before = dh.ed.doc.log.length;
+  copy.grown = 1e12;
+  dh.ed.apply({ t: 'layer.props', id: 'sq' + Date.now(), layer: dh.ed.activeLayer, props: { opacity: 0.99 } });
+  await new Promise((r) => setTimeout(r, 3500));
+  return { before, after: dh.ed.doc.log.length, grown: copy.grown, strokes: dh.ed.doc.log.filter((o) => o.t === 'stroke').length };
+});
+check(squash.after < squash.before && squash.strokes === 0 && squash.grown === 0, `the heavy log was squashed to a snapshot (${squash.before} → ${squash.after} ops)`);
+await ren.reload();
+await ren.waitForFunction(() => window.doodlehive?.session.local && window.doodlehive.ed.layer?.surface.tiles.size > 0);
+check(await dh(ren, (dh) => dh.ed.doc.log.some((o) => o.t === 'tiles') && !dh.ed.doc.log.some((o) => o.t === 'stroke')), 'reload reopens the squashed canvas with its pixels');
 await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await bob.locator('[aria-label=\"Menu\"]').click(); await bob.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await bob.waitForSelector('.home:not([hidden]) .project-tile');

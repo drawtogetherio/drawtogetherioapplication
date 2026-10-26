@@ -189,6 +189,8 @@ export class DrawDoc {
         const gco: GlobalCompositeOperation = op.erase ? 'destination-out' : layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
         const keys = [...buf.tiles.keys()].filter((k) => !op.erase || surface.tiles.has(k));
         const src = buf;
+        // Undo keeps only the part of each tile the stroke touched.
+        const parts = new Map(keys.map((k) => [k, src.footprint(k)]));
         return this.pixelEdit(layer, surface, keys, () => {
           const clip = op.clip ? selPath(op.clip) : null;
           let dirty: Rect | null = null;
@@ -204,7 +206,7 @@ export class DrawDoc {
             dirty = rectUnion(dirty, { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE });
           }
           return dirty;
-        }, true, undefined, !!op.erase);
+        }, true, undefined, !!op.erase, parts);
       }
       case 'smudge': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
@@ -474,10 +476,10 @@ export class DrawDoc {
    * Mutate a layer's pixels (or its mask); returns the `tiles` op that restores them (none when not recording).
    * `canEmpty`: the edit may leave tiles blank, so they are read back and dropped. Painting never does.
    */
-  private pixelEdit(layer: Layer, surface: TiledSurface, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot, canEmpty = true): Op[] {
-    const before: TileSnapshot | null = this.record ? taken ?? surface.snapshot(keys) : null;
+  private pixelEdit(layer: Layer, surface: TiledSurface, keys: string[], mutate: () => Rect | null, emit = true, taken?: TileSnapshot, canEmpty = true, parts?: Map<string, { key: string; w: number; h: number }>): Op[] {
+    const before: TileSnapshot | null = this.record ? taken ?? surface.snapshot(keys, undefined, parts) : null;
     const dirty = mutate();
-    if (before && canEmpty) surface.prune(surface.snapshot(keys));
+    if (before && canEmpty) surface.prune(keys);
     if (emit) this.emit({ rect: dirty ?? rectOfKeys(keys), pixels: layer.props.id });
     if (!before) return [];
     const inv: TilesOp = { t: 'tiles', id: uid(), layer: layer.props.id, tiles: {}, img: Object.fromEntries(before) };
@@ -544,8 +546,11 @@ export function toWire(op: Op): Op {
   return { ...rest, tiles };
 }
 
+/** Undo memory in whole tiles' worth of pixels; a partial tile counts its share. */
 export function opsCost(ops: Op[]) {
-  return ops.reduce((s, o) => s + (o.t === 'tiles' && o.img ? Object.keys(o.img).length : 0), 0);
+  let n = 0;
+  for (const o of ops) if (o.t === 'tiles' && o.img) for (const d of Object.values(o.img)) n += d ? (d.width * d.height) / (TILE * TILE) : 1;
+  return n;
 }
 
 export function newLayerProps(name: string, owner?: string): LayerProps {

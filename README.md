@@ -385,8 +385,9 @@ the server. A `.hivecanvas` is a zip of `manifest.json`, `tree.json` (folders an
 layers' 256 px tiles as PNGs: the canvas as it looks now, never its undo history. Export saves one,
 **Open a file** on the home screen opens one, and the desktop app opens them from the file manager.
 A device canvas moves to a premium account as a `.hivecanvas` (`POST /api/rooms/import`), so a long
-history full of undo pixels can't block it, and a device log heavy with undo pixels is rewritten as a
-snapshot the first time it is opened (`DrawDoc.compactLog`).
+history full of undo pixels can't block it. Undo keeps only the part of each tile a stroke touched
+(`tiles` keys like `3,2@0,160`), and a device log that still grows past 8 MB of undo pixels is rewritten
+as a snapshot once the pen is up, and when it is next opened (`DrawDoc.compactLog`).
 Timelapses (`src/io/lapse.ts`) are recorded only on the device: every 10 s the composited tiles that
 changed are kept losslessly in their own IndexedDB database, merged in pairs past 2000 frames. **Export →
 Timelapse…** makes a 1080p or 4K video in the browser, or saves the frames as a `.hivelapse`. The server
@@ -396,7 +397,8 @@ never takes a timelapse.
 - Joining replays the whole op log (yielding every 24 ms). Long-lived rooms would load faster with a
   periodic snapshot (`tiles` op) replacing old ops, as `LocalCopy.heavy` already does on devices.
 - Two hosts restructuring the same folder at the exact same moment can see different orders until reload.
-- Undoing a stroke restores whole 256px tiles, so it can also undo a host's edit in the same tile of your layer.
+- Undoing a stroke restores the part of each 256px tile it touched, so it can also undo a host's edit in that
+  same strip of your layer.
 - One server process holds all rooms; scaling out later needs sticky sessions or a shared pub/sub.
 
 ## Tests

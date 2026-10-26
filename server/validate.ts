@@ -86,7 +86,7 @@ export function validOp(op: unknown): op is Op {
       if (!isId(op.layer) || !obj(op.tiles) || 'img' in op) return false;
       const entries = Object.entries(op.tiles);
       if (entries.length > MAX_TILES) return false;
-      return entries.every(([k, v]) => /^-?\d{1,6},-?\d{1,6}$/.test(k) && (v === null || (typeof v === 'string' && v.length <= MAX_TILE_CHARS && v.startsWith('data:image/png;base64,'))));
+      return entries.every(([k, v]) => /^-?\d{1,6},-?\d{1,6}(@\d{1,3},\d{1,3})?$/.test(k) && (v === null || (typeof v === 'string' && v.length <= MAX_TILE_CHARS && v.startsWith('data:image/png;base64,'))));
     }
     case 'layer.add': {
       if (!obj(op.layer)) return false;
