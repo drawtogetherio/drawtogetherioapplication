@@ -29,7 +29,13 @@ export function initTheme() {
 
 const dark = matchMedia('(prefers-color-scheme: dark)');
 let mode: Mode = 'dark';
-const paint = () => { document.documentElement.dataset.mode = mode === 'system' ? (dark.matches ? 'dark' : 'light') : mode; };
+const MODE_KEY = 'doodlehive.mode';
+const paint = () => {
+  const m = mode === 'system' ? (dark.matches ? 'dark' : 'light') : mode;
+  document.documentElement.dataset.mode = m;
+  // app.html reads this before anything loads, so the loading screen matches.
+  try { localStorage.setItem(MODE_KEY, m); } catch { /* storage may be blocked */ }
+};
 dark.addEventListener('change', paint);
 
 export function applyMode(m: Mode) { mode = m; paint(); }

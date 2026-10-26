@@ -38,18 +38,18 @@ function scene() {
   return `<div class="mock" aria-hidden="true">
     <svg class="doodles" viewBox="0 0 960 540">
       <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="780" cy="150" r="58" fill="#f4c25b" stroke="#e8b13f" stroke-width="5"/>
-        <path d="M780 62v-22M780 238v22M692 150h-22M868 150h22M718 88l-15-15M842 88l15-15M718 212l-15 15M842 212l15 15" stroke="#e8b13f" stroke-width="6"/>
-        <path d="M760 140h.1M800 140h.1M762 166c10 10 26 10 36 0" stroke="#2b1f04" stroke-width="6"/>
+        <circle cx="780" cy="150" r="58" fill="#fdb302" stroke="#e5a200" stroke-width="5"/>
+        <path d="M780 62v-22M780 238v22M692 150h-22M868 150h22M718 88l-15-15M842 88l15-15M718 212l-15 15M842 212l15 15" stroke="#e5a200" stroke-width="6"/>
+        <path d="M760 140h.1M800 140h.1M762 166c10 10 26 10 36 0" stroke="#212021" stroke-width="6"/>
         <path d="M120 150c-20-20-40 5 0 30 40-25 20-50 0-30" stroke="#e8578a" stroke-width="5"/>
-        <path d="M210 430V320l65-58 65 58v110zM262 430v-50h30v50M300 340h24v22h-24z" stroke="#2b2b33" stroke-width="5"/>
+        <path d="M210 430V320l65-58 65 58v110zM262 430v-50h30v50M300 340h24v22h-24z" stroke="#212021" stroke-width="5"/>
         <path d="M40 440C200 370 360 390 520 440S760 470 860 418" stroke="#3fbf7f" stroke-width="7"/>
         <path d="M380 170C350 168 345 128 375 122 380 92 425 88 437 112 457 94 492 108 490 135 508 140 510 165 494 170" stroke="#5aa9ff" stroke-width="6"/>
         <path d="M640 440c-4-30 2-50 0-80" stroke="#3fbf7f" stroke-width="5"/>
         <circle cx="640" cy="316" r="14" stroke="#e8578a" stroke-width="5"/>
         <circle cx="618" cy="338" r="14" stroke="#e8578a" stroke-width="5"/>
         <path d="M662 324a14 14 0 1 1-2 28" stroke="#e8578a" stroke-width="5"/>
-        <circle cx="640" cy="338" r="8" fill="#f4c25b" stroke="none"/>
+        <circle cx="640" cy="338" r="8" fill="#fdb302" stroke="none"/>
       </g>
     </svg>
     <div class="mock-bubble" style="--c:#5aa9ff;left:51.5%;top:31.5%"><b>K</b>Kiwi</div>

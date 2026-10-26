@@ -86,14 +86,14 @@ await page.screenshot({ path: `${out}/05-rotated-zoomed.png` });
 
 // ---- Themes ----
 const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim());
-check(await accent() === '#f4c25b', 'default theme is Honey');
+check(await accent() === '#fdb302', 'default theme is Honey');
 await page.locator('[aria-label="Menu"]').click();
 await page.screenshot({ path: `${out}/06-menu-honey.png` });
 check((await page.locator('.menu-pop .shortcuts, .menu-pop .theme-row').count()) === 0, 'the menu holds no shortcut list or theme row');
 await page.locator('.menu-pop .menu-item', { hasText: 'Preferences' }).click();
 await page.waitForSelector('.modal[aria-label="Preferences"]');
 await page.locator('.theme-swatch[aria-label^="Lavender"]').click();
-check(await accent() === '#f4c25b', 'premium themes stay locked without premium');
+check(await accent() === '#fdb302', 'premium themes stay locked without premium');
 check((await page.locator('.theme-swatch.custom.locked').count()) === 1, 'so does the custom colour');
 await page.screenshot({ path: `${out}/07-prefs.png` });
 await page.locator('.modal-head .icon-btn').click();

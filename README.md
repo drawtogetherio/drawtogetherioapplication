@@ -47,6 +47,17 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 ## Features
 
+**Branding (v0.31)**
+- Logo by [Logocraftz](https://www.fiverr.com/logocraftz), credited in Preferences → About. The kit's
+  originals are in `src/assets/brand/kit`; `src/site/brand.ts` inlines copies with plain fills. The mark
+  has a version for dark backgrounds (`mark-on-dark.svg`) and one for light (`mark-on-light.svg`), and CSS
+  shows the one for the current mode; the wordmark is one SVG in `currentColor`. `public/favicon.svg`
+  follows the browser's colour scheme. `public/apple-touch-icon.png`, `public/og.png` and
+  `desktop/build/icon.png` are rendered from the same artwork.
+- Brand colours: Dark `#212021`, Honey `#fdb302`, White `#ffffff`. Honey is the default accent; dark mode
+  is built on Dark, light mode on White with Dark text. The last mode is kept in localStorage
+  (`doodlehive.mode`) so the loading screen matches it.
+
 **Drawing (v0.1)**
 - Fixed or **Unlimited** canvas; brush/eraser presets with pen pressure, smoothing, hardness, flow; **Smudge** (S) drags and blends paint in place
 - **Brush library (v0.21)**: one library in categories (General, Pencil, Pen, Eraser) that brush, eraser and

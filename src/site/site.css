@@ -1,16 +1,17 @@
 /* Landing and login pages. Accent colours come from the active theme (see src/ui/theme.ts). */
 :root {
-  --accent: #f4c25b;
-  --accent-hover: #e8b13f;
-  --accent-soft: rgba(244, 194, 91, 0.18);
-  --accent-tint: #3a3322;
-  --on-accent: #2b1f04;
-  --bg: #17150f;
-  --bg-2: #201d16;
-  --card: #26231b;
-  --line: rgba(255, 240, 210, 0.1);
-  --text: #f5efe3;
-  --muted: #b5ab98;
+  /* Brand colours: Dark #212021, Honey #fdb302, White #ffffff. */
+  --accent: #fdb302;
+  --accent-hover: #e5a200;
+  --accent-soft: rgba(253, 179, 2, 0.18);
+  --accent-tint: #42361c;
+  --on-accent: #212021;
+  --bg: #212021;
+  --bg-2: #2a292a;
+  --card: #2f2e2f;
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #ffffff;
+  --muted: #b4b1b4;
   color-scheme: dark;
 }
 
@@ -27,7 +28,7 @@ button { font: inherit; }
 /* Honeycomb texture behind the hero */
 .hive-bg {
   position: absolute; inset: 0; pointer-events: none; opacity: 0.5; z-index: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 0l28 16v32L28 64 0 48V16zM28 64v33' fill='none' stroke='%23f4c25b' stroke-opacity='.07' stroke-width='1.2'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cpath d='M28 0l28 16v32L28 64 0 48V16zM28 64v33' fill='none' stroke='%23fdb302' stroke-opacity='.07' stroke-width='1.2'/%3E%3C/svg%3E");
   mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 70%);
   -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 0%, transparent 70%);
 }
@@ -35,14 +36,15 @@ button { font: inherit; }
 /* Header */
 .site-header {
   position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px max(20px, env(safe-area-inset-left)); background: rgba(23, 21, 15, 0.82);
+  padding: 14px max(20px, env(safe-area-inset-left)); background: rgba(33, 32, 33, 0.82);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
 }
 .header-left { display: flex; align-items: center; gap: 14px; }
-.brand-link { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; }
-.brand-word { font-weight: 800; font-size: 20px; letter-spacing: -0.03em; }
-.brand-word span { color: var(--accent); }
-.logo-mark { display: block; flex: none; }
+.brand-link { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); }
+.brand-word { display: block; flex: none; height: 21px; width: auto; }
+.logo-mark { display: block; flex: none; width: 31px; height: 33px; }
+.logo-mark svg { display: block; width: 100%; height: 100%; }
+.logo-mark .on-light { display: none; }
 
 /* Buttons */
 .btn {
@@ -50,7 +52,7 @@ button { font: inherit; }
   border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text);
   font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; transition: background 0.15s, transform 0.1s;
 }
-.btn:hover { background: #312d23; }
+.btn:hover { background: #3a393a; }
 .btn:active { transform: translateY(1px); }
 .btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 .btn.primary:hover { background: var(--accent-hover); }
@@ -65,6 +67,9 @@ button { font: inherit; }
 /* Landing: one screen, text over the drawing scene */
 .intro { max-width: 1040px; margin: 0 auto; padding: 40px 16px 24px; text-align: center; }
 .intro-brand { display: flex; justify-content: center; margin-bottom: 44px; }
+.intro-brand .brand-link { gap: 12px; }
+.intro-brand .logo-mark { width: 40px; height: 43px; }
+.intro-brand .brand-word { height: 27px; }
 .intro h1 { font-size: clamp(36px, 6vw, 60px); line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 14px; font-weight: 800; }
 .intro .lede { font-size: 18px; color: var(--muted); margin: 0 auto 32px; max-width: 30em; }
 .stage { position: relative; }
@@ -79,19 +84,19 @@ button { font: inherit; }
 
 /* The drawing scene */
 .mock {
-  position: relative; aspect-ratio: 16 / 9; border-radius: 22px; background: #fffaf0; overflow: hidden;
+  position: relative; aspect-ratio: 16 / 9; border-radius: 22px; background: #ffffff; overflow: hidden;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
 }
 .mock svg.doodles { position: absolute; inset: 0; width: 100%; height: 100%; }
 .mock-bubble {
-  position: absolute; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 10px; background: #1d1d22;
+  position: absolute; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 10px; background: #212021;
   color: #f2f2f6; font-size: 13px; font-weight: 600; border: 2px solid var(--c); transform: translate(-50%, calc(-100% - 10px));
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); white-space: nowrap;
 }
 .mock-bubble::after {
-  content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: #1d1d22;
+  content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: #212021;
 }
-.mock-bubble b { width: 20px; height: 20px; border-radius: 50%; background: var(--c); display: grid; place-items: center; font-size: 11px; color: #1d1d22; }
+.mock-bubble b { width: 20px; height: 20px; border-radius: 50%; background: var(--c); display: grid; place-items: center; font-size: 11px; color: #212021; }
 .mock-chat { position: absolute; left: 14px; bottom: 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-size: 12.5px; text-align: left; }
 .mock-chat span { background: rgba(20, 20, 24, 0.86); color: #eee; padding: 3px 9px; border-radius: 8px; }
 .mock-chat strong { color: var(--c); margin-right: 5px; }
@@ -102,7 +107,7 @@ button { font: inherit; }
   position: relative; z-index: 1; width: min(420px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 22px;
   padding: 32px 28px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); text-align: center;
 }
-.login-card .logo-mark { width: 56px; height: 56px; margin: 0 auto 14px; }
+.login-card .logo-mark { width: 60px; height: 64px; margin: 0 auto 14px; }
 .login-card h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.02em; }
 .login-card > p { color: var(--muted); margin: 0 0 24px; }
 .login-card .fine { font-size: 13px; color: var(--muted); margin: 16px 0 0; }

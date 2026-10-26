@@ -6,6 +6,7 @@ import { modal } from './dialogs';
 import { clear, h } from './dom';
 import { Slider } from './slider';
 import { native } from '../io/native';
+import { LOGO_SVG, WORDMARK_SVG } from '../site/brand';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
 const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'About'] as const;
@@ -118,8 +119,12 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
   ];
 
   const about = () => {
-    const rows = [row('Doodlehive', h('span.muted', {}, `v${__APP_VERSION__}`))];
+    const rows = [
+      h('div.about-brand', { html: LOGO_SVG + WORDMARK_SVG }),
+      row('Doodlehive', h('span.muted', {}, `v${__APP_VERSION__}`)),
+    ];
     if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
+    rows.push(row('Logo design', h('a.about-link', { href: 'https://www.fiverr.com/logocraftz', target: '_blank', rel: 'noopener noreferrer' }, 'Logocraftz')));
     return rows;
   };
 

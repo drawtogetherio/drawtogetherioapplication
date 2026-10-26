@@ -310,7 +310,7 @@ async function route(req: Req, res: Res) {
     }
     if (b.favoriteColor !== undefined) {
       const c = normalizeColor(String(b.favoriteColor));
-      if (!c) throw new HttpError(400, 'Use a 6-digit hex colour like #f4c25b.', 'favoriteColor');
+      if (!c) throw new HttpError(400, 'Use a 6-digit hex colour like #fdb302.', 'favoriteColor');
       sets.push('favorite_color = ?'); vals.push(c);
     }
     if (b.links !== undefined) {

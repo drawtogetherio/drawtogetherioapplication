@@ -1,10 +1,17 @@
-export const LOGO_SVG = `<svg class="logo-mark" viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
-  <path d="M16 2.5l11.7 6.75v13.5L16 29.5 4.3 22.75V9.25z" fill="var(--accent)"/>
-  <path d="M10 21.5c2.5-.6 3.6-2.8 5.7-6.4l3.4-4.6 2.6 2.4-4.2 3.6c-3.9 2.8-6.2 3.6-7.5 5z" fill="var(--on-accent)"/>
-</svg>`;
+// Logo by Logocraftz (fiverr.com/logocraftz). Originals in src/assets/brand/kit; these are the same artwork with plain fills,
+// so several can sit inline on one page. The mark has a version for dark backgrounds and one for light; CSS shows the right one.
+import markOnDark from '../assets/brand/mark-on-dark.svg?raw';
+import markOnLight from '../assets/brand/mark-on-light.svg?raw';
+import wordmark from '../assets/brand/wordmark.svg?raw';
+
+const tag = (svg: string, cls: string) => svg.trim().replace('<svg ', `<svg class="${cls}" aria-hidden="true" focusable="false" `);
+
+export const LOGO_SVG = `<span class="logo-mark">${tag(markOnDark, 'on-dark')}${tag(markOnLight, 'on-light')}</span>`;
+/** "Doodlehive" in the logo's lettering, drawn in currentColor. */
+export const WORDMARK_SVG = tag(wordmark, 'brand-word');
 
 export function brandHtml(href = '/') {
-  return `<a class="brand-link" href="${href}" aria-label="Doodlehive home">${LOGO_SVG}<span class="brand-word">doodle<span>hive</span></span></a>`;
+  return `<a class="brand-link" href="${href}" aria-label="Doodlehive home">${LOGO_SVG}${WORDMARK_SVG}</a>`;
 }
 
 export const DISCORD_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M20.3 4.6A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.5 19.5 0 0 0-4.9 1.6C.6 9.2-.3 13.7.1 18.1a19.8 19.8 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14 14 0 0 0 12.2 0l.5.4c-.7.4-1.3.7-2 1l1.3 2a19.7 19.7 0 0 0 6-3c.5-5.1-.8-9.6-3.6-13.5zM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z"/></svg>`;

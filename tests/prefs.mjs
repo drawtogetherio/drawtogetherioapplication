@@ -63,7 +63,7 @@ await group('Appearance');
 // ---- Appearance ----
 await page.locator('.theme-swatch[aria-label^="Lavender"]').click();
 await page.waitForSelector('.toast.show');
-check((await page.locator('.toast').innerText()).includes('premium') && (await accent()) === '#f4c25b', 'only Honey is free');
+check((await page.locator('.toast').innerText()).includes('premium') && (await accent()) === '#fdb302', 'only Honey is free');
 check((await page.locator('.theme-swatch.custom.locked').count()) === 1, 'the custom colour is locked too');
 await page.locator('.segmented button', { hasText: 'Light' }).click();
 check(await page.evaluate(() => document.documentElement.dataset.mode === 'light'), 'light mode applies at once');

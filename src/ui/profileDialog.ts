@@ -26,7 +26,7 @@ export function profileDialog(me: MyProfile, setup: boolean, patreonLink = false
 
     // ---- Colour: one picker for the profile colour, or for either end of the gradient ----
     let color = me.favoriteColor;
-    const g: [string, string] = me.gradient ?? [me.favoriteColor, '#f4c25b'];
+    const g: [string, string] = me.gradient ?? [me.favoriteColor, '#fdb302'];
     let end: 0 | 1 = 0;
     const gradOn = h('input', { type: 'checkbox', id: 'gradient-on' });
     gradOn.checked = !!me.gradient;

@@ -10,7 +10,7 @@ export interface Theme {
 }
 
 export const THEMES: Theme[] = [
-  { id: 'honey', name: 'Honey', premium: false, accent: '#f4c25b', accentHover: '#e8b13f', accentTint: '#3a3322', onAccent: '#2b1f04' },
+  { id: 'honey', name: 'Honey', premium: false, accent: '#fdb302', accentHover: '#e5a200', accentTint: '#42361c', onAccent: '#212021' },
   { id: 'blueberry', name: 'Blueberry', premium: true, accent: '#4f8cff', accentHover: '#3f7ef5', accentTint: '#2b3445', onAccent: '#ffffff' },
   { id: 'lavender', name: 'Lavender', premium: true, accent: '#b49cff', accentHover: '#a387fb', accentTint: '#332e45', onAccent: '#1d1238' },
   { id: 'mint', name: 'Mint', premium: true, accent: '#5fd3a5', accentHover: '#47c592', accentTint: '#253a33', onAccent: '#08281c' },
@@ -34,7 +34,7 @@ export function findTheme(id: string | null | undefined): Theme {
     const light = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2] > 150;
     return {
       id: customTheme(m[1]), name: 'Custom', premium: true, accent: m[1].toLowerCase(),
-      accentHover: hex(mix(c, [0, 0, 0], 0.1)), accentTint: hex(mix(c, [35, 35, 40], 0.75)), onAccent: light ? '#141418' : '#ffffff',
+      accentHover: hex(mix(c, [0, 0, 0], 0.1)), accentTint: hex(mix(c, [33, 32, 33], 0.75)), onAccent: light ? '#212021' : '#ffffff',
     };
   }
   return THEMES.find((t) => t.id === id) ?? THEMES.find((t) => t.id === DEFAULT_THEME)!;
