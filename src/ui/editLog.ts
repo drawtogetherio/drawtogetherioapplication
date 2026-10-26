@@ -13,7 +13,7 @@ import { clear, h } from './dom';
 import { avatarEl, nameText } from './people';
 
 /** Edits that change pixels: the ones a host can take out of the canvas. */
-const PIXELS = new Set<string>(['stroke', 'smudge', 'effect', 'shape', 'fill', 'fillPoly', 'transform', 'tiles', 'layer.clear', 'layer.mask.apply']);
+const PIXELS = new Set<string>(['stroke', 'smudge', 'effect', 'shape', 'fill', 'fillPoly', 'gradient', 'transform', 'tiles', 'layer.clear', 'layer.mask.apply']);
 const PAGE = 150;
 
 /** Hosts: who did what, by person, with a Remove for any edit that touched pixels. */

@@ -444,6 +444,7 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .crop-zoom { display: flex !important; align-items: center; gap: 10px; width: 280px; max-width: 100%; margin: 0 auto; color: var(--muted); font-weight: 700; }
 .crop-zoom input { flex: 1; accent-color: var(--accent); }
 .crop-body small { text-align: center; display: block; }
+.optionsbar .swatch-input { width: 30px; height: 26px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
 .profile-form input[type="color"] { width: 44px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); flex: none; }
 .profile-form #fav-hex { width: 120px !important; font-family: ui-monospace, monospace; }
 .profile-form details summary { cursor: pointer; list-style: revert; }

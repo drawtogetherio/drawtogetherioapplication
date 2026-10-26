@@ -1,5 +1,6 @@
 import { Rect, rectContains, rectIntersect, rectUnion, uid } from '../core/geom';
 import type { Editor } from '../editor';
+import { GradientTool } from './gradientTool';
 import { LassoFillTool } from './lassoFillTool';
 import { PointerInfo, Tool } from './tool';
 
@@ -20,20 +21,23 @@ export function fillRegion(ed: Editor, x: number, y: number): Rect {
 /** The bucket, or in lasso mode the fill lasso. */
 export class FillTool implements Tool {
   private lasso: LassoFillTool;
+  private gradient: GradientTool;
   private pending = false;
 
-  constructor(private ed: Editor) { this.lasso = new LassoFillTool(ed); }
+  constructor(private ed: Editor) { this.lasso = new LassoFillTool(ed); this.gradient = new GradientTool(ed); }
 
-  private get isLasso() { return this.ed.settings.fillMode === 'lasso'; }
-  busy() { return this.lasso.busy(); }
-  down(p: PointerInfo) { if (this.isLasso) this.lasso.down(p); }
-  move(p: PointerInfo) { this.lasso.move(p); }
-  cancel() { this.lasso.cancel(); }
+  /** The drag tool for the current mode; the bucket itself works on release. */
+  private get sub() { const m = this.ed.settings.fillMode; return m === 'lasso' ? this.lasso : m === 'gradient' ? this.gradient : null; }
+  busy() { return this.lasso.busy() || this.gradient.busy(); }
+  down(p: PointerInfo) { this.sub?.down(p); }
+  move(p: PointerInfo) { this.lasso.move(p); this.gradient.move(p); }
+  cancel() { this.lasso.cancel(); this.gradient.cancel(); }
   overlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) { this.lasso.overlay(ctx, M); }
 
   up(p: PointerInfo) {
     const ed = this.ed, st = ed.settings;
-    if (this.isLasso) { this.lasso.up(); return; }
+    const sub = this.sub;
+    if (sub) { sub.up(); return; }
     if (!ed.paintableLayer()) return;
     const region = fillRegion(ed, p.x, p.y);
     if (!rectContains(region, p.x, p.y)) return;

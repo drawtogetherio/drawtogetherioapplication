@@ -7,6 +7,7 @@ import { renderStroke } from '../engine/brush';
 import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
+import { renderGradient } from '../engine/gradient';
 import { enclosedFill, floodFill, maskCanvas, polyFill, polyMask } from '../engine/fill';
 import { effectImage, enclosedFillMask, fillMask } from '../engine/offload';
 import { renderRegion } from '../engine/compositor';
@@ -191,18 +192,20 @@ export class DrawDoc {
   private applyInner(op: Op, opts: ApplyOptions): Op[] | null {
     switch (op.t) {
       case 'stroke':
-      case 'shape': {
+      case 'shape':
+      case 'gradient': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
         if (!layer || !surface) return null;
         let buf = opts.buffer;
         if (!buf) {
           buf = new TiledSurface();
           if (op.t === 'stroke') renderStroke(buf, op.brush, op.color, op.pts);
-          else renderShape(buf, op);
+          else if (op.t === 'shape') renderShape(buf, op);
+          else renderGradient(buf, op);
         }
-        const alpha = op.t === 'stroke' ? op.brush.opacity : op.opacity;
-        const gco: GlobalCompositeOperation = op.erase ? 'destination-out' : layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
-        const keys = [...buf.tiles.keys()].filter((k) => !op.erase || surface.tiles.has(k));
+        const alpha = op.t === 'stroke' ? op.brush.opacity : op.opacity, erase = op.t !== 'gradient' && op.erase;
+        const gco: GlobalCompositeOperation = erase ? 'destination-out' : layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
+        const keys = [...buf.tiles.keys()].filter((k) => !erase || surface.tiles.has(k));
         const src = buf;
         // Undo keeps only the part of each tile the stroke touched.
         const parts = new Map(keys.map((k) => [k, src.footprint(k)]));
@@ -221,7 +224,7 @@ export class DrawDoc {
             dirty = rectUnion(dirty, { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE });
           }
           return dirty;
-        }, true, undefined, !!op.erase, parts);
+        }, true, undefined, erase, parts);
       }
       case 'smudge': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);

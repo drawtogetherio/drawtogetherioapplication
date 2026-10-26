@@ -76,6 +76,12 @@ export function validOp(op: unknown): op is Op {
       return isId(op.layer) && nums([op.x, op.y], 2, 2) && isColor(op.color) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && inRange(op.expand, 0, 16)
         && obj(r) && nums([r.x, r.y], 2, 2) && inRange(r.w, 1, 16384) && inRange(r.h, 1, 16384) && (r.w as number) * (r.h as number) <= MAX_REGION_PX && isClip(op.clip);
     }
+    case 'gradient': {
+      const r = op.region, stops = op.stops;
+      return isId(op.layer) && (op.kind === 'linear' || op.kind === 'radial') && nums([op.x0, op.y0, op.x1, op.y1], 4, 4) && inRange(op.opacity, 0, 1)
+        && Array.isArray(stops) && stops.length >= 2 && stops.length <= 16 && stops.every((s) => obj(s) && inRange(s.at, 0, 1) && isColor(s.color) && inRange(s.alpha, 0, 1))
+        && obj(r) && nums([r.x, r.y], 2, 2) && inRange(r.w, 1, 16384) && inRange(r.h, 1, 16384) && (r.w as number) * (r.h as number) <= MAX_REGION_PX && isClip(op.clip);
+    }
     case 'fillPoly': {
       const r = op.region;
       return isId(op.layer) && nums(op.pts, MAX_CLIP_PTS, 2, 6) && isColor(op.color) && isBool(op.inside) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll)

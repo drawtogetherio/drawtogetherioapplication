@@ -74,6 +74,8 @@ export type EffectId = (typeof EFFECTS)[number];
 /** A polygon; `holes` are rings cut out of it (magic wand). */
 export interface Selection { pts: number[]; holes?: number[][] }
 
+export interface GradientStop { at: number; color: string; alpha: number }
+
 export type ShapeKind = 'line' | 'rect' | 'ellipse' | 'polygon' | 'star' | 'arrow' | 'bubble' | 'polyline' | 'curve' | 'arc';
 export const SHAPE_KINDS_ALL: ShapeKind[] = ['line', 'rect', 'ellipse', 'polygon', 'star', 'arrow', 'bubble', 'polyline', 'curve', 'arc'];
 /** Shapes drawn by clicking points rather than dragging a box. */
@@ -103,6 +105,10 @@ export type Op =
       sampleAll: boolean; expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
     })
   /** A lasso filled with colour; `inside` fills only the parts closed off by lines. */
+  | (OpBase & {
+      t: 'gradient'; layer: string; kind: 'linear' | 'radial'; x0: number; y0: number; x1: number; y1: number;
+      stops: GradientStop[]; opacity: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
+    })
   | (OpBase & {
       t: 'fillPoly'; layer: string; pts: number[]; color: string; inside: boolean; tolerance: number;
       sampleAll: boolean; expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;

@@ -664,6 +664,18 @@ export class App {
         toggle('Size', params.pressureSize > 0, (v) => { pf.pressureSize = v; applyPressure(pf, st.brush); applyPressure(pf, st.eraser); pref(); }),
         toggle('Opacity', params.pressureFlow > 0, (v) => { pf.pressureOpacity = v; applyPressure(pf, st.brush); applyPressure(pf, st.eraser); pref(); }),
       );
+    } else if (ed.toolId === 'fill' && st.fillMode === 'gradient') {
+      const endColor = h('input.swatch-input', { type: 'color', title: 'End colour' });
+      endColor.value = st.gradientEnd ?? ed.color;
+      endColor.addEventListener('input', () => { st.gradientEnd = endColor.value; });
+      o.append(
+        this.modeButton(FILL_MODES.find((m) => m[0] === st.fillMode)!),
+        seg([['linear', 'Linear'], ['radial', 'Radial']] as const, st.gradientKind, (v) => { st.gradientKind = v; }),
+        range('Opacity', st.gradientAlpha, 0, 1, (v) => { st.gradientAlpha = v; }),
+        label('To:'),
+        seg([['fade', 'Transparent'], ['color', 'Colour']] as const, st.gradientEnd ? 'color' : 'fade', (v) => { st.gradientEnd = v === 'color' ? endColor.value : null; }),
+        st.gradientEnd ? endColor : h('span.hint', {}, 'Drag across the selection or canvas'),
+      );
     } else if (ed.toolId === 'fill' || (ed.toolId === 'select' && st.selectMode === 'wand')) {
       o.append(this.modeButton((ed.toolId === 'fill' ? FILL_MODES.find((m) => m[0] === st.fillMode) : SELECT_MODES.find((m) => m[0] === st.selectMode))!));
       if (ed.toolId === 'fill' && st.fillMode === 'lasso') o.append(toggle('Fill inside lines', st.lassoInside, (v) => { st.lassoInside = v; }));
