@@ -11,7 +11,7 @@ import { ctx2d, makeCanvas, uid } from '../core/geom';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 
-export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse'], ['wand', 'Magic wand', 'wand']];
+export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse'], ['wand', 'Magic wand', 'wand'], ['range', 'Colour range', 'colorRange']];
 export const FILL_MODES: [FillMode, string, string][] = [['bucket', 'Bucket', 'fill'], ['lasso', 'Fill lasso', 'lassoFill'], ['gradient', 'Gradient', 'gradient']];
 export const SHAPE_KINDS: [ShapeKind, string, string][] = [
   ['line', 'Line', 'line'], ['arrow', 'Arrow', 'arrow'], ['rect', 'Rectangle', 'rect'], ['ellipse', 'Ellipse', 'ellipse'], ['polygon', 'Polygon', 'polygon'],

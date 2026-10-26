@@ -8,6 +8,7 @@ import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
 import { renderGradient } from '../engine/gradient';
+import { featherPad, maskImage, selMask, unmaskImage } from '../engine/selection';
 import { enclosedFill, floodFill, maskCanvas, polyFill, polyMask } from '../engine/fill';
 import { effectImage, enclosedFillMask, fillMask } from '../engine/offload';
 import { renderRegion } from '../engine/compositor';
@@ -204,13 +205,15 @@ export class DrawDoc {
           else renderGradient(buf, op);
         }
         const alpha = op.t === 'stroke' ? op.brush.opacity : op.opacity, erase = op.t !== 'gradient' && op.erase;
-        const gco: GlobalCompositeOperation = erase ? 'destination-out' : layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
-        const keys = [...buf.tiles.keys()].filter((k) => !erase || surface.tiles.has(k));
+        const atop = (layer.props.alphaLock || (op.t === 'shape' && op.atop)) && !op.mask;
+        const gco: GlobalCompositeOperation = erase ? 'destination-out' : atop ? 'source-atop' : 'source-over';
+        const keys = [...buf.tiles.keys()].filter((k) => (!erase && !atop) || surface.tiles.has(k));
         const src = buf;
         // Undo keeps only the part of each tile the stroke touched.
         const parts = new Map(keys.map((k) => [k, src.footprint(k)]));
         return this.pixelEdit(layer, surface, keys, () => {
-          const clip = op.clip ? selPath(op.clip) : null;
+          const soft = op.clip?.feather && keys.length ? selMask(op.clip, rectRoundOut(rectOfKeys(keys)!, featherPad(op.clip))) : null;
+          const clip = op.clip && !soft ? selPath(op.clip) : null;
           let dirty: Rect | null = null;
           for (const k of keys) {
             const [tx, ty] = TiledSurface.parse(k);
@@ -219,7 +222,7 @@ export class DrawDoc {
             if (clip) { c.translate(-tx * TILE, -ty * TILE); c.clip(clip, 'evenodd'); c.setTransform(1, 0, 0, 1, 0, 0); }
             c.globalAlpha = alpha;
             c.globalCompositeOperation = gco;
-            c.drawImage(src.tiles.get(k)!, 0, 0);
+            c.drawImage(soft ? maskImage(src.tiles.get(k)!, TILE, TILE, soft, tx * TILE, ty * TILE) : src.tiles.get(k)!, 0, 0);
             c.restore();
             dirty = rectUnion(dirty, { x: tx * TILE, y: ty * TILE, w: TILE, h: TILE });
           }
@@ -251,11 +254,15 @@ export class DrawDoc {
         const r = done.region, src = makeCanvas(r.w, r.h);
         ctx2d(src).putImageData(done.img, 0, 0);
         return this.pixelEdit(layer, surface, surface.keysIn(r), () => {
-          const clip = op.clip ? selPath(op.clip) : null;
+          const soft = op.clip?.feather ? selMask(op.clip, r) : null;
+          const clip = op.clip && !soft ? selPath(op.clip) : null;
+          // A soft edge mixes the processed pixels into the original by the mask.
+          const keep = soft ? unmaskImage(surface.extract(r), r.w, r.h, soft, r.x, r.y) : null;
           surface.draw(r, (c) => {
             if (clip) c.clip(clip, 'evenodd');
             c.clearRect(r.x, r.y, r.w, r.h);
-            c.drawImage(src, r.x, r.y);
+            if (keep) c.drawImage(keep, r.x, r.y);
+            c.drawImage(soft ? maskImage(src, r.w, r.h, soft, r.x, r.y) : src, r.x, r.y);
           });
           return r;
         });
@@ -277,11 +284,12 @@ export class DrawDoc {
         if (!fill) return null;
         const gco: GlobalCompositeOperation = layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';
         return this.pixelEdit(layer, surface, surface.keysIn(op.region), () => {
-          const clip = op.clip ? selPath(op.clip) : null;
+          const soft = op.clip?.feather ? selMask(op.clip, op.region) : null;
+          const clip = op.clip && !soft ? selPath(op.clip) : null;
           surface.draw(op.region, (c) => {
             if (clip) c.clip(clip, 'evenodd');
             c.globalCompositeOperation = gco;
-            c.drawImage(fill, op.region.x, op.region.y);
+            c.drawImage(soft ? maskImage(fill, op.region.w, op.region.h, soft, op.region.x, op.region.y) : fill, op.region.x, op.region.y);
           });
           return op.region;
         });

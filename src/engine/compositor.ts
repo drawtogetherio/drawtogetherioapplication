@@ -1,6 +1,7 @@
 import { Rect, ctx2d, makeCanvas, transformRect } from '../core/geom';
 import { type Adjustment, blendOp } from '../core/model';
 import { adjustPixels } from './effects';
+import type { SelMask } from './selection';
 import type { DrawDoc, Layer } from '../core/document';
 import { TiledSurface } from '../core/tiles';
 
@@ -10,6 +11,8 @@ export interface LiveLayer {
   bufferAlpha?: number;
   bufferOp?: GlobalCompositeOperation;
   clip?: Path2D; // document-space clip for the buffer
+  /** A feathered selection: the buffer shows through this instead of the hard clip. */
+  clipMask?: SelMask;
   hole?: Path2D;
   floating?: { canvas: HTMLCanvasElement; x: number; y: number; m: DOMMatrix };
   /** The edit is on the layer's mask, not its pixels. */
@@ -169,10 +172,19 @@ function drawLive(sc: CanvasRenderingContext2D, live: LiveLayer, region: Rect) {
   }
   if (live.buffer) {
     sc.save();
-    if (live.clip) sc.clip(live.clip, 'evenodd');
     sc.globalAlpha = live.bufferAlpha ?? 1;
     sc.globalCompositeOperation = live.bufferOp ?? 'source-over';
-    live.buffer.drawTo(sc, region);
+    if (live.clipMask) {
+      const m = live.clipMask, soft = makeCanvas(region.w, region.h), c = ctx2d(soft);
+      c.translate(-region.x, -region.y);
+      live.buffer.drawTo(c, region);
+      c.globalCompositeOperation = 'destination-in';
+      c.drawImage(m.canvas, m.x, m.y);
+      sc.drawImage(soft, region.x, region.y);
+    } else {
+      if (live.clip) sc.clip(live.clip, 'evenodd');
+      live.buffer.drawTo(sc, region);
+    }
     sc.restore();
   }
   if (live.floating) {

@@ -1,11 +1,12 @@
 import { Rect, ctx2d, makeCanvas, rectFromPoints, rectRoundOut, selPath, transformRect } from '../core/geom';
 import { Selection } from '../core/model';
 import { TiledSurface } from '../core/tiles';
+import { featherPad, selMask } from './selection';
 
 export interface Floating { canvas: HTMLCanvasElement; x: number; y: number }
 
 export function selectionBounds(sel: Selection): Rect {
-  return rectRoundOut(rectFromPoints(sel.pts)!, 1);
+  return rectRoundOut(rectFromPoints(sel.pts)!, 1 + featherPad(sel));
 }
 
 export function liftSelection(surface: TiledSurface, sel: Selection): Floating {
@@ -14,18 +15,18 @@ export function liftSelection(surface: TiledSurface, sel: Selection): Floating {
   const ctx = ctx2d(c);
   ctx.translate(-b.x, -b.y);
   ctx.save();
-  ctx.clip(selPath(sel), 'evenodd');
-  surface.drawTo(ctx, b);
+  if (sel.feather) { surface.drawTo(ctx, b); ctx.globalCompositeOperation = 'destination-in'; ctx.drawImage(selMask(sel, b).canvas, b.x, b.y); }
+  else { ctx.clip(selPath(sel), 'evenodd'); surface.drawTo(ctx, b); }
   ctx.restore();
   return { canvas: c, x: b.x, y: b.y };
 }
 
 export function clearSelection(surface: TiledSurface, sel: Selection) {
-  const path = selPath(sel);
-  surface.draw(selectionBounds(sel), (ctx) => {
+  const path = selPath(sel), b = selectionBounds(sel);
+  surface.draw(b, (ctx) => {
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = '#000';
-    ctx.fill(path, 'evenodd');
+    if (sel.feather) ctx.drawImage(selMask(sel, b).canvas, b.x, b.y);
+    else { ctx.fillStyle = '#000'; ctx.fill(path, 'evenodd'); }
   }, false);
 }
 
@@ -42,7 +43,7 @@ export function placeFloating(surface: TiledSurface, f: Floating, m: DOMMatrixRe
 }
 
 export function transformSel(sel: Selection, m: DOMMatrixReadOnly): Selection {
-  return { pts: transformPoly(sel.pts, m), holes: sel.holes?.map((h) => transformPoly(h, m)) };
+  return { pts: transformPoly(sel.pts, m), holes: sel.holes?.map((h) => transformPoly(h, m)), feather: sel.feather };
 }
 
 export function transformPoly(pts: number[], m: DOMMatrixReadOnly): number[] {

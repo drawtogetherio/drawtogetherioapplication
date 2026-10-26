@@ -36,7 +36,7 @@ function strokePts(v: unknown, max: number, size: number, min = 3): v is number[
 
 export const validCoord = (v: unknown): v is number => isNum(v) && Math.abs(v) <= MAX_COORD;
 
-const isSel = (v: unknown) => obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6)
+const isSel = (v: unknown) => obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6) && (v.feather === undefined || inRange(v.feather, 0, 64))
   && (v.holes === undefined || (Array.isArray(v.holes) && v.holes.length <= MAX_HOLES && v.holes.every((h) => nums(h, MAX_CLIP_PTS, 2, 6))));
 const isClip = (v: unknown) => v === undefined || isSel(v);
 const isMask = (v: unknown) => v === undefined || v === true;
@@ -77,7 +77,7 @@ export function validOp(op: unknown): op is Op {
     case 'shape':
       return isId(op.layer) && SHAPE_KINDS_ALL.includes(op.shape as never) && nums([op.x0, op.y0, op.x1, op.y1], 4, 4)
         && inRange(op.width, 0, MAX_BRUSH) && isBool(op.fill) && isColor(op.color) && inRange(op.opacity, 0, 1) && isBool(op.erase) && isClip(op.clip)
-        && (op.sides === undefined || inRange(op.sides, 3, 24)) && (op.pts === undefined ? !POINT_SHAPES.includes(op.shape as never) : nums(op.pts, MAX_CLIP_PTS, 2, 4));
+        && (op.atop === undefined || isBool(op.atop)) && (op.sides === undefined || inRange(op.sides, 3, 24)) && (op.pts === undefined ? !POINT_SHAPES.includes(op.shape as never) : nums(op.pts, MAX_CLIP_PTS, 2, 4));
     case 'fill': {
       const r = op.region;
       return isId(op.layer) && nums([op.x, op.y], 2, 2) && isColor(op.color) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && inRange(op.expand, 0, 16)

@@ -43,7 +43,7 @@ export class GradientTool implements Tool {
     renderGradient(buffer, this.spec);
     ed.view.live = {
       layerId: layer.props.id, buffer, bufferAlpha: 1,
-      bufferOp: layer.props.alphaLock && !ed.onMask ? 'source-atop' : 'source-over', clip: ed.clipPath(), mask: ed.onMask,
+      bufferOp: layer.props.alphaLock && !ed.onMask ? 'source-atop' : 'source-over', clip: ed.clipPath(), clipMask: ed.clipMask(), mask: ed.onMask,
     };
     ed.view.invalidate(this.region);
   }

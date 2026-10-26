@@ -67,6 +67,7 @@ const P: Record<string, string> = {
   home: '<path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/>',
   clipMask: '<path d="M7 4v9a4 4 0 0 0 4 4h7"/><path d="M14 13l4 4-4 4"/>',
   maskIc: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 3v18"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+  colorRange: '<circle cx="7" cy="8" r="2.5"/><circle cx="16" cy="7" r="2.5"/><circle cx="9" cy="16" r="2.5"/><circle cx="17" cy="16" r="2.5"/><path d="M3 3h4M3 3v4M21 3h-4M21 3v4M3 21h4M3 21v-4M21 21h-4M21 21v-4"/>',
   gradient: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M12 4v16M16 4v16" opacity=".35"/>',
   arrow: '<path d="M5 19L19 5M11 5h8v8"/>',
   polygon: '<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/>',

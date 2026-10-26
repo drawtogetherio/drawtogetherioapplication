@@ -8,12 +8,13 @@ import { SelectTool } from '../tools/selectTool';
 import { ShapeTool } from '../tools/shapeTool';
 import { InputController } from '../view/input';
 import { ColorPicker } from './colorPicker';
-import { confirmDialog, exportDialog, modal, newCanvasDialog } from './dialogs';
+import { confirmDialog, exportDialog, modal, newCanvasDialog, textDialog } from './dialogs';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { LayersPanel } from './layersPanel';
 import { Slider } from './slider';
-import { uid } from '../core/geom';
+import { rectFromPoints, uid } from '../core/geom';
+import { featherPad } from '../engine/selection';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { MemoryMeter } from './memory';
@@ -677,8 +678,12 @@ export class App {
         seg([['fade', 'Transparent'], ['color', 'Colour']] as const, st.gradientEnd ? 'color' : 'fade', (v) => { st.gradientEnd = v === 'color' ? endColor.value : null; }),
         st.gradientEnd ? endColor : h('span.hint', {}, 'Drag across the selection or canvas'),
       );
-    } else if (ed.toolId === 'fill' || (ed.toolId === 'select' && st.selectMode === 'wand')) {
+    } else if (ed.toolId === 'fill' || (ed.toolId === 'select' && (st.selectMode === 'wand' || st.selectMode === 'range'))) {
       o.append(this.modeButton((ed.toolId === 'fill' ? FILL_MODES.find((m) => m[0] === st.fillMode) : SELECT_MODES.find((m) => m[0] === st.selectMode))!));
+      if (ed.toolId === 'fill' && st.fillMode === 'bucket') o.append(
+        h('button.btn.small', { title: ed.selection ? 'Fill the selection (Alt+Backspace)' : 'Fill the whole layer (Alt+Backspace)', onclick: () => this.fillArea('fill') }, ed.selection ? 'Fill selection' : 'Fill layer'),
+        h('button.btn.small', { title: 'Paint the colour over existing pixels only (Shift+Alt+Backspace)', onclick: () => this.fillArea('recolour') }, 'Recolour'),
+      );
       if (ed.toolId === 'fill' && st.fillMode === 'lasso') o.append(toggle('Fill inside lines', st.lassoInside, (v) => { st.lassoInside = v; }));
       o.append(range('Tolerance', st.fillTolerance, 0, 1, (v) => { st.fillTolerance = v; }));
       if (ed.toolId !== 'select') o.append(range('Expand', st.fillExpand, 0, 4, (v) => { st.fillExpand = Math.round(v); }, (v) => Math.round(v) + 'px'));
@@ -686,13 +691,13 @@ export class App {
         label('Reference:'),
         seg([['all', 'All layers'], ['layer', 'This layer']] as const, st.fillSampleAll ? 'all' : 'layer', (v) => { st.fillSampleAll = v === 'all'; }),
       );
-      if (ed.toolId === 'select' && ed.selection) o.append(h('button.btn', { onclick: () => this.select.deselect() }, 'Deselect'));
+      if (ed.toolId === 'select') this.selectionTools(o);
     } else if (ed.toolId === 'select') {
       o.append(this.modeButton(SELECT_MODES.find((m) => m[0] === st.selectMode)!));
       o.append(h('button.btn', { onclick: () => this.select.selectAll() }, 'Select all'));
+      this.selectionTools(o);
       if (ed.selection) {
         o.append(
-          h('button.btn', { onclick: () => this.select.deselect() }, 'Deselect'),
           h('button.icon-btn', { title: 'Flip selection horizontally', html: icon('flipH', 18), onclick: () => this.select.flip(true) }),
           h('button.icon-btn', { title: 'Flip selection vertically', html: icon('flipV', 18), onclick: () => this.select.flip(false) }),
         );
@@ -702,8 +707,8 @@ export class App {
           h('button.btn.primary', { html: icon('check', 16) + '<span>Apply</span>', onclick: () => { this.select.commit(); } }),
           h('button.btn', { onclick: () => { this.select.cancel(); } }, 'Cancel'),
         );
-      } else {
-        o.append(h('span.hint', {}, ed.selection ? 'Drag to move, corners scale, dot rotates' : 'Drag to select'));
+      } else if (!ed.selection) {
+        o.append(h('span.hint', {}, 'Drag to select'));
       }
     } else if (ed.toolId === 'shape') {
       const points = POINT_SHAPES.includes(st.shape);
@@ -845,7 +850,7 @@ export class App {
         else if (this.select.xf) this.select.cancel(); else this.select.deselect();
         return;
       }
-      if (e.key === 'Delete' || e.key === 'Backspace') { this.deleteSelection(); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace') { if (e.altKey) this.fillArea(e.shiftKey ? 'recolour' : 'fill'); else this.deleteSelection(); return; }
       const action = actionFor(ed.prefs, k);
       if (!action) return;
       if (TOOLS.some((t) => t.id === action)) { ed.setTool(action as ToolId); return; }
@@ -879,16 +884,47 @@ export class App {
   }
 
   private deleteSelection() {
+    if (this.ed.selection) this.fillArea('erase');
+  }
+
+  /** Refinements that apply to any selection: feather, grow/shrink, invert, content, saved selections. */
+  private selectionTools(o: HTMLElement) {
+    const ed = this.ed, st = ed.settings, sel = ed.selection, select = this.select;
+    const num = (name: string, value: number, min: number, max: number, set: (v: number) => void) => {
+      const s = new Slider({ min, max, value, label: name, step: 1, format: (v) => Math.round(v) + 'px', onInput: (v) => set(Math.round(v)), onEnd: () => this.renderOptions() });
+      s.el.classList.add('compact');
+      return s.el;
+    };
+    const btn = (label: string, title: string, fn: () => void) => h('button.btn.small', { title, onclick: () => { fn(); this.renderOptions(); } }, label);
+    o.append(num('Feather', sel?.feather ?? st.selectFeather, 0, 64, (v) => { st.selectFeather = v; if (ed.selection) select.feather(v); }));
+    if (sel) o.append(
+      num('By', st.selectGrow, 1, 64, (v) => { st.selectGrow = v; }),
+      btn('Grow', 'Grow the selection', () => select.grow(st.selectGrow)),
+      btn('Shrink', 'Shrink the selection', () => select.grow(-st.selectGrow)),
+      btn('Invert', 'Select everything else', () => select.invert()),
+      btn('Deselect', 'Drop the selection (Ctrl+D)', () => select.deselect()),
+      btn('Save', 'Keep this selection to load later', async () => { const name = await textDialog('Save selection', `Selection ${ed.savedSelections.length + 1}`); if (name) select.save(name); }),
+    );
+    else o.append(btn('Content', 'Select the painted pixels of this layer', () => select.selectContent()));
+    if (ed.savedSelections.length) {
+      const load = h('select.opt-select', { 'aria-label': 'Load a saved selection' }, h('option', { value: '' }, 'Load…'), ...ed.savedSelections.map((s, i) => h('option', { value: String(i) }, s.name)));
+      load.addEventListener('change', () => { const s = ed.savedSelections[+load.value]; if (s) select.set(s.sel); this.renderOptions(); });
+      o.append(load);
+    }
+    if (sel) o.append(h('span.hint', {}, 'Drag to move, corners scale, dot rotates'));
+  }
+
+  /** One rectangle op over the selection (or the whole canvas): erased, filled with the colour, or recoloured where pixels already are. */
+  fillArea(how: 'erase' | 'fill' | 'recolour') {
     const ed = this.ed;
-    if (!ed.selection) return;
+    if (!ed.paintableLayer()) return;
     this.select.commit();
-    const sel = ed.selection!;
-    // An erasing shape op, so it syncs and undoes like any edit.
-    const xs = sel.pts.filter((_, i) => i % 2 === 0), ys = sel.pts.filter((_, i) => i % 2 === 1);
-    const x0 = Math.min(...xs) - 2, y0 = Math.min(...ys) - 2, x1 = Math.max(...xs) + 2, y1 = Math.max(...ys) + 2;
+    const sel = ed.selection, r = sel ? rectFromPoints(sel.pts, 2 + featherPad(sel))! : ed.workArea();
     ed.apply({
-      t: 'shape', id: uid(), layer: ed.activeLayer, shape: 'rect', x0, y0, x1, y1,
-      width: 0, fill: true, color: '#000000', opacity: 1, erase: true, clip: sel, mask: ed.onMask,
+      t: 'shape', id: uid(), layer: ed.activeLayer, shape: 'rect', x0: r.x, y0: r.y, x1: r.x + r.w, y1: r.y + r.h,
+      width: 0, fill: true, color: how === 'erase' ? '#000000' : ed.color, opacity: how === 'erase' ? 1 : ed.settings.brush.opacity, erase: how === 'erase',
+      atop: how === 'recolour' || undefined, clip: sel ?? undefined, mask: ed.onMask,
     });
+    if (how !== 'erase') ed.pushRecent(ed.color);
   }
 }

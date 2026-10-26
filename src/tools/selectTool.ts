@@ -2,6 +2,7 @@ import { Point, Rect, ctx2d, dist, pointInSel, rectContains, rectFromPoints, sel
 import { renderRegion } from '../engine/compositor';
 import { maskToSelection } from '../engine/contour';
 import { regionMask } from '../engine/fill';
+import { colourRangeSel, contentSel, growSel, invertSel } from '../engine/selection';
 import { fillRegion } from './fillTool';
 import { Selection } from '../core/model';
 import { Floating, liftSelection, transformSel } from '../engine/transform';
@@ -128,7 +129,7 @@ export class SelectTool implements Tool {
         }
         return;
       }
-      if (this.ed.settings.selectMode !== 'wand' && pointInSel(this.outline()!, p.x, p.y)) {
+      if (this.ed.settings.selectMode !== 'wand' && this.ed.settings.selectMode !== 'range' && pointInSel(this.outline()!, p.x, p.y)) {
         const x = this.ensureXform();
         if (!x) return;
         this.drag = { kind: 'move', p0: { x: p.x, y: p.y }, T0: { ...x.T } };
@@ -144,7 +145,7 @@ export class SelectTool implements Tool {
     const d = this.drag;
     if (!d) return;
     if (d.kind === 'select') {
-      if (this.ed.settings.selectMode === 'wand') return;
+      if (this.ed.settings.selectMode === 'wand' || this.ed.settings.selectMode === 'range') return;
       if (this.ed.settings.selectMode === 'lasso') {
         const n = d.pts.length;
         if (dist(d.pts[n - 2], d.pts[n - 1], p.x, p.y) * this.ed.view.viewport.zoom > 2) d.pts.push(p.x, p.y);
@@ -195,21 +196,43 @@ export class SelectTool implements Tool {
     this.drag = null;
     if (!d) return;
     if (d.kind === 'select') {
-      const sel = this.ed.settings.selectMode === 'wand' ? this.wand(d.x0, d.y0) : this.buildSelection(d.pts);
-      this.ed.selection = sel;
-      this.ed.emit('selection');
-      this.ed.view.requestRender();
+      const mode = this.ed.settings.selectMode;
+      const sel = mode === 'wand' || mode === 'range' ? this.wand(d.x0, d.y0, mode === 'range') : this.buildSelection(d.pts);
+      this.set(sel && this.ed.settings.selectFeather ? { ...sel, feather: this.ed.settings.selectFeather } : sel);
     }
   }
 
-  /** The connected area of similar colour under the point, on this layer or everything visible. */
-  private wand(x: number, y: number): Selection | null {
+  /** Makes this the selection. */
+  set(sel: Selection | null) {
+    this.commit();
+    this.ed.selection = sel;
+    this.ed.emit('selection');
+    this.ed.view.requestRender();
+  }
+
+  invert() { const sel = this.ed.selection; if (sel) this.set(invertSel(sel, this.ed.doc.settings.infinite ? rectFromPoints(sel.pts, 4096)! : this.ed.workArea())); }
+  grow(px: number) { const sel = this.ed.selection; if (sel) this.set(growSel(sel, px)); }
+  feather(px: number) { const sel = this.ed.selection; if (sel) this.set({ ...sel, feather: px || undefined }); }
+
+  /** Selects the painted pixels of the active layer (or its mask). */
+  selectContent() {
+    const ed = this.ed, layer = ed.layer, surface = layer && (ed.onMask && layer.mask ? layer.mask : layer.surface);
+    const r = surface?.contentBounds();
+    if (!surface || !r) { ed.toast('Nothing on this layer'); return; }
+    this.set(contentSel(ctx2d(surface.extract(r), true).getImageData(0, 0, r.w, r.h), r));
+  }
+
+  save(name: string) { const sel = this.ed.selection; if (sel) this.ed.savedSelections = [{ name, sel }, ...this.ed.savedSelections.filter((s) => s.name !== name)].slice(0, 20); }
+
+  /** The connected area of similar colour under the point, on this layer or everything visible; or every such pixel, wherever it is. */
+  private wand(x: number, y: number, everywhere = false): Selection | null {
     const ed = this.ed, st = ed.settings, layer = ed.layer;
     const region = fillRegion(ed, x, y);
     if (!layer || !rectContains(region, x, y)) return null;
     const src = ed.onMask && layer.mask ? layer.mask.extract(region)
       : renderRegion(ed.doc, region, { paper: false, only: st.fillSampleAll ? undefined : layer.props.id, raw: !st.fillSampleAll });
     const data = ctx2d(src, true).getImageData(0, 0, region.w, region.h);
+    if (everywhere) return colourRangeSel(data, region, x, y, st.fillTolerance);
     const m = regionMask(data, region, x, y, st.fillTolerance);
     return m && maskToSelection(m, region.w, region.h, region.x, region.y);
   }
@@ -270,20 +293,12 @@ export class SelectTool implements Tool {
   }
 
   selectAll() {
-    this.commit();
     const ed = this.ed;
     const r = ed.doc.settings.infinite ? ed.layer?.surface.contentBounds() ?? ed.workArea() : ed.workArea();
-    ed.selection = { pts: [r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h] };
-    ed.emit('selection');
-    ed.view.requestRender();
+    this.set({ pts: [r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h] });
   }
 
-  deselect() {
-    this.commit();
-    this.ed.selection = null;
-    this.ed.emit('selection');
-    this.ed.view.requestRender();
-  }
+  deselect() { this.set(null); }
 
   overlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) {
     const d = this.drag;

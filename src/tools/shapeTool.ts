@@ -83,7 +83,7 @@ export class ShapeTool implements Tool {
     const layer = this.ed.layer!;
     const live = (buffer: TiledSurface) => ({
       layerId: layer.props.id, buffer, bufferAlpha: b.opacity,
-      bufferOp: layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over', clip: this.ed.clipPath(), mask: this.ed.onMask,
+      bufferOp: layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over', clip: this.ed.clipPath(), clipMask: this.ed.clipMask(), mask: this.ed.onMask,
     } as const);
     this.ed.view.live = live(buffer);
     this.copies = [];

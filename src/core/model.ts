@@ -79,7 +79,7 @@ export const isAdjustment = (e: EffectId) => ADJUSTMENTS.includes(e);
 export interface Adjustment { effect: EffectId; amount: number; params?: number[]; colors?: string[] }
 
 /** A polygon; `holes` are rings cut out of it (magic wand). */
-export interface Selection { pts: number[]; holes?: number[][] }
+export interface Selection { pts: number[]; holes?: number[][]; /** Soft edge, in px. */ feather?: number }
 
 export interface GradientStop { at: number; color: string; alpha: number }
 
@@ -104,6 +104,7 @@ export type Op =
   | (OpBase & {
       t: 'shape'; layer: string; shape: ShapeKind; x0: number; y0: number; x1: number; y1: number;
       width: number; fill: boolean; color: string; opacity: number; erase: boolean; clip?: Selection;
+      /** Paint only where the layer already has pixels (a recolour). */ atop?: boolean;
       /** Corners of a polygon or points of a star. */ sides?: number;
       /** x,y pairs for point shapes; an arc is start, a point on it, end. */ pts?: number[];
     })

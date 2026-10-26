@@ -1,5 +1,6 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, wireOps } from './core/document';
-import { Point, Rect, selPath, uid } from './core/geom';
+import { Point, Rect, rectFromPoints, rectRoundOut, selPath, uid } from './core/geom';
+import { SelMask, featherPad, selMask } from './engine/selection';
 import { Adjustment, BrushParams, Op, Selection, ShapeKind } from './core/model';
 import { EFFECT_INFO } from './engine/effects';
 import { DEFAULT_GUIDES, GuideSettings } from './ui/guides';
@@ -16,7 +17,7 @@ import { Prefs, cleanPrefs } from './shared/prefs';
 
 export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
 export type FillMode = 'bucket' | 'lasso' | 'gradient';
-export type SelectMode = 'rect' | 'ellipse' | 'lasso' | 'wand';
+export type SelectMode = 'rect' | 'ellipse' | 'lasso' | 'wand' | 'range';
 
 export interface EditorSettings {
   brush: BrushParams;
@@ -36,6 +37,9 @@ export interface EditorSettings {
   /** Fill lasso: only the parts closed off by lines. */
   lassoInside: boolean;
   selectMode: SelectMode;
+  /** Soft edge given to new selections, px. */
+  selectFeather: number;
+  selectGrow: number;
   shape: ShapeKind;
   guides: GuideSettings;
   shapeFill: boolean;
@@ -76,7 +80,7 @@ export class Editor {
     eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
     smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
     fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, fillMode: 'bucket', lassoInside: true, gradientKind: 'linear', gradientEnd: null, gradientAlpha: 1,
-    selectMode: 'rect', shape: 'rect', shapeFill: false, shapeSides: 6,
+    selectMode: 'rect', selectFeather: 0, selectGrow: 8, shape: 'rect', shapeFill: false, shapeSides: 6,
     guides: structuredClone(DEFAULT_GUIDES),
     hideOthersFolders: false,
   };
@@ -374,6 +378,18 @@ export class Editor {
   commitPending() { this.currentTool?.commit?.(); }
 
   clipPath(): Path2D | undefined { return this.selection ? selPath(this.selection) : undefined; }
+
+  private softClip: { sel: Selection; mask: SelMask } | null = null;
+  /** The feathered selection as a mask for live previews; nothing when the edge is hard. */
+  clipMask(): SelMask | undefined {
+    const sel = this.selection;
+    if (!sel?.feather) return undefined;
+    if (this.softClip?.sel !== sel) this.softClip = { sel, mask: selMask(sel, rectRoundOut(rectFromPoints(sel.pts, featherPad(sel))!, 0)) };
+    return this.softClip.mask;
+  }
+
+  /** Selections kept by name for this session. */
+  savedSelections: { name: string; sel: Selection }[] = [];
 
   workArea(): Rect {
     const s = this.doc.settings;

@@ -51,7 +51,7 @@ export class BrushTool implements Tool {
     const live = this.live = (buffer: TiledSurface) => ({
       layerId: layer.props.id, buffer, bufferAlpha: params.opacity,
       bufferOp: this.erase ? 'destination-out' : layer.props.alphaLock && !this.ed.onMask ? 'source-atop' : 'source-over',
-      clip: this.ed.clipPath(), mask: this.ed.onMask,
+      clip: this.ed.clipPath(), clipMask: this.ed.clipMask(), mask: this.ed.onMask,
     } as const);
     this.quick = null;
     this.ed.view.live = live(this.buffer);
