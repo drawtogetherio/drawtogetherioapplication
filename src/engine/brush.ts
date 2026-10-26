@@ -1,6 +1,8 @@
 import { BrushParams } from '../core/model';
 import { Rect, ctx2d, lerp, makeCanvas, rectUnion } from '../core/geom';
 import { TILE, TiledSurface } from '../core/tiles';
+import { isAssetId } from '../shared/brushAssets';
+import { assetImage } from './brushAssets';
 
 export interface BrushPreset { id: string; name: string; params: BrushParams }
 export interface BrushCategory { name: string; brushes: BrushPreset[] }
@@ -87,26 +89,65 @@ export function grainSheet(): Float32Array {
 }
 
 const paperCache = new Map<string, HTMLCanvasElement>();
+const sheetCache = new WeakMap<HTMLCanvasElement, Float32Array>();
 
-/** Opaque grey paper: white where paint takes, darker where grain is deep. Scaled by `scale`. */
-function paper(strength: number, scale: number): HTMLCanvasElement {
-  const key = strength.toFixed(2) + '|' + scale.toFixed(2);
+/** A texture image's alpha (its brightness) as 0..1 texels. */
+function alphaSheet(img: HTMLCanvasElement): Float32Array {
+  let s = sheetCache.get(img);
+  if (s) return s;
+  const d = ctx2d(img, true).getImageData(0, 0, img.width, img.height).data;
+  s = new Float32Array(img.width * img.height);
+  for (let i = 0; i < s.length; i++) s[i] = d[i * 4 + 3] / 255;
+  sheetCache.set(img, s);
+  return s;
+}
+
+/** Opaque grey paper: white where paint takes, darker where grain is deep. The built-in noise, or a texture asset, scaled by `scale`. */
+function paper(strength: number, scale: number, tex?: { id: string; img: HTMLCanvasElement }): HTMLCanvasElement {
+  const key = (tex?.id ?? '') + '|' + strength.toFixed(2) + '|' + scale.toFixed(2);
   let c = paperCache.get(key);
   if (c) return c;
-  const sheet = grainSheet(), S = Math.max(1, Math.round(GRAIN * scale));
-  c = makeCanvas(S, S);
+  const sheet = tex ? alphaSheet(tex.img) : grainSheet(), sw = tex ? tex.img.width : GRAIN, sh = tex ? tex.img.height : GRAIN;
+  const W = Math.max(1, Math.round(sw * scale)), H = Math.max(1, Math.round(sh * scale));
+  c = makeCanvas(W, H);
   const ctx = ctx2d(c, true);
-  const img = ctx.createImageData(S, S), d = img.data;
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    const n = sheet[Math.floor(y / scale) * GRAIN + Math.floor(x / scale)];
+  const img = ctx.createImageData(W, H), d = img.data;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const n = sheet[Math.min(sh - 1, Math.floor(y / scale)) * sw + Math.min(sw - 1, Math.floor(x / scale))];
     // Contrast grows with strength, so a light grain only speckles and a heavy one breaks the dab up.
     const v = Math.min(1, Math.max(0, 0.5 + (n - 0.5) * (1 + strength * 3)));
-    const i = (y * S + x) * 4;
+    const i = (y * W + x) * 4;
     d[i] = d[i + 1] = d[i + 2] = Math.round(255 * (1 - strength * (1 - v)));
     d[i + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+  if (paperCache.size > 64) paperCache.clear();
   paperCache.set(key, c);
+  return c;
+}
+
+/** A tip image fitted into an S px square, and with a dual tip cut into it. */
+function tipStamp(key: string, tip: HTMLCanvasElement | null, hardness: number, S: number, dual: HTMLCanvasElement | null, dualScale: number): HTMLCanvasElement {
+  const k = `${key}|${S}`;
+  let c = stampCache.get(k);
+  if (c) return c;
+  if (tip) {
+    c = makeCanvas(S, S);
+    const ctx = ctx2d(c), f = S / Math.max(tip.width, tip.height), w = tip.width * f, h = tip.height * f;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(tip, (S - w) / 2, (S - h) / 2, w, h);
+  } else {
+    c = makeCanvas(S, S);
+    ctx2d(c).drawImage(stampFor(hardness, S), 0, 0);
+  }
+  if (dual) {
+    const ctx = ctx2d(c), D = S * dualScale, f = D / Math.max(dual.width, dual.height), w = dual.width * f, h = dual.height * f;
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(dual, (S - w) / 2, (S - h) / 2, w, h);
+  }
+  if (stampCache.size > 128) stampCache.clear();
+  stampCache.set(k, c);
   return c;
 }
 
@@ -271,7 +312,11 @@ export class StrokeRenderer extends DabPath {
   private readonly tint: TiledSurface | null;
   private readonly rgb: RGB;
   private col: RGB;
-  private readonly square: boolean;
+  private readonly stamped: boolean;
+  private readonly tip: HTMLCanvasElement | null;
+  private readonly dual: HTMLCanvasElement | null;
+  private readonly stampKey: string;
+  private readonly moving: boolean;
   private readonly soft: boolean;
   private readonly rnd: () => number;
   private readonly under?: TiledSurface;
@@ -285,14 +330,19 @@ export class StrokeRenderer extends DabPath {
   constructor(private target: TiledSurface, brush: BrushParams, color: string, opts: StrokeOptions = {}) {
     super(brush);
     this.rgb = this.col = hexToRgb(color);
-    this.square = brush.shape === 'square';
+    // A tip image that isn't here yet draws as a round tip; the asset store fetches it for later strokes.
+    this.tip = isAssetId(brush.shape) ? assetImage(brush.shape) : null;
+    this.dual = brush.dual ? assetImage(brush.dual) : null;
+    this.stamped = brush.shape === 'square' || !!this.tip || !!this.dual;
+    this.stampKey = `${this.tip ? brush.shape : brush.shape === 'square' ? 'sq' : 'rd'}|${brush.hardness.toFixed(2)}|${this.dual ? brush.dual : ''}|${brush.dualScale ?? 1}`;
     this.soft = brush.hardness < 0.98;
     this.rnd = seeded(hashSeed(opts.seed ?? ''));
     this.under = opts.under;
     this.tint = brush.wet || brush.hueJitter || brush.satJitter || brush.brightJitter ? new TiledSurface() : null;
+    this.moving = !!brush.grainMove;
     if (brush.grain) {
-      const scale = Math.max(0.25, Math.min(8, brush.grainScale ?? 1));
-      this.paper = gradients().createPattern(paper(Math.min(1, brush.grain), scale), 'repeat');
+      const scale = Math.max(0.25, Math.min(8, brush.grainScale ?? 1)), tex = brush.texture ? assetImage(brush.texture) : null;
+      this.paper = gradients().createPattern(paper(Math.min(1, brush.grain), scale, tex ? { id: brush.texture!, img: tex } : undefined), 'repeat');
     }
   }
 
@@ -319,7 +369,7 @@ export class StrokeRenderer extends DabPath {
       a *= 1 - b.tilt * lean * 0.6;
     }
     if (this.tint) this.col = this.dabColor(x, y);
-    if (this.square) return this.stamp(x, y, d, a, pose);
+    if (this.stamped) return this.stamp(x, y, d, a, pose);
     // The darkness the old pile of overlapping dabs settled at, so every brush keeps its feel.
     const n = Math.max(1, Math.min(1 / b.spacing, d / 0.4));
     const level = 1 - Math.pow(1 - a, n);
@@ -382,7 +432,7 @@ export class StrokeRenderer extends DabPath {
       else { const g = c.createRadialGradient(0, 0, 0, 0, 0, r); softStops(g, this.brush.hardness, level, (u) => [u]); c.fillStyle = g; }
       c.fill();
       c.restore();
-    }, level);
+    }, level, (c) => { c.translate(x, y); c.rotate(pose.angle); });
   }
 
   /** The pending ribbon: its last quad and end cap, or a dot for a tap. */
@@ -436,14 +486,16 @@ export class StrokeRenderer extends DabPath {
     if (d < 1) { a *= d; d = 1; }
     const r = d / 2, R = r * pose.stretch * Math.SQRT2, box = { x: x - R - 1, y: y - R - 1, w: R * 2 + 2, h: R * 2 + 2 };
     if (a <= 0.001) return null;
-    const stamp = stampFor(this.brush.hardness, stampSize(d));
+    const stamp = this.tip || this.dual ? tipStamp(this.stampKey, this.tip, this.brush.hardness, stampSize(d), this.dual, this.brush.dualScale ?? 1) : stampFor(this.brush.hardness, stampSize(d));
     const place = (c: CanvasRenderingContext2D) => { c.translate(x, y); c.rotate(pose.lean); c.scale(pose.stretch, 1); c.rotate(pose.angle - pose.lean); };
     if (this.paper) {
       const sc = this.scratchFor(box), c = ctx2d(sc), S = sc.width, ox = Math.floor(box.x), oy = Math.floor(box.y);
       c.save();
       c.clearRect(0, 0, S, S);
       c.translate(-ox, -oy);
-      c.fillStyle = this.paper; c.fillRect(ox, oy, S, S);
+      c.fillStyle = this.paper;
+      // A moving texture rides with the dab: the pattern follows the transform.
+      if (this.moving) { c.save(); place(c); c.fillRect(-S, -S, S * 2, S * 2); c.restore(); } else c.fillRect(ox, oy, S, S);
       c.globalCompositeOperation = 'destination-in';
       place(c);
       c.drawImage(stamp, -r, -r, d, d);
@@ -459,8 +511,8 @@ export class StrokeRenderer extends DabPath {
     return this.scratch && this.scratch.width >= S ? this.scratch : (this.scratch = makeCanvas(S, S));
   }
 
-  /** Draws `shape` into the coverage with `op`; with grain, the shape is cut by the paper first. */
-  private paint(box: Rect, op: GlobalCompositeOperation, shape: (c: CanvasRenderingContext2D) => void, level: number): Rect | null {
+  /** Draws `shape` into the coverage with `op`; with grain, the shape is cut by the paper first (`at` places a moving texture on the dab). */
+  private paint(box: Rect, op: GlobalCompositeOperation, shape: (c: CanvasRenderingContext2D) => void, level: number, at?: (c: CanvasRenderingContext2D) => void): Rect | null {
     if (level <= 0.002) return null;
     if (this.paper) {
       const sc = this.scratchFor(box), c = ctx2d(sc), S = sc.width, ox = Math.floor(box.x), oy = Math.floor(box.y);
@@ -469,7 +521,8 @@ export class StrokeRenderer extends DabPath {
       c.translate(-ox, -oy);
       shape(c);
       c.globalCompositeOperation = 'multiply';
-      c.fillStyle = this.paper; c.fillRect(ox, oy, S, S);
+      c.fillStyle = this.paper;
+      if (this.moving && at) { c.save(); at(c); c.fillRect(-S, -S, S * 2, S * 2); c.restore(); } else c.fillRect(ox, oy, S, S);
       c.globalCompositeOperation = 'destination-in';
       shape(c); // keeps only the shape: 'multiply' painted the paper over the whole square
       c.restore();

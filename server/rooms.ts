@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { config } from './config.ts';
-import { db, getUser, hasBlocked, keepGuest, newId, publicProfile, UserRow } from './db.ts';
+import { db, getUser, hasBlocked, keepGuest, newId, publicProfile, UserRow, hasAsset } from './db.ts';
 import { areFriends, notifyFriends, touch } from './social.ts';
 import { validCoord, validLive, validOp } from './validate.ts';
+import { brushAssets } from '../src/shared/brushAssets.ts';
 import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import type { PublicProfile } from '../src/shared/profile.ts';
@@ -368,7 +369,7 @@ export class Room {
         return;
       }
       case 'live':
-        if (validLive(msg.live) && this.can(c.userId, msg.live.layer) && this.liveBudget(c, msg.live.pts.length / 3)) this.broadcast({ type: 'live', from: c.userId, live: msg.live }, c);
+        if (validLive(msg.live) && this.can(c.userId, msg.live.layer) && brushAssets(msg.live.brush).every(hasAsset) && this.liveBudget(c, msg.live.pts.length / 3)) this.broadcast({ type: 'live', from: c.userId, live: msg.live }, c);
         return;
       case 'live-end':
         this.broadcast({ type: 'live-end', from: c.userId, stroke: String(msg.stroke).slice(0, 48) }, c);
@@ -432,6 +433,7 @@ export class Room {
 
   private check(userId: string, op: Op): string | null {
     if (!validOp(op)) return 'Unknown edit';
+    if (op.t === 'stroke' && !brushAssets(op.brush).every(hasAsset)) return 'The brush image hasn’t reached the server yet';
     const host = this.isHost(userId);
     switch (op.t) {
       case 'stroke': case 'smudge': case 'effect': case 'shape': case 'fill': case 'fillPoly': case 'gradient': case 'transform': case 'tiles': case 'layer.clear': case 'layer.props': case 'layer.remove': case 'layer.merge': case 'layer.mask.apply':

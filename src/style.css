@@ -1019,6 +1019,9 @@ body.spectating .stage { cursor: grab; }
 .brush-edit { display: flex; flex-direction: column; gap: 8px; }
 .brush-edit-preview { background: var(--workspace); border-radius: 10px; padding: 6px; display: grid; place-items: center; }
 .brush-edit-preview canvas { display: block; }
+.asset-thumb { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); flex: none; }
+.asset-slot:empty { display: none; }
+.asset-row { gap: 8px; }
 .brush-group { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; gap: 8px; }
 .brush-group summary { cursor: pointer; font-weight: 600; font-size: 13px; list-style: none; display: flex; align-items: center; gap: 6px; }
 .brush-group summary::before { content: '▸'; color: var(--muted); font-size: 11px; }

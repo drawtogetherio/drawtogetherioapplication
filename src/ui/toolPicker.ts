@@ -5,6 +5,8 @@ import { brushCode, parseBrushCode } from '../shared/brush';
 import { BUILTIN_CATEGORIES, CustomBrush, applyPressure } from '../shared/prefs';
 import type { App } from './app';
 import { brushEditor, newCategory, removeBrush } from './brushEditor';
+import { ensureAssets } from '../engine/brushAssets';
+import { brushAssets } from '../shared/brushAssets';
 import { confirmDialog, textDialog } from './dialogs';
 import type { Editor, FillMode, SelectMode, ToolId } from '../editor';
 import { ctx2d, makeCanvas, uid } from '../core/geom';
@@ -78,6 +80,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
   const menu = h('div.panel.brush-menu', { hidden: true });
   const pick = (pr: BrushPreset) => {
     const params = { ...pr.params };
+    void ensureAssets(brushAssets(params));
     if (tool !== 'smudge') applyPressure(ed.prefs, params);
     if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
     else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); }
@@ -123,6 +126,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
       act('link', 'Add a brush from a code', async () => {
         const got = parseBrushCode((await textDialog('Brush code', '', 'Add')) ?? '');
         if (!got) { app.toast('That isn’t a brush code'); return; }
+        if (!(await ensureAssets(brushAssets(got.params)))) app.toast('This brush’s images aren’t available here; it draws with a round tip');
         edit({ id: uid('c'), name: got.name, cat: cat.user ? cat.name : 'General', params: got.params });
       }),
       act('folderPlus', 'New category', async () => { const name = await newCategory(app); if (name) { tab = all.length; render(); } }),

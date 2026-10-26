@@ -39,6 +39,8 @@ import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
 import { QuickMenu } from './quickMenu';
+import { ensureAssets } from '../engine/brushAssets';
+import { brushAssets } from '../shared/brushAssets';
 import { commandPalette } from './commandPalette';
 import { BrushTool as BrushToolId, FILL_MODES, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
 import { effectsBar } from './effectsBar';
@@ -259,6 +261,7 @@ export class App {
   /** Puts the preferences into effect: colour mode, shortcuts, hover outline. */
   applyPrefs() {
     const p = this.ed.prefs, st = this.ed.settings;
+    void ensureAssets(p.customBrushes.flatMap((b) => brushAssets(b.params)));
     applyMode(p.mode);
     applyPressure(p, st.brush);
     applyPressure(p, st.eraser);

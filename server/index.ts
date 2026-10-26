@@ -6,7 +6,7 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getSite, getUser, handleTaken, isAdmin, isPremium, keepGuest, myProfile, publicProfile, sessionUser, userByHandle, UserRow,
+  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getAsset, getSite, getUser, handleTaken, hasAsset, isAdmin, isPremium, keepGuest, myProfile, publicProfile, putAsset, sessionUser, userByHandle, UserRow,
 } from './db.ts';
 import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare, visited, visitsOf } from './rooms.ts';
 import { validOp } from './validate.ts';
@@ -29,6 +29,7 @@ import {
 } from '../src/shared/profile.ts';
 import { ROOM_NAME_MAX, WATCH_KEY_RE, type ShareSettings } from '../src/shared/protocol.ts';
 import { cleanPrefs } from '../src/shared/prefs.ts';
+import { MAX_ASSET_BYTES, MAX_ASSET_SIZE, pngSize } from '../src/shared/brushAssets.ts';
 import { canUseTheme, isTheme } from '../src/shared/themes.ts';
 
 
@@ -279,6 +280,26 @@ async function route(req: Req, res: Res) {
   }
 
   // ---- Profile ----
+  // Brush images: anyone may fetch one by id (they're content-addressed, so cache forever); a session may store one.
+  const asset = /^\/api\/brush-assets\/([0-9a-f]{32})$/.exec(p);
+  if (asset && m === 'GET') {
+    const data = getAsset(asset[1]);
+    if (!data) throw new HttpError(404, 'No such brush image.');
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': data.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
+    res.end(Buffer.from(data));
+    return;
+  }
+  if (asset && m === 'PUT') {
+    const u = requireUser(req);
+    if (hasAsset(asset[1])) return json(res, 200, { ok: true });
+    limit('asset:' + u.id, 200, HOUR);
+    const buf = await body(req, MAX_ASSET_BYTES);
+    const size = pngSize(buf);
+    if (!size || size.w > MAX_ASSET_SIZE || size.h > MAX_ASSET_SIZE || buf.includes(Buffer.from('acTL'))) throw new HttpError(400, 'A brush image is a still PNG up to 256 px.');
+    if (crypto.createHash('sha256').update(buf).digest('hex').slice(0, 32) !== asset[1]) throw new HttpError(400, 'The id doesn’t match the image.');
+    putAsset(asset[1], buf, u.id);
+    return json(res, 200, { ok: true });
+  }
   if (p === '/api/me' && m === 'GET') {
     const u = requireUser(req);
     // A stale patron status is refreshed in the background; the next load shows it.

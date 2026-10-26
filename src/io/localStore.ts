@@ -19,16 +19,19 @@ export interface LocalCanvas {
   thumb: Blob | null;
 }
 
-const DB = 'doodlehive', VERSION = 1;
+const DB = 'doodlehive', VERSION = 2;
 let dbp: Promise<IDBDatabase> | null = null;
 
 function open(): Promise<IDBDatabase> {
   return (dbp ??= new Promise((res, rej) => {
     const r = indexedDB.open(DB, VERSION);
-    r.onupgradeneeded = () => {
+    r.onupgradeneeded = (e) => {
       const d = r.result;
-      d.createObjectStore('canvases', { keyPath: 'id' }).createIndex('user', 'user');
-      d.createObjectStore('ops', { keyPath: ['canvas', 'seq'] });
+      if (e.oldVersion < 1) {
+        d.createObjectStore('canvases', { keyPath: 'id' }).createIndex('user', 'user');
+        d.createObjectStore('ops', { keyPath: ['canvas', 'seq'] });
+      }
+      if (e.oldVersion < 2) d.createObjectStore('assets'); // brush images by id
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -109,5 +112,17 @@ export async function deleteCanvas(id: string) {
   const tx = d.transaction(['ops', 'canvases'], 'readwrite');
   tx.objectStore('ops').delete(IDBKeyRange.bound([id, 0], [id, Infinity]));
   tx.objectStore('canvases').delete(id);
+  await finished(tx);
+}
+
+// Brush images stay in IndexedDB on every platform; the desktop app only moves canvases to files.
+export async function getAssetBytes(id: string): Promise<Uint8Array | null> {
+  const d = await open();
+  return (await done(d.transaction('assets').objectStore('assets').get(id))) as Uint8Array | undefined ?? null;
+}
+
+export async function putAssetBytes(id: string, bytes: Uint8Array) {
+  const d = await open(), tx = d.transaction('assets', 'readwrite');
+  tx.objectStore('assets').put(bytes, id);
   await finished(tx);
 }

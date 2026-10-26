@@ -68,6 +68,13 @@ db.exec(`
     seq INTEGER NOT NULL,
     ops TEXT NOT NULL
   );
+  -- Brush tip and texture images, by content hash; strokes in rooms refer to them by id.
+  CREATE TABLE IF NOT EXISTS brush_assets (
+    id TEXT PRIMARY KEY,
+    data BLOB NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 // Columns added after the first release.
@@ -296,3 +303,17 @@ export function sessionUser(token: string | undefined): UserRow | undefined {
 }
 
 export function deleteSession(token: string) { db.prepare('DELETE FROM sessions WHERE token = ?').run(token); }
+
+const knownAssets = new Set<string>();
+/** Whether a brush image is stored here (strokes may only use images every client can fetch). */
+export function hasAsset(id: string): boolean {
+  if (knownAssets.has(id)) return true;
+  const row = db.prepare('SELECT 1 FROM brush_assets WHERE id = ?').get(id);
+  if (row) knownAssets.add(id);
+  return !!row;
+}
+export function putAsset(id: string, data: Buffer, userId: string) {
+  db.prepare('INSERT OR IGNORE INTO brush_assets (id, data, user_id, created_at) VALUES (?, ?, ?, ?)').run(id, data, userId, Date.now());
+  knownAssets.add(id);
+}
+export const getAsset = (id: string) => (db.prepare('SELECT data FROM brush_assets WHERE id = ?').get(id) as { data: Uint8Array } | undefined)?.data ?? null;

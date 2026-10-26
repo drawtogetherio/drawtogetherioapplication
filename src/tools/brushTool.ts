@@ -1,6 +1,8 @@
 import { uid } from '../core/geom';
 import type { Op } from '../core/model';
 import { strokeFits } from '../shared/brush';
+import { brushAssets } from '../shared/brushAssets';
+import { uploadAssets } from '../engine/brushAssets';
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
 import { recognizeShape } from '../engine/quickShape';
@@ -42,6 +44,7 @@ export class BrushTool implements Tool {
     const layer = this.ed.paintableLayer();
     if (!layer) return;
     const params = { ...this.params };
+    if (this.ed.room) void uploadAssets(brushAssets(params));
     this.id = uid();
     this.sent = 0;
     this.buffer = new TiledSurface();
@@ -193,7 +196,10 @@ export class BrushTool implements Tool {
       t: 'stroke', id, layer: this.ed.activeLayer, erase: this.erase, brush,
       color: this.erase ? '#000000' : this.ed.color, pts, clip: this.ed.selection ?? undefined, mask: this.ed.onMask, tilt,
     });
-    this.ed.run([op(this.id, this.pts), ...mirrors.map((c) => op(c.id, mapPts(c.m, this.pts)))], 'stroke', [{ buffer }, ...mirrors.map((c) => ({ buffer: c.buffer }))]);
+    const run = () => this.ed.run([op(this.id, this.pts), ...mirrors.map((c) => op(c.id, mapPts(c.m, this.pts)))], 'stroke', [{ buffer }, ...mirrors.map((c) => ({ buffer: c.buffer }))]);
+    // A room only takes a stroke once its brush images are on the server.
+    const ids = brushAssets(brush);
+    if (ids.length && this.ed.room) void uploadAssets(ids).then(run); else run();
   }
 
   private commitQuick() {

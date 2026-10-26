@@ -11,6 +11,7 @@ import { profileDialog } from './profileDialog';
 import { saveThumbnail } from '../io/thumbnail';
 import { deleteCanvas, listCanvases } from '../io/localStore';
 import { HIVE_ACCEPT, hiveCanvasBlob, hiveCanvasOps, readHiveFile, safeFileName } from '../io/hivecanvas';
+import { assetServer } from '../engine/brushAssets';
 import { saveFile } from '../io/platform';
 import { lapse, lapseFromFiles, moveLapse, roomLapseKey } from '../io/lapse';
 import { timelapseDialog } from './timelapse';
@@ -77,6 +78,7 @@ export class Session {
 
   async start() {
     this.server = await api.config();
+    assetServer(!!this.server);
     if (!this.server || new URLSearchParams(location.search).has('offline')) {
       this.offline = true;
       try { this.ed.prefs = cleanPrefs(JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')); } catch { /* fresh device */ }

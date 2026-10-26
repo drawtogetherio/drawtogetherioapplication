@@ -4,6 +4,8 @@ import { DocSettings, FolderProps, LayerProps, Op, blendOp } from './model';
 import { TILE, TiledSurface, TileSnapshot } from './tiles';
 import { TILES_PER_OP } from '../shared/hivecanvas';
 import { renderStroke } from '../engine/brush';
+import { ensureAssets } from '../engine/brushAssets';
+import { brushAssets } from '../shared/brushAssets';
 import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
@@ -150,6 +152,7 @@ export class DrawDoc {
    * the op is worked out on the thread at apply time instead.
    */
   async prepared(op: Op): Promise<ApplyOptions> {
+    if (op.t === 'stroke') await ensureAssets(brushAssets(op.brush));
     for (let i = 0; i < 4; i++) {
       const rev = this.rev, opts = await this.prepare(op);
       if (this.rev === rev) return opts;

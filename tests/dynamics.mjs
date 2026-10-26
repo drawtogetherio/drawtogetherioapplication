@@ -128,7 +128,7 @@ await page.locator('[aria-label="More for Ink Pen"]').click();
 await page.locator('.brush-menu .menu-item', { hasText: 'Clone' }).click();
 await page.waitForSelector('.brush-edit');
 const groups = page.locator('.brush-edit .brush-group');
-check((await groups.count()) === 7, 'the editor has seven sections');
+check((await groups.count()) === 8, 'the editor has eight sections');
 check((await page.locator('.brush-group[open]').count()) === 2, 'only Stroke and Pressure start open');
 await groups.filter({ hasText: 'Scatter' }).locator('summary').click();
 check(await page.locator('.brush-edit .slider[aria-label="Scatter"]').isVisible(), 'opening Scatter shows its sliders');

@@ -65,8 +65,14 @@ export interface BrushParams {
   pressureFlow: number; // 0..1: how much pressure affects flow
   minSize: number; // fraction of size at zero pressure
   smoothing: number; // 0..1 streamline
-  /** Dab shape; round unless set. */
-  shape?: 'round' | 'square';
+  /** Dab shape: round unless set, square, or a tip image (an asset id). */
+  shape?: 'round' | 'square' | string;
+  /** A second tip image multiplied into every dab, at this size relative to the dab. */
+  dual?: string;
+  dualScale?: number;
+  /** A texture image instead of the built-in paper; `grainMove` carries it along with each dab. */
+  texture?: string;
+  grainMove?: boolean;
   /** 0..1 how much paper grain breaks the dab up; the texture is fixed to the canvas so strokes line up. */
   grain?: number;
   /** Grain texture scale, 1 = fine. */

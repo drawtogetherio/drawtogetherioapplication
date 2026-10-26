@@ -1,5 +1,7 @@
 import { TiledSurface } from '../core/tiles';
 import { StrokeRenderer } from '../engine/brush';
+import { ensureAssets, haveAssets } from '../engine/brushAssets';
+import { brushAssets } from '../shared/brushAssets';
 import { Rect, selPath } from '../core/geom';
 import type { Editor } from '../editor';
 import type { RoomClient, RoomEvent } from '../net/roomClient';
@@ -164,6 +166,7 @@ export class RoomUI {
           return;
         }
         let s = this.strokes.get(key);
+        if (!s && !haveAssets(brushAssets(l.brush))) { void ensureAssets(brushAssets(l.brush)); return; } // the finished stroke still arrives as an edit
         if (!s) {
           const buffer = new TiledSurface(), layer = ed.doc.layer(l.layer);
           const under = (l.mask ? layer?.mask : layer?.surface) ?? undefined;
