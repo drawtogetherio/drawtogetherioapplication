@@ -35,8 +35,7 @@ export class LocalCopy {
     const doc = new DrawDoc({ id: 'doc_' + this.meta.id, ...this.meta.settings });
     let t = performance.now();
     for (let i = 0; i < ops.length; i++) {
-      await doc.prepare(ops[i]);
-      doc.apply(ops[i], { record: false });
+      doc.apply(ops[i], { ...await doc.prepare(ops[i]), record: false });
       if (performance.now() - t > YIELD_MS) { onProgress?.((i + 1) / ops.length); await new Promise((r) => setTimeout(r)); t = performance.now(); }
     }
     return doc;

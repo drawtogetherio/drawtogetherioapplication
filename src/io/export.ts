@@ -6,6 +6,7 @@ import { BlendMode, FolderProps } from '../core/model';
 import { renderRegion } from '../engine/compositor';
 import { saveFile } from './platform';
 import { hiveCanvasBlob } from './hivecanvas';
+import { encodeImage } from '../engine/offload';
 
 export type ExportFormat = 'png' | 'jpg' | 'psd' | 'hivecanvas';
 
@@ -47,7 +48,8 @@ export async function exportDoc(doc: DrawDoc, o: ExportOptions) {
     ctx.drawImage(c, 0, 0);
   }
   const type = o.format === 'png' ? 'image/png' : 'image/jpeg';
-  const blob = await new Promise<Blob>((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('Encoding failed'))), type, o.quality));
+  const blob = await encodeImage(ctx2d(out, true).getImageData(0, 0, out.width, out.height), type, o.quality);
+  if (!blob) throw new Error('Encoding failed');
   return saveFile(blob, `${o.name}.${o.format}`);
 }
 

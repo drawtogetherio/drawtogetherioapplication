@@ -7,7 +7,8 @@ import { renderStroke } from '../engine/brush';
 import { applyEffect, effectReach } from '../engine/effects';
 import { renderSmudge, smudgeKeys } from '../engine/smudge';
 import { renderShape } from '../engine/shapes';
-import { enclosedFill, floodFill, polyFill } from '../engine/fill';
+import { enclosedFill, floodFill, maskCanvas, polyFill, polyMask } from '../engine/fill';
+import { effectImage, enclosedFillMask, fillMask } from '../engine/offload';
 import { renderRegion } from '../engine/compositor';
 import { clearSelection, floatingBounds, liftSelection, placeFloating, selectionBounds } from '../engine/transform';
 
@@ -29,9 +30,15 @@ export interface ApplyOptions {
   record?: boolean;
   /** The edit is already on the layer; these are the tiles as they were before it. */
   applied?: TileSnapshot;
+  /** A fill worked out ahead of time (see `prepare`); null when it found nothing to fill. */
+  fill?: HTMLCanvasElement | null;
+  /** An effect worked out ahead of time: the processed pixels of `region`. */
+  effect?: { region: Rect; img: ImageData } | null;
 }
 
 type TilesOp = Extract<Op, { t: 'tiles' }>;
+type FillOp = Extract<Op, { t: 'fill' | 'fillPoly' }>;
+type EffectOp = Extract<Op, { t: 'effect' }>;
 
 /** A tree of folders and layers. apply() is deterministic and returns the ops that undo it, so undo syncs like any edit. */
 export class DrawDoc {
@@ -110,9 +117,14 @@ export class DrawDoc {
     this.layers = out;
   }
 
-  /** Decode the PNG tiles of an op from the wire; needed before apply(). */
-  async prepare(op: Op) {
-    if (op.t !== 'tiles' || op.img) return;
+  /**
+   * The slow part of an op ahead of apply(): PNG tiles are decoded, and fills and effects are worked
+   * out in the worker from the canvas as it is now. The options go straight into apply().
+   */
+  async prepare(op: Op): Promise<ApplyOptions> {
+    if (op.t === 'fill' || op.t === 'fillPoly') return { fill: await this.prepareFill(op) };
+    if (op.t === 'effect') return { effect: await this.prepareEffect(op) };
+    if (op.t !== 'tiles' || op.img) return {};
     const img: Record<string, ImageData | null> = {};
     await Promise.all(Object.entries(op.tiles).map(async ([k, url]) => {
       if (!url) { img[k] = null; return; }
@@ -125,6 +137,32 @@ export class DrawDoc {
       img[k] = ctx.getImageData(0, 0, TILE, TILE);
     }));
     op.img = img;
+    return {};
+  }
+
+  /** The fill as a canvas over its region, or null when there is nothing to fill. */
+  async prepareFill(op: FillOp): Promise<HTMLCanvasElement | null> {
+    const layer = this.layer(op.layer), surface = this.target(layer, op);
+    if (!layer || !surface) return null;
+    if (op.t === 'fillPoly' && !op.inside) return polyFill(op.region, op.pts, op.color);
+    const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
+    const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
+    const m = op.t === 'fill' ? await fillMask(data, op.region, op.x, op.y, op.tolerance, op.expand)
+      : await enclosedFillMask(data, polyMask(op.region, op.pts), op.tolerance, op.expand);
+    return m && maskCanvas(m, op.region.w, op.region.h, op.color);
+  }
+
+  /** The part of the layer an effect touches, with the pixels it would leave there. */
+  async prepareEffect(op: EffectOp): Promise<{ region: Rect; img: ImageData } | null> {
+    const layer = this.layer(op.layer), surface = this.target(layer, op);
+    if (!layer || !surface) return null;
+    let region = surface.contentBounds();
+    if (op.clip) region = region && rectIntersect(region, rectFromPoints(op.clip.pts)!);
+    if (!region) return null;
+    region = rectRoundOut(region, effectReach(op));
+    const src = surface.extract(region);
+    const img = await effectImage(ctx2d(src, true).getImageData(0, 0, region.w, region.h), op, region.x, region.y);
+    return { region, img };
   }
 
   apply(op: Op, opts: ApplyOptions = {}): Op[] {
@@ -178,15 +216,20 @@ export class DrawDoc {
       case 'effect': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
         if (!layer || !surface) return null;
-        let region = surface.contentBounds();
-        if (op.clip) region = region && rectIntersect(region, rectFromPoints(op.clip.pts)!);
-        if (!region) return null;
-        region = rectRoundOut(region, effectReach(op));
-        const src = surface.extract(region);
-        const img = ctx2d(src, true).getImageData(0, 0, region.w, region.h);
-        applyEffect(img, op, region.x, region.y);
-        ctx2d(src).putImageData(img, 0, 0);
-        const r = region;
+        let done = opts.effect;
+        if (done === undefined) {
+          // Worked out here and now, on the thread: the same arithmetic as the worker runs.
+          let region = surface.contentBounds();
+          if (op.clip) region = region && rectIntersect(region, rectFromPoints(op.clip.pts)!);
+          if (!region) return null;
+          region = rectRoundOut(region, effectReach(op));
+          const img = ctx2d(surface.extract(region), true).getImageData(0, 0, region.w, region.h);
+          applyEffect(img, op, region.x, region.y);
+          done = { region, img };
+        }
+        if (!done) return null;
+        const r = done.region, src = makeCanvas(r.w, r.h);
+        ctx2d(src).putImageData(done.img, 0, 0);
         return this.pixelEdit(layer, surface, surface.keysIn(r), () => {
           const clip = op.clip ? selPath(op.clip) : null;
           surface.draw(r, (c) => {
@@ -201,13 +244,15 @@ export class DrawDoc {
       case 'fillPoly': {
         const layer = this.layer(op.layer), surface = this.target(layer, op);
         if (!layer || !surface) return null;
-        let fill: HTMLCanvasElement | null;
-        if (op.t === 'fillPoly' && !op.inside) fill = polyFill(op.region, op.pts, op.color);
-        else {
-          const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
-          const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
-          fill = op.t === 'fill' ? floodFill(data, op.region, op.x, op.y, op.color, op.tolerance, op.expand)
-            : enclosedFill(data, op.region, op.pts, op.color, op.tolerance, op.expand);
+        let fill = opts.fill;
+        if (fill === undefined) {
+          if (op.t === 'fillPoly' && !op.inside) fill = polyFill(op.region, op.pts, op.color);
+          else {
+            const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
+            const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
+            fill = op.t === 'fill' ? floodFill(data, op.region, op.x, op.y, op.color, op.tolerance, op.expand)
+              : enclosedFill(data, op.region, op.pts, op.color, op.tolerance, op.expand);
+          }
         }
         if (!fill) return null;
         const gco: GlobalCompositeOperation = layer.props.alphaLock && !op.mask ? 'source-atop' : 'source-over';

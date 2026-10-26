@@ -102,8 +102,7 @@ async function removeEdit(ed: Editor, room: RoomClient, e: LogEntry, progress: (
       let op = hist.ops[i];
       if (op.id === e.id) continue;
       if (partial && op.t === 'layer.add') op = { ...op, parent: null, index: 0 };
-      await scratch.prepare(op);
-      scratch.apply(op, { record: false });
+      scratch.apply(op, { ...await scratch.prepare(op), record: false });
       if (performance.now() - t > 30) { progress(`Rebuilding… ${Math.round((100 * i) / hist.ops.length)}%`); await new Promise((r) => setTimeout(r)); t = performance.now(); }
     }
     const ids = partial ? [e.layer!] : ed.doc.layers.map((l) => l.props.id);

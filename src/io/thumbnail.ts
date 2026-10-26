@@ -4,6 +4,7 @@ import { TILE } from '../core/tiles';
 import { composite } from '../engine/compositor';
 import { api } from '../net/api';
 import { exportRect } from './export';
+import { encodeImage } from '../engine/offload';
 
 const MAX = 480;
 
@@ -23,9 +24,10 @@ export async function makeThumbnail(doc: DrawDoc): Promise<Blob | null> {
   ctx.setTransform(k, 0, 0, k, -ox, -oy);
   composite(ctx, doc, r, { paper: false });
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const img = () => ctx.getImageData(0, 0, out.width, out.height);
   for (const q of [0.8, 0.6, 0.4]) {
-    const b = await new Promise<Blob | null>((res) => out.toBlob(res, 'image/webp', q));
-    const blob = b && b.type === 'image/webp' ? b : await new Promise<Blob | null>((res) => out.toBlob(res, 'image/jpeg', q));
+    const b = await encodeImage(img(), 'image/webp', q);
+    const blob = b && b.type === 'image/webp' ? b : await encodeImage(img(), 'image/jpeg', q);
     if (blob && blob.size < 90 * 1024) return blob;
   }
   return null;

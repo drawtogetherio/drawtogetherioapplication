@@ -1,6 +1,7 @@
 import { EFFECTS, EffectId } from '../core/model';
 import { ctx2d, rectFromPoints, rectIntersect, rectRoundOut, selPath, transformRect, uid } from '../core/geom';
-import { EFFECT_INFO, EffectOp, applyEffect, effectReach } from '../engine/effects';
+import { EFFECT_INFO, EffectOp, effectReach } from '../engine/effects';
+import { effectImage } from '../engine/offload';
 import type { Editor } from '../editor';
 import { h } from './dom';
 import { icon } from './icons';
@@ -22,11 +23,11 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
   const state = { effect: initial, amount: 0.3, angle: 0 };
   const op = (): EffectOp => ({ t: 'effect', id: uid(), layer: layer.props.id, effect: state.effect, amount: state.amount, angle: state.effect === 'motion' ? state.angle : undefined, clip: sel ?? undefined, mask });
 
-  let timer = 0;
+  let timer = 0, seq = 0;
   const render = () => {
     clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      const o = op(), reach = effectReach(o);
+    timer = window.setTimeout(async () => {
+      const o = op(), reach = effectReach(o), n = ++seq;
       let region = surface.contentBounds();
       if (region && selBox) region = rectIntersect(region, selBox);
       // Only what is on screen gets processed, so the slider stays quick on big layers.
@@ -34,8 +35,8 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
       if (!region) { view.live = null; view.invalidate(null); return; }
       const r = rectRoundOut(region, reach);
       const src = surface.extract(r);
-      const img = ctx2d(src, true).getImageData(0, 0, r.w, r.h);
-      applyEffect(img, { ...o, id: 'preview' }, r.x, r.y);
+      const img = await effectImage(ctx2d(src, true).getImageData(0, 0, r.w, r.h), { ...o, id: 'preview' }, r.x, r.y);
+      if (n !== seq || closeOpen !== close) return; // a newer slider value, or the bar closed meanwhile
       const c = ctx2d(src);
       c.putImageData(img, 0, 0);
       if (clip) { c.setTransform(1, 0, 0, 1, -r.x, -r.y); c.globalCompositeOperation = 'destination-in'; c.fill(clip, 'evenodd'); }
@@ -62,7 +63,7 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
   const bar = h('div.effect-bar', { role: 'dialog', 'aria-label': 'Layer effects' },
     h('div.effect-row', {},
       h('span.opt-title', {}, 'Effect'), select, amount.el, angle.el,
-      h('button.icon-btn', { type: 'button', title: 'Apply', 'aria-label': 'Apply', html: icon('check', 20), onclick: () => { close(); ed.apply(op(), {}); } }),
+      h('button.icon-btn', { type: 'button', title: 'Apply', 'aria-label': 'Apply', html: icon('check', 20), onclick: () => { close(); apply(); } }),
       h('button.icon-btn', { type: 'button', title: 'Cancel', 'aria-label': 'Cancel', html: icon('x', 20), onclick: () => close() })),
     h('div.effect-note', {}, (sel ? 'Only the selection changes. ' : '') + 'Bakes into the layer; undo works until it leaves the history.'));
 
@@ -85,7 +86,16 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur') {
     e.stopPropagation();
     e.preventDefault();
     close();
-    if (e.key === 'Enter') ed.apply(op(), {});
+    if (e.key === 'Enter') apply();
+  };
+  /** Bakes it in: the pixels are worked out in the worker, then land as one op. */
+  const apply = async () => {
+    const o = op(), doc = ed.doc, room = ed.room;
+    if (room) room.freeze = true;
+    try {
+      const effect = await doc.prepareEffect(o);
+      if (ed.doc === doc && effect) ed.apply(o, { effect });
+    } finally { if (room) room.freeze = false; }
   };
   const onDraw = (e: PointerEvent) => { if (!bar.contains(e.target as Node)) close(); };
   document.addEventListener('keydown', onKey, true);

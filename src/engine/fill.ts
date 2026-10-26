@@ -51,16 +51,22 @@ export function regionMask(src: ImageData, region: Rect, seedX: number, seedY: n
   return flood(W, H, [p], matcher(src.data, p * 4, tolerance));
 }
 
+/** The bucket's mask: the connected area, grown by `expand`. Pure, so it can run in a worker. */
+export function floodMask(src: ImageData, region: Rect, seedX: number, seedY: number, tolerance: number, expand: number): Uint8Array | null {
+  const m = regionMask(src, region, seedX, seedY, tolerance);
+  return m && grow(m, src.width, src.height, expand);
+}
+
 /** Flood fill over `src` (covering `region`). Returns the fill as a canvas of the same size, or null. */
 export function floodFill(
   src: ImageData, region: Rect, seedX: number, seedY: number, color: string, tolerance: number, expand: number,
 ): HTMLCanvasElement | null {
-  const m = regionMask(src, region, seedX, seedY, tolerance);
-  return m && maskCanvas(grow(m, src.width, src.height, expand), src.width, src.height, color);
+  const m = floodMask(src, region, seedX, seedY, tolerance, expand);
+  return m && maskCanvas(m, src.width, src.height, color);
 }
 
 /** The polygon (document coords) as a mask over `region`. */
-function polyMask(region: Rect, pts: number[]): Uint8Array {
+export function polyMask(region: Rect, pts: number[]): Uint8Array {
   const c = makeCanvas(region.w, region.h), ctx = ctx2d(c, true);
   ctx.translate(-region.x, -region.y);
   ctx.fillStyle = '#000';
@@ -85,8 +91,13 @@ export function polyFill(region: Rect, pts: number[], color: string): HTMLCanvas
  * edge sits on) are the open space; everything of that colour that can't be reached from the edge is inside the lines.
  */
 export function enclosedFill(src: ImageData, region: Rect, pts: number[], color: string, tolerance: number, expand: number): HTMLCanvasElement | null {
+  const m = enclosedMask(src, polyMask(region, pts), tolerance, expand);
+  return m && maskCanvas(m, src.width, src.height, color);
+}
+
+/** The enclosed parts of `lasso` (a mask over `src`) as a mask. Pure, so it can run in a worker. */
+export function enclosedMask(src: ImageData, lasso: Uint8Array, tolerance: number, expand: number): Uint8Array | null {
   const W = src.width, H = src.height, d = src.data;
-  const lasso = polyMask(region, pts);
   const edge: number[] = [];
   const hist = new Map<number, { n: number; p: number }>();
   for (let p = 0; p < lasso.length; p++) {
@@ -111,7 +122,7 @@ export function enclosedFill(src: ImageData, region: Rect, pts: number[], color:
   if (!any) return null;
   const grown = grow(m, W, H, expand);
   for (let p = 0; p < grown.length; p++) if (!lasso[p]) grown[p] = 0;
-  return maskCanvas(grown, W, H, color);
+  return grown;
 }
 
 function grow(m: Uint8Array, W: number, H: number, by: number): Uint8Array {
@@ -119,7 +130,7 @@ function grow(m: Uint8Array, W: number, H: number, by: number): Uint8Array {
   return m;
 }
 
-function maskCanvas(m: Uint8Array, W: number, H: number, color: string): HTMLCanvasElement {
+export function maskCanvas(m: Uint8Array, W: number, H: number, color: string): HTMLCanvasElement {
   const out = makeCanvas(W, H);
   const octx = ctx2d(out);
   const img = octx.createImageData(W, H);
