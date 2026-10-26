@@ -37,6 +37,12 @@ export function avatarEl(
 export function badges(role: Role | undefined, premium: boolean, extra: Badge[] = []): HTMLElement {
   const el = h('span.badges');
   el.innerHTML = (role === 'owner' ? CROWN_SVG : role === 'host' ? HOST_SVG : '') + (premium ? STAR_SVG : '') + extra.map((b) => BADGE_SVGS[b] ?? '').join('');
+  // A <title> gives each badge its name as a hover tooltip.
+  for (const svg of el.querySelectorAll('svg[aria-label]')) {
+    const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    title.textContent = svg.getAttribute('aria-label');
+    svg.prepend(title);
+  }
   return el;
 }
 
