@@ -2,10 +2,11 @@ import type { BrushParams, ShapeKind } from '../core/model';
 import { TiledSurface } from '../core/tiles';
 import { BRUSH_LIBRARY, BrushCategory, BrushPreset, renderStroke, smudgeParams } from '../engine/brush';
 import { brushCode, parseBrushCode } from '../shared/brush';
-import { BUILTIN_CATEGORIES, CustomBrush, applyPressure } from '../shared/prefs';
+import { BUILTIN_CATEGORIES, CustomBrush, MAX_CATEGORIES, MAX_CUSTOM_BRUSHES, applyPressure, cleanName } from '../shared/prefs';
 import type { App } from './app';
 import { brushEditor, newCategory, removeBrush } from './brushEditor';
-import { ensureAssets } from '../engine/brushAssets';
+import { importBrushFile } from '../io/brushImport';
+import { ensureAssets, uploadAssets } from '../engine/brushAssets';
 import { brushAssets } from '../shared/brushAssets';
 import { confirmDialog, textDialog } from './dialogs';
 import type { Editor, FillMode, SelectMode, ToolId } from '../editor';
@@ -113,6 +114,28 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
     menu.style.top = `${at.offsetTop + at.offsetHeight}px`;
     menu.hidden = false;
   };
+  const file: HTMLInputElement = h('input.import-file', { type: 'file', accept: '.abr,.brush,.brushset', hidden: true, 'aria-label': 'Brush file', onchange: async () => {
+    const f = file.files?.[0];
+    file.value = '';
+    if (!f) return;
+    app.toast('Reading brushes…');
+    const got = await importBrushFile(f).catch(() => null);
+    if (!got?.length) { app.toast(got ? 'No brushes in that file' : 'That brush file can’t be read'); return; }
+    // A set of brushes gets its own category, named after the file, when there's room.
+    const stem = cleanName(f.name.replace(/\.[^.]+$/, ''), 20);
+    let catName = 'General';
+    if (got.length > 1 && stem && !BUILTIN_CATEGORIES.includes(stem)) {
+      if (!p.brushCategories.includes(stem) && p.brushCategories.length < MAX_CATEGORIES) p.brushCategories.push(stem);
+      if (p.brushCategories.includes(stem)) catName = stem;
+    }
+    const room = Math.max(0, MAX_CUSTOM_BRUSHES - p.customBrushes.length), added = got.slice(0, room);
+    for (const b of added) p.customBrushes.push({ id: uid('c'), name: b.name, cat: catName, params: b.params });
+    void uploadAssets(added.flatMap((b) => brushAssets(b.params)));
+    ed.emit('prefs');
+    app.toast(added.length < got.length ? `Added ${added.length} of ${got.length} brushes; the library holds ${MAX_CUSTOM_BRUSHES}` : `Added ${added.length} brush${added.length === 1 ? '' : 'es'}`);
+    tab = Math.max(0, cats().findIndex((c) => c.name === catName));
+    render();
+  } });
   const render = () => {
     const all = cats();
     tab = Math.min(tab, all.length - 1);
@@ -129,6 +152,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
         if (!(await ensureAssets(brushAssets(got.params)))) app.toast('This brush’s images aren’t available here; it draws with a round tip');
         edit({ id: uid('c'), name: got.name, cat: cat.user ? cat.name : 'General', params: got.params });
       }),
+      act('download', 'Import brushes (.abr, .brush, .brushset)', () => file.click()),
       act('folderPlus', 'New category', async () => { const name = await newCategory(app); if (name) { tab = all.length; render(); } }),
       cat.user ? act('trash', 'Delete category', async () => {
         if (!(await confirmDialog('Delete category', `Delete “${cat.name}”? Its brushes move to General.`, 'Delete'))) return;
@@ -152,7 +176,7 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
   };
   render();
   const title = tool === 'eraser' ? 'Eraser' : tool === 'smudge' ? 'Smudge' : 'Brush';
-  const el = h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library'), head), tabs, list, menu);
+  const el = h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library'), head), tabs, list, menu, file);
   dismissOnOutside(menu, [], () => { menu.hidden = true; });
   return el;
 }

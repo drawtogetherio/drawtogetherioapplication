@@ -55,7 +55,7 @@ export async function hiveCanvasBlob(doc: DrawDoc, name: string): Promise<Blob> 
   return zipBlob(entries);
 }
 
-async function inflate(data: Uint8Array, maxBytes: number): Promise<Uint8Array> {
+export async function inflate(data: Uint8Array, maxBytes: number): Promise<Uint8Array> {
   const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   const chunks: Uint8Array[] = [];
   let n = 0;

@@ -1,6 +1,6 @@
 {
   "name": "doodlehive",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "build": "tsc && vite build && node scripts/check-build.mjs",

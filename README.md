@@ -70,6 +70,27 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - **Accessibility**: icon-only controls are named by their tooltips, keyboard focus shows a ring, F6 moves
   focus between bars, reduced motion is honoured, and a left-handed preference mirrors the layout.
 
+**Brush engine (v0.34)**
+- **Dynamics** (`src/engine/brush.ts`): tip angle (fixed or following the stroke), scatter, size/flow/angle
+  jitter, hue/saturation/brightness jitter, **wet mixing** (each dab picks up the paint under it) and
+  **tilt shading** (a leaning pen stretches the dab and thins the paint; strokes carry `tilt` only when the
+  brush uses it). Randomness is seeded from the op id, so every client replays the same dabs; the server
+  range-checks each number (`src/shared/brush.ts`, `server/validate.ts`).
+- **Brush images**: a tip shape, a **dual tip** multiplied into the dab, and a **texture** (fixed to the
+  canvas or moving with the dab) are small greyscale PNGs kept as content-addressed assets
+  (`src/shared/brushAssets.ts`, `src/engine/brushAssets.ts`): the id is the SHA-256 of the normalised file,
+  256 px and 64 KB at most. They live in IndexedDB and are uploaded once to `PUT /api/brush-assets/:id`
+  (signature and size checked, never decoded server-side; 200 per user per hour); a room refuses a stroke
+  naming an asset it hasn't got, and peers fetch missing ones before applying the op. A brush whose image
+  is unavailable draws with a round tip.
+- **Brush editor** groups the sliders into collapsible sections (Stroke, Pressure, Texture, Dual tip, Scatter,
+  Colour, Wet mix, Tilt); brush codes carry the image ids, so a shared code still works once the images
+  are on the server.
+- **Import** (`src/io/brushImport.ts`): the library's Import button reads Photoshop `.abr` (versions 1, 2 and
+  6+, `src/shared/abr.ts`: sampled tips, computed tips, scatter, texture, dual brush, colour dynamics) and
+  Procreate `.brush` / `.brushset` (`src/shared/bplist.ts` unarchives the `Brush.archive` plist; `Shape.png`
+  and `Grain.png` become the tip and texture). A set lands in a category named after the file.
+
 **Performance (v0.32)**
 - Fills, effects, PNG/JPG encoding, thumbnails and `.hivecanvas` zips run in a Web Worker
   (`src/engine/offload.ts`); the page falls back to doing them inline if the worker fails to start.
@@ -471,6 +492,9 @@ node tests/reference.mjs http://localhost:4180/app.html # reference layer for fi
 node tests/layers.mjs http://localhost:4180/app.html    # search, tags, multi-select, merge visible, flatten
 node tests/quickmenu.mjs http://localhost:4180/app.html # quick menu and command palette
 node tests/a11y.mjs http://localhost:4180/app.html      # names, focus ring, F6, reduced motion, left-handed layout
+node tests/dynamics.mjs http://localhost:4180/app.html  # seeded replay, scatter, colour jitter, wet mix, tilt, follow angle, editor sections
+node tests/tips.mjs http://localhost:4180/app.html      # tip, dual and texture images, missing-asset fallback, IndexedDB persistence
+node tests/import.mjs http://localhost:4180/app.html    # Photoshop .abr (v2 and v6) and Procreate .brushset import
 node tests/pwa.mjs http://localhost:4180                # manifest, icons, service worker precache, offline /app
 node tests/compbench.mjs --layers 20                    # compositor timings at 4K with N layers
 
@@ -483,6 +507,7 @@ node tests/spectate.mjs                       # watch links: chat only, no edits
 node tests/smudge.mjs                         # smudge: drags paint, undo, selection clip, room sync
 DB_PATH=... node tests/notices.mjs            # bell: friend requests, invites, premium warning, clear
 DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pressure graph, key binds, sync, gradients
+DB_PATH=... node tests/assets.mjs             # brush images: upload rules, room rejections, a tip drawn by one person shows for another
 DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete, site settings
 DB_PATH=... node tests/room.mjs               # start the server with SNAPSHOT_EVERY=5 so the snapshot check passes
 DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
