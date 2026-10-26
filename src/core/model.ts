@@ -71,6 +71,22 @@ export interface BrushParams {
   grain?: number;
   /** Grain texture scale, 1 = fine. */
   grainScale?: number;
+  /** Dab rotation in degrees; `follow` turns it with the stroke. */
+  angle?: number;
+  follow?: boolean;
+  /** Per-dab randomness: offset (× diameter), smaller size, weaker flow, rotation (fraction of a turn). */
+  scatter?: number;
+  sizeJitter?: number;
+  flowJitter?: number;
+  angleJitter?: number;
+  /** Colour dynamics: per-dab hue (fraction of the wheel), saturation and brightness jitter. */
+  hueJitter?: number;
+  satJitter?: number;
+  brightJitter?: number;
+  /** Wet mix: how much of the paint under each dab the brush picks up. */
+  wet?: number;
+  /** Tilt shading: how much a leaning pen stretches the dab and thins the paint. */
+  tilt?: number;
 }
 
 export const EFFECTS = ['blur', 'motion', 'mosaic', 'chroma', 'glitch', 'sharpen', 'noise', 'hsb', 'balance', 'curves', 'levels', 'invert', 'gradientMap'] as const;
@@ -99,6 +115,8 @@ export type Op =
       t: 'stroke'; layer: string; erase: boolean; brush: BrushParams; color: string;
       /** Raw samples, flat x, y, pressure; smoothing happens when rendering. */
       pts: number[]; clip?: Selection;
+      /** Pen tilt per sample, x and y in degrees, only when the brush shades by tilt. */
+      tilt?: number[];
     })
   /** Drags the layer's own pixels along the path; flow is the strength. */
   | (OpBase & { t: 'smudge'; layer: string; brush: BrushParams; pts: number[]; clip?: Selection })

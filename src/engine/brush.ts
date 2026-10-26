@@ -55,6 +55,13 @@ const stampCache = new Map<string, HTMLCanvasElement>();
 export const GRAIN = 256;
 let grainData: Float32Array | null = null;
 
+/** An op id as a seed, so every client scatters a stroke the same way. */
+export function hashSeed(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
 function seeded(seed: number) {
   return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
@@ -158,12 +165,15 @@ export abstract class DabPath {
   private p1 = -1; private p2 = -1; // the two raw pressures before this one
   private started = false;
   private carry = 0; // distance travelled since the last dab
+  /** The pen's lean at the latest sample, in degrees. */
+  protected tiltX = 0; protected tiltY = 0;
 
   constructor(protected brush: BrushParams) {}
 
   protected abstract dab(x: number, y: number, p: number): Rect | null;
 
-  add(x: number, y: number, p: number): Rect | null {
+  add(x: number, y: number, p: number, tiltX = 0, tiltY = 0): Rect | null {
+    this.tiltX = tiltX; this.tiltY = tiltY;
     // Pens jitter at light pressure and some drivers slip in a stray sample; a median of three drops single spikes.
     const pm = this.p2 < 0 ? p : Math.max(Math.min(this.p2, this.p1), Math.min(Math.max(this.p2, this.p1), p));
     this.p2 = this.p1; this.p1 = p; p = pm;
@@ -225,29 +235,61 @@ const THIN = 2.5;
 /** Narrower ribbons fade instead, since a thinner polygon would just vanish. */
 const MIN_WIDTH = 0.6;
 
+/** How a dab is placed: rotation, and how far it is stretched along `lean`. */
+interface Pose { angle: number; stretch: number; lean: number }
+type RGB = [number, number, number];
+
+export interface StrokeOptions {
+  /** Seeds scatter, jitter and colour dynamics; the op id when drawing, so a replay matches. */
+  seed?: string;
+  /** The pixels the stroke lands on, for wet mixing. */
+  under?: TiledSurface;
+}
+
+const rgbToHsv = ([r, g, b]: RGB): RGB => {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d) { h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
+  return [h, max ? d / max : 0, max];
+};
+const hsvToRgb = ([h, s, v]: RGB): RGB => {
+  const f = (n: number) => { const k = (n + h / 60) % 6; return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255); };
+  return [f(5), f(3), f(1)];
+};
+
 /**
  * Paint is laid down as coverage (grey levels) in a scratch surface, where round dabs combine by
  * maximum ('lighten'), so a pixel holds the brush's coverage however many dabs land on it: no
  * build-up pattern, no banding at light pressure. Hairlines are a ribbon of quads added once per
  * pixel instead, since discs that small are all anti-aliasing. Square dabs still stamp over each other.
  * `sync` turns the coverage into coloured pixels in the stroke buffer; it runs after each input event.
+ * A brush with colour dynamics or wet mixing also keeps each dab's colour in a tint surface.
  */
 export class StrokeRenderer extends DabPath {
   private readonly cov = new TiledSurface();
-  private readonly rgb: [number, number, number];
+  private readonly tint: TiledSurface | null;
+  private readonly rgb: RGB;
+  private col: RGB;
   private readonly square: boolean;
   private readonly soft: boolean;
+  private readonly rnd: () => number;
+  private readonly under?: TiledSurface;
   private paper: CanvasPattern | null = null;
   private scratch: HTMLCanvasElement | null = null;
   private nodes: Node[] = [];
   private dirty: Rect | null = null;
   private queued = false;
+  private px = NaN; private py = NaN; // the previous dab, for the stroke direction
 
-  constructor(private target: TiledSurface, brush: BrushParams, color: string) {
+  constructor(private target: TiledSurface, brush: BrushParams, color: string, opts: StrokeOptions = {}) {
     super(brush);
-    this.rgb = hexToRgb(color);
+    this.rgb = this.col = hexToRgb(color);
     this.square = brush.shape === 'square';
     this.soft = brush.hardness < 0.98;
+    this.rnd = seeded(hashSeed(opts.seed ?? ''));
+    this.under = opts.under;
+    this.tint = brush.wet || brush.hueJitter || brush.satJitter || brush.brightJitter ? new TiledSurface() : null;
     if (brush.grain) {
       const scale = Math.max(0.25, Math.min(8, brush.grainScale ?? 1));
       this.paper = gradients().createPattern(paper(Math.min(1, brush.grain), scale), 'repeat');
@@ -261,12 +303,27 @@ export class StrokeRenderer extends DabPath {
   }
 
   protected dab(x: number, y: number, p: number): Rect | null {
-    const d = this.diameter(p), a = Math.min(1, this.strength(p));
-    if (this.square) return this.stamp(x, y, d, a);
+    const b = this.brush, rnd = this.rnd;
+    let d = this.diameter(p), a = Math.min(1, this.strength(p));
+    const pose: Pose = { angle: ((b.angle ?? 0) * Math.PI) / 180, stretch: 1, lean: 0 };
+    if (b.follow && !Number.isNaN(this.px)) pose.angle += Math.atan2(y - this.py, x - this.px);
+    this.px = x; this.py = y;
+    if (b.sizeJitter) d *= 1 - b.sizeJitter * rnd();
+    if (b.flowJitter) a *= 1 - b.flowJitter * rnd();
+    if (b.angleJitter) pose.angle += (rnd() - 0.5) * b.angleJitter * Math.PI * 2;
+    if (b.scatter) { const r = rnd() * b.scatter * d, t = rnd() * Math.PI * 2; x += Math.cos(t) * r; y += Math.sin(t) * r; }
+    if (b.tilt) {
+      const lean = Math.min(1, Math.hypot(this.tiltX, this.tiltY) / 60);
+      pose.stretch = 1 + b.tilt * lean * 2;
+      pose.lean = Math.atan2(this.tiltY, this.tiltX);
+      a *= 1 - b.tilt * lean * 0.6;
+    }
+    if (this.tint) this.col = this.dabColor(x, y);
+    if (this.square) return this.stamp(x, y, d, a, pose);
     // The darkness the old pile of overlapping dabs settled at, so every brush keeps its feel.
-    const n = Math.max(1, Math.min(1 / this.brush.spacing, d / 0.4));
+    const n = Math.max(1, Math.min(1 / b.spacing, d / 0.4));
     const level = 1 - Math.pow(1 - a, n);
-    if (d >= THIN) { const r = rectUnion(this.flush(), this.disc(x, y, d, level)); return r; }
+    if (d >= THIN) { const r = rectUnion(this.flush(), this.disc(x, y, d, level, pose)); return r; }
     const fade = Math.min(1, d / MIN_WIDTH);
     const nodes = this.nodes;
     nodes.push({ x, y, r: Math.max(d, MIN_WIDTH) / 2, a: level * fade, lx: 0, ly: 0, rx: 0, ry: 0 });
@@ -281,14 +338,50 @@ export class StrokeRenderer extends DabPath {
     return this.quad(A, B);
   }
 
-  /** A round dab at full coverage `level`, kept by maximum. */
-  private disc(x: number, y: number, d: number, level: number): Rect | null {
-    const r = d / 2;
-    return this.paint({ x: x - r - 1, y: y - r - 1, w: d + 2, h: d + 2 }, 'lighten', (c) => {
-      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2);
-      if (this.soft) { const g = c.createRadialGradient(x, y, 0, x, y, r); softStops(g, this.brush.hardness, level, (u) => [u]); c.fillStyle = g; }
-      else c.fillStyle = grey(level);
+  /** This dab's colour: what the brush carries after picking up from the layer, then jittered. */
+  private dabColor(x: number, y: number): RGB {
+    const b = this.brush;
+    let c = this.col;
+    if (b.wet && this.under) {
+      // Pick up what is under the dab, while the brush slowly recharges with its own colour.
+      const u = this.sample(x, y), k = u ? b.wet * u[3] : 0, r = (1 - b.wet) * 0.1, o = this.rgb;
+      this.col = c = c.map((v, i) => { const m = v + ((u ? u[i] : v) - v) * k; return m + (o[i] - m) * r; }) as RGB;
+    }
+    if (!b.hueJitter && !b.satJitter && !b.brightJitter) return c;
+    const hsv = rgbToHsv(c), rnd = this.rnd;
+    if (b.hueJitter) hsv[0] = (hsv[0] + (rnd() - 0.5) * 2 * b.hueJitter * 360 + 720) % 360;
+    if (b.satJitter) hsv[1] = Math.max(0, Math.min(1, hsv[1] + (rnd() - 0.5) * 2 * b.satJitter));
+    if (b.brightJitter) hsv[2] = Math.max(0, Math.min(1, hsv[2] + (rnd() - 0.5) * 2 * b.brightJitter));
+    return hsvToRgb(hsv);
+  }
+
+  /** The layer's colour and alpha under a point, before this stroke. */
+  private sample(x: number, y: number): [number, number, number, number] | null {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE), t = this.under!.get(tx, ty);
+    if (!t) return [0, 0, 0, 0];
+    const px = Math.floor(x - tx * TILE), py = Math.floor(y - ty * TILE);
+    if (px < 0 || py < 0 || px >= TILE || py >= TILE) return null;
+    const d = t.getContext('2d', { willReadFrequently: true })!.getImageData(px, py, 1, 1).data;
+    return [d[0], d[1], d[2], d[3] / 255];
+  }
+
+  private fill(c: CanvasRenderingContext2D, level: number) {
+    const [r, g, b] = this.col;
+    c.fillStyle = c.canvas === this.tintCanvas ? `rgb(${r},${g},${b})` : grey(level);
+  }
+  private tintCanvas: HTMLCanvasElement | null = null;
+
+  /** A round dab at full coverage `level`, kept by maximum; a tilted pen stretches it along the lean. */
+  private disc(x: number, y: number, d: number, level: number, pose: Pose): Rect | null {
+    const r = d / 2, R = r * pose.stretch;
+    return this.paint({ x: x - R - 1, y: y - R - 1, w: R * 2 + 2, h: R * 2 + 2 }, 'lighten', (c) => {
+      c.save();
+      c.translate(x, y); c.rotate(pose.lean); c.scale(pose.stretch, 1);
+      c.beginPath(); c.arc(0, 0, r, 0, Math.PI * 2);
+      if (c.canvas === this.tintCanvas || !this.soft) this.fill(c, level);
+      else { const g = c.createRadialGradient(0, 0, 0, 0, 0, r); softStops(g, this.brush.hardness, level, (u) => [u]); c.fillStyle = g; }
       c.fill();
+      c.restore();
     }, level);
   }
 
@@ -300,7 +393,7 @@ export class StrokeRenderer extends DabPath {
     if (nodes.length === 1) {
       const N = nodes[0];
       return this.paint({ x: N.x - N.r - 1, y: N.y - N.r - 1, w: N.r * 2 + 2, h: N.r * 2 + 2 }, 'lighter', (c) => {
-        c.fillStyle = grey(N.a); c.beginPath(); c.arc(N.x, N.y, N.r, 0, Math.PI * 2); c.fill();
+        this.fill(c, N.a); c.beginPath(); c.arc(N.x, N.y, N.r, 0, Math.PI * 2); c.fill();
       }, N.a);
     }
     const [A, B] = nodes;
@@ -325,7 +418,7 @@ export class StrokeRenderer extends DabPath {
     const xs = [A.lx, B.lx, B.rx, A.rx], ys = [A.ly, B.ly, B.ry, A.ry];
     const x0 = Math.min(...xs), y0 = Math.min(...ys);
     return this.paint({ x: x0 - 1, y: y0 - 1, w: Math.max(...xs) - x0 + 2, h: Math.max(...ys) - y0 + 2 }, 'lighter', (c) => {
-      c.fillStyle = grey(a);
+      this.fill(c, a);
       c.beginPath(); c.moveTo(A.lx, A.ly); c.lineTo(B.lx, B.ly); c.lineTo(B.rx, B.ry); c.lineTo(A.rx, A.ry); c.closePath(); c.fill();
     }, a);
   }
@@ -334,16 +427,17 @@ export class StrokeRenderer extends DabPath {
   private cap(N: Node, from: Node): Rect | null {
     const t = Math.atan2(N.y - from.y, N.x - from.x), r = N.r;
     return this.paint({ x: N.x - r - 1, y: N.y - r - 1, w: r * 2 + 2, h: r * 2 + 2 }, 'lighter', (c) => {
-      c.fillStyle = grey(N.a); c.beginPath(); c.arc(N.x, N.y, r, t - Math.PI / 2, t + Math.PI / 2); c.closePath(); c.fill();
+      this.fill(c, N.a); c.beginPath(); c.arc(N.x, N.y, r, t - Math.PI / 2, t + Math.PI / 2); c.closePath(); c.fill();
     }, N.a);
   }
 
   /** Square dabs stamp over each other as they always did; the stamp's alpha is the coverage. */
-  private stamp(x: number, y: number, d: number, a: number): Rect | null {
+  private stamp(x: number, y: number, d: number, a: number, pose: Pose): Rect | null {
     if (d < 1) { a *= d; d = 1; }
-    const r = d / 2, box = { x: x - r - 1, y: y - r - 1, w: d + 2, h: d + 2 };
+    const r = d / 2, R = r * pose.stretch * Math.SQRT2, box = { x: x - R - 1, y: y - R - 1, w: R * 2 + 2, h: R * 2 + 2 };
     if (a <= 0.001) return null;
     const stamp = stampFor(this.brush.hardness, stampSize(d));
+    const place = (c: CanvasRenderingContext2D) => { c.translate(x, y); c.rotate(pose.lean); c.scale(pose.stretch, 1); c.rotate(pose.angle - pose.lean); };
     if (this.paper) {
       const sc = this.scratchFor(box), c = ctx2d(sc), S = sc.width, ox = Math.floor(box.x), oy = Math.floor(box.y);
       c.save();
@@ -351,10 +445,12 @@ export class StrokeRenderer extends DabPath {
       c.translate(-ox, -oy);
       c.fillStyle = this.paper; c.fillRect(ox, oy, S, S);
       c.globalCompositeOperation = 'destination-in';
-      c.drawImage(stamp, x - r, y - r, d, d);
+      place(c);
+      c.drawImage(stamp, -r, -r, d, d);
       c.restore();
       this.cov.draw(box, (ctx) => { ctx.globalAlpha = a; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
-    } else this.cov.draw(box, (ctx) => { ctx.globalAlpha = a; ctx.drawImage(stamp, x - r, y - r, d, d); });
+    } else this.cov.draw(box, (ctx) => { ctx.save(); ctx.globalAlpha = a; place(ctx); ctx.drawImage(stamp, -r, -r, d, d); ctx.restore(); });
+    if (this.tint) this.tint.draw(box, (ctx) => { ctx.save(); place(ctx); this.tintCanvas = ctx.canvas; this.fill(ctx, 1); this.tintCanvas = null; ctx.fillRect(-r, -r, d, d); ctx.restore(); });
     return this.touched(box);
   }
 
@@ -379,6 +475,8 @@ export class StrokeRenderer extends DabPath {
       c.restore();
       this.cov.draw(box, (ctx) => { ctx.globalCompositeOperation = op; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
     } else this.cov.draw(box, (ctx) => { ctx.globalCompositeOperation = op; shape(ctx); });
+    // The tint keeps the newest colour: a plain fill, the shape sees which canvas it is on.
+    if (this.tint) this.tint.draw(box, (ctx) => { this.tintCanvas = ctx.canvas; shape(ctx); this.tintCanvas = null; });
     return this.touched(box);
   }
 
@@ -403,10 +501,13 @@ export class StrokeRenderer extends DabPath {
       const w = Math.min(x1, tx * TILE + TILE) - tx * TILE - lx, h = Math.min(y1, ty * TILE + TILE) - ty * TILE - ly;
       if (w <= 0 || h <= 0) continue;
       const img = ctx2d(src).getImageData(lx, ly, w, h), px = img.data;
+      const tint = this.tint?.get(tx, ty), tp = tint ? ctx2d(tint).getImageData(lx, ly, w, h).data : null;
       for (let i = 0; i < px.length; i += 4) {
         // Coverage is the premultiplied red channel: level × alpha.
         const v = Math.round((px[i] * px[i + 3]) / 255);
-        px[i] = cr; px[i + 1] = cg; px[i + 2] = cb; px[i + 3] = v;
+        if (tp && tp[i + 3]) { px[i] = tp[i]; px[i + 1] = tp[i + 1]; px[i + 2] = tp[i + 2]; }
+        else { px[i] = cr; px[i + 1] = cg; px[i + 2] = cb; }
+        px[i + 3] = v;
       }
       ctx2d(this.target.ensure(tx, ty)).putImageData(img, lx, ly);
       this.target.mark(TiledSurface.key(tx, ty), { x: lx, y: ly, w, h });
@@ -414,9 +515,10 @@ export class StrokeRenderer extends DabPath {
   }
 }
 
-export function renderStroke(target: TiledSurface, brush: BrushParams, color: string, pts: number[]): Rect | null {
-  const r = new StrokeRenderer(target, brush, color);
+export function renderStroke(target: TiledSurface, brush: BrushParams, color: string, pts: number[], opts: StrokeOptions & { tilt?: number[] } = {}): Rect | null {
+  const r = new StrokeRenderer(target, brush, color, opts);
+  const t = opts.tilt;
   let dirty: Rect | null = null;
-  for (let i = 0; i + 2 < pts.length; i += 3) dirty = rectUnion(dirty, r.add(pts[i], pts[i + 1], pts[i + 2]));
+  for (let i = 0, j = 0; i + 2 < pts.length; i += 3, j += 2) dirty = rectUnion(dirty, r.add(pts[i], pts[i + 1], pts[i + 2], t?.[j] ?? 0, t?.[j + 1] ?? 0));
   return rectUnion(dirty, r.end());
 }

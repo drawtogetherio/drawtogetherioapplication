@@ -15,6 +15,7 @@ export class BrushTool implements Tool {
   get stroke() { return this.buffer; }
   private renderer: StrokeRenderer | null = null;
   private pts: number[] = [];
+  private tilt: number[] = [];
   private len = 0;
   private id = '';
   private sent = 0; // samples already streamed to the room
@@ -44,8 +45,10 @@ export class BrushTool implements Tool {
     this.id = uid();
     this.sent = 0;
     this.buffer = new TiledSurface();
-    this.renderer = new StrokeRenderer(this.buffer, params, this.erase ? '#000000' : this.ed.color);
+    const under = (this.ed.onMask ? layer.mask : layer.surface) ?? undefined;
+    this.renderer = new StrokeRenderer(this.buffer, params, this.erase ? '#000000' : this.ed.color, { seed: this.id, under });
     this.pts = [];
+    this.tilt = [];
     this.len = 0;
     this.tether = null;
     const live = this.live = (buffer: TiledSurface) => ({
@@ -57,7 +60,8 @@ export class BrushTool implements Tool {
     this.ed.view.live = live(this.buffer);
     this.mirrors = symmetryMaps(this.ed).map((m, i) => {
       const buffer = new TiledSurface();
-      return { m, buffer, renderer: new StrokeRenderer(buffer, params, this.erase ? '#000000' : this.ed.color), id: `${this.id}m${i}`, sent: 0 };
+      const id = `${this.id}m${i}`;
+      return { m, buffer, renderer: new StrokeRenderer(buffer, params, this.erase ? '#000000' : this.ed.color, { seed: id, under }), id, sent: 0 };
     });
     this.ed.view.extraLive = this.mirrors.map((c) => live(c.buffer));
     this.add(p);
@@ -123,11 +127,13 @@ export class BrushTool implements Tool {
     if (n) this.len += Math.hypot(x - this.pts[n - 3], y - this.pts[n - 2]);
     if (!strokeFits(n + 3, this.len, this.params.size, 0.8)) { this.up(); this.down(p); return; }
     this.pts.push(x, y, pr);
-    const r = this.renderer!.add(x, y, pr);
+    const tx = this.params.tilt ? Math.round(p.tiltX) : 0, ty = this.params.tilt ? Math.round(p.tiltY) : 0;
+    if (this.params.tilt) this.tilt.push(tx, ty);
+    const r = this.renderer!.add(x, y, pr, tx, ty);
     if (r) this.ed.view.invalidate(r);
     for (const c of this.mirrors) {
       const [mx, my] = mapPts(c.m, [x, y, pr]);
-      const mr = c.renderer.add(mx, my, pr);
+      const mr = c.renderer.add(mx, my, pr, tx, ty);
       if (mr) this.ed.view.invalidate(mr);
     }
     if (this.ed.room && !this.flushTimer) this.flushTimer = window.setTimeout(() => this.flush(), 33);
@@ -154,9 +160,10 @@ export class BrushTool implements Tool {
     this.flushTimer = 0;
     const room = this.ed.room;
     if (!room || this.sent >= this.pts.length) return;
+    const tilt = this.params.tilt ? this.tilt.slice((this.sent / 3) * 2) : undefined;
     const live = (stroke: string, pts: number[]) => room.send({ type: 'live', live: {
       stroke, layer: this.ed.activeLayer, erase: this.erase, brush: this.params, color: this.erase ? '#000000' : this.ed.color,
-      clip: this.ed.selection ?? undefined, mask: this.ed.onMask, pts,
+      clip: this.ed.selection ?? undefined, mask: this.ed.onMask, pts, tilt,
     } });
     live(this.id, this.pts.slice(this.sent));
     for (const c of this.mirrors) live(c.id, mapPts(c.m, this.pts.slice(this.sent)));
@@ -181,9 +188,10 @@ export class BrushTool implements Tool {
     this.buffer = null;
     this.mirrors = [];
     if (!this.erase) this.ed.pushRecent(this.ed.color);
+    const tilt = brush.tilt ? this.tilt : undefined;
     const op = (id: string, pts: number[]): Op => ({
       t: 'stroke', id, layer: this.ed.activeLayer, erase: this.erase, brush,
-      color: this.erase ? '#000000' : this.ed.color, pts, clip: this.ed.selection ?? undefined, mask: this.ed.onMask,
+      color: this.erase ? '#000000' : this.ed.color, pts, clip: this.ed.selection ?? undefined, mask: this.ed.onMask, tilt,
     });
     this.ed.run([op(this.id, this.pts), ...mirrors.map((c) => op(c.id, mapPts(c.m, this.pts)))], 'stroke', [{ buffer }, ...mirrors.map((c) => ({ buffer: c.buffer }))]);
   }

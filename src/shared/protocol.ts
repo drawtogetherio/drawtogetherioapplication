@@ -64,6 +64,7 @@ export interface LiveStroke {
   clip?: Selection;
   mask?: boolean;
   pts: number[]; // new samples, flat x,y,pressure
+  tilt?: number[];
 }
 
 /** The deny message for private rooms; the client turns it into the 404 page. */

@@ -57,7 +57,7 @@ await page.locator('[aria-label="More for Ink Pen"]').click();
 check((await page.locator('.brush-menu .menu-item').allTextContents()).join() === 'Clone,Copy code', 'a library brush offers clone and copy code');
 await page.locator('.brush-menu .menu-item', { hasText: 'Clone' }).click();
 await page.waitForSelector('.brush-edit');
-check((await page.locator('.brush-edit .slider').count()) === 11 && (await page.locator('.brush-edit input[aria-label="Brush name"]').inputValue()) === 'Ink Pen copy', 'the editor opens on a copy with every setting as a slider');
+check((await page.locator('.brush-edit .slider').count()) === 21 && (await page.locator('.brush-edit input[aria-label="Brush name"]').inputValue()) === 'Ink Pen copy', 'the editor opens on a copy with every setting as a slider');
 await page.fill('.brush-edit input[aria-label="Brush name"]', 'Soft Ink');
 const hard = await page.locator('.brush-edit .slider[aria-label="Hardness"]').boundingBox();
 await m.click(hard.x + hard.width * 0.3, hard.y + hard.height / 2);

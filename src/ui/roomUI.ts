@@ -16,7 +16,7 @@ import { EMOJI, emojiMatches, emojify } from '../shared/emoji';
 const MENTION = /<@([\w-]+)>/g;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[]; pad: number }
+interface RemoteStroke { renderer: StrokeRenderer; buffer: TiledSurface; count: number; touched: number; pending: number[]; tilt: number[]; pad: number }
 interface Bubble { x: number; y: number; drawing: boolean; t: number }
 
 const BUBBLE_LINGER = 1200;
@@ -89,12 +89,13 @@ export class RoomUI {
   }
 
   private drawPending(s: RemoteStroke) {
-    const p = s.pending;
-    for (let i = 0; i + 2 < p.length; i += 3) {
-      const r = s.renderer.add(p[i], p[i + 1], p[i + 2]);
+    const p = s.pending, t = s.tilt;
+    for (let i = 0, j = 0; i + 2 < p.length; i += 3, j += 2) {
+      const r = s.renderer.add(p[i], p[i + 1], p[i + 2], t[j] ?? 0, t[j + 1] ?? 0);
       if (r) this.ed.view.invalidate(r);
     }
     s.pending = [];
+    s.tilt = [];
     s.renderer.sync(); // the frame composites right after this, before any microtask
   }
 
@@ -164,10 +165,10 @@ export class RoomUI {
         }
         let s = this.strokes.get(key);
         if (!s) {
-          const buffer = new TiledSurface();
-          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color), buffer, count: 0, touched: 0, pending: [], pad: l.brush.size / 2 + 2 };
+          const buffer = new TiledSurface(), layer = ed.doc.layer(l.layer);
+          const under = (l.mask ? layer?.mask : layer?.surface) ?? undefined;
+          s = { renderer: new StrokeRenderer(buffer, l.brush, l.color, { seed: l.stroke, under }), buffer, count: 0, touched: 0, pending: [], tilt: [], pad: l.brush.size / 2 + 2 };
           this.strokes.set(key, s);
-          const layer = ed.doc.layer(l.layer);
           ed.view.remoteLive.set(key, {
             layerId: l.layer, buffer, bufferAlpha: l.brush.opacity,
             bufferOp: l.erase ? 'destination-out' : layer?.props.alphaLock && !l.mask ? 'source-atop' : 'source-over',
@@ -177,6 +178,7 @@ export class RoomUI {
         s.touched = Date.now();
         s.count += l.pts.length;
         for (const v of l.pts) s.pending.push(v);
+        if (l.tilt) for (const v of l.tilt) s.tilt.push(v);
         const n = l.pts.length;
         if (n >= 3) this.bubbles.set(e.from, { x: l.pts[n - 3], y: l.pts[n - 2], drawing: true, t: Date.now() });
         if (this.inView(s, ed.view.visible())) ed.view.requestRender();

@@ -1019,6 +1019,10 @@ body.spectating .stage { cursor: grab; }
 .brush-edit { display: flex; flex-direction: column; gap: 8px; }
 .brush-edit-preview { background: var(--workspace); border-radius: 10px; padding: 6px; display: grid; place-items: center; }
 .brush-edit-preview canvas { display: block; }
+.brush-group { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; display: flex; flex-direction: column; gap: 8px; }
+.brush-group summary { cursor: pointer; font-weight: 600; font-size: 13px; list-style: none; display: flex; align-items: center; gap: 6px; }
+.brush-group summary::before { content: '▸'; color: var(--muted); font-size: 11px; }
+.brush-group[open] summary::before { content: '▾'; }
 .brush-edit input[type="text"], .brush-edit select { height: 34px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; flex: 1; min-width: 0; width: auto; max-width: none; }
 .brush-code { font-size: 12px; }
 

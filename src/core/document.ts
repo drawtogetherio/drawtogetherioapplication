@@ -200,7 +200,7 @@ export class DrawDoc {
         let buf = opts.buffer;
         if (!buf) {
           buf = new TiledSurface();
-          if (op.t === 'stroke') renderStroke(buf, op.brush, op.color, op.pts);
+          if (op.t === 'stroke') renderStroke(buf, op.brush, op.color, op.pts, { seed: op.id, tilt: op.tilt, under: surface });
           else if (op.t === 'shape') renderShape(buf, op);
           else renderGradient(buf, op);
         }

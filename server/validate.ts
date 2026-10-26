@@ -36,6 +36,9 @@ function strokePts(v: unknown, max: number, size: number, min = 3): v is number[
 
 export const validCoord = (v: unknown): v is number => isNum(v) && Math.abs(v) <= MAX_COORD;
 
+/** Tilt x, y in whole degrees, one pair per sample. */
+const tiltOk = (v: unknown, pts: number[]) => v === undefined || (Array.isArray(v) && v.length === (pts.length / 3) * 2 && v.every((n) => Number.isInteger(n) && Math.abs(n) <= 90));
+
 const isSel = (v: unknown) => obj(v) && nums(v.pts, MAX_CLIP_PTS, 2, 6) && (v.feather === undefined || inRange(v.feather, 0, 64))
   && (v.holes === undefined || (Array.isArray(v.holes) && v.holes.length <= MAX_HOLES && v.holes.every((h) => nums(h, MAX_CLIP_PTS, 2, 6))));
 const isClip = (v: unknown) => v === undefined || isSel(v);
@@ -61,14 +64,14 @@ function propsOk(props: unknown, rules: Record<string, (v: unknown) => boolean>,
 }
 
 export function validLive(l: unknown): l is LiveStroke {
-  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && validBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && strokePts(l.pts, MAX_LIVE_PTS, l.brush.size, 0);
+  return obj(l) && isId(l.stroke) && isId(l.layer) && isBool(l.erase) && validBrush(l.brush) && isColor(l.color) && isClip(l.clip) && isMask(l.mask) && strokePts(l.pts, MAX_LIVE_PTS, l.brush.size, 0) && tiltOk(l.tilt, l.pts);
 }
 
 export function validOp(op: unknown): op is Op {
   if (!obj(op) || !isId(op.id) || !isMask(op.mask)) return false;
   switch (op.t) {
     case 'stroke':
-      return isId(op.layer) && isBool(op.erase) && validBrush(op.brush) && isColor(op.color) && isClip(op.clip) && strokePts(op.pts, MAX_STROKE_PTS, op.brush.size);
+      return isId(op.layer) && isBool(op.erase) && validBrush(op.brush) && isColor(op.color) && isClip(op.clip) && strokePts(op.pts, MAX_STROKE_PTS, op.brush.size) && tiltOk(op.tilt, op.pts);
     case 'smudge':
       return isId(op.layer) && validBrush(op.brush) && isClip(op.clip) && strokePts(op.pts, MAX_STROKE_PTS, op.brush.size);
     case 'effect':

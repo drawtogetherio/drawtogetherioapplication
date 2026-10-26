@@ -1,4 +1,4 @@
-import { BRUSH_FIELDS, brushCode } from '../shared/brush';
+import { BRUSH_FIELDS, BRUSH_GROUPS, brushCode } from '../shared/brush';
 import { BUILTIN_CATEGORIES, CustomBrush, MAX_CATEGORIES, MAX_CUSTOM_BRUSHES, cleanName } from '../shared/prefs';
 import type { App } from './app';
 import { confirmDialog, modal, textDialog } from './dialogs';
@@ -34,18 +34,35 @@ export function brushEditor(app: App, brush: CustomBrush, onDone: () => void) {
   const renderShape = () => shape.replaceChildren(...(['round', 'square'] as const).map((s) =>
     h(`button${(params.shape ?? 'round') === s ? '.active' : ''}` as 'button', { type: 'button', onclick: () => { params.shape = s === 'square' ? 'square' : undefined; renderShape(); refresh(); } }, s === 'round' ? 'Round' : 'Square')));
   renderShape();
-  const sliders = BRUSH_FIELDS.map((f) => new Slider({
+  const slider = (f: typeof BRUSH_FIELDS[number]) => new Slider({
     min: f.min, max: f.max, value: (params[f.key] as number | undefined) ?? (f.key === 'grainScale' ? 1 : 0), label: f.label,
     curve: f.key === 'size' ? 2.4 : f.key === 'grainScale' ? 1.6 : 1,
-    format: (v) => f.pct ? Math.round(v * 100) + '%' : f.key === 'size' ? (v < 10 ? v.toFixed(1) : Math.round(v)) + ' px' : '×' + v.toFixed(2),
+    format: (v) => f.pct ? Math.round(v * 100) + '%' : f.key === 'size' ? (v < 10 ? v.toFixed(1) : Math.round(v)) + ' px' : f.key === 'angle' ? Math.round(v) + '°' : '×' + v.toFixed(2),
     onInput: (v) => { (params as unknown as Record<string, number>)[f.key] = Math.round(v * 1000) / 1000; refresh(); },
-  }).el);
+  }).el;
+  const follow = h('input', { type: 'checkbox', role: 'switch' });
+  follow.checked = !!params.follow;
+  follow.addEventListener('change', () => { params.follow = follow.checked || undefined; refresh(); });
+  const NOTES: Partial<Record<typeof BRUSH_GROUPS[number], string>> = {
+    Scatter: 'Dabs land off the path, at random sizes, strengths and angles.',
+    Colour: 'Each dab shifts the colour a little.',
+    'Wet mix': 'The brush picks up paint already on the layer and carries it along.',
+    Tilt: 'Leaning the pen stretches the dab along the lean and thins the paint.',
+  };
+  // Stroke and pressure stay open; the rest fold away so the dialog stays short.
+  const groups = BRUSH_GROUPS.map((g) => {
+    const fields = BRUSH_FIELDS.filter((f) => f.group === g), on = fields.some((f) => params[f.key]);
+    const sec = h('details.brush-group', { open: g === 'Stroke' || g === 'Pressure' || on || undefined }, h('summary', {}, g),
+      NOTES[g] ? h('small.muted', {}, NOTES[g]) : null, ...fields.map(slider),
+      g === 'Scatter' ? h('label.switch-row', {}, h('span', {}, 'Angle follows the stroke'), follow) : null);
+    return sec;
+  });
   const copy = h('button.btn.small', { type: 'button', onclick: () => app.copyText(code.value, 'Brush code copied') }, 'Copy');
   const body = h('div.modal-body.brush-edit', {},
     preview,
     h('div.row', {}, name, cat),
     h('div.pref-row', {}, h('span', {}, 'Tip'), shape),
-    ...sliders,
+    ...groups,
     h('div.row', {}, code, copy),
     h('small.muted', {}, 'Friends paste the code into their library to get this brush.'),
   );
