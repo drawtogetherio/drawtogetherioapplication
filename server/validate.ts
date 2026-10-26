@@ -49,7 +49,7 @@ const adjustOk = (params: unknown, colors: unknown) =>
 const isAdjust = (v: unknown) => v === null || (obj(v) && EFFECTS.includes(v.effect as never) && inRange(v.amount, 0, 1) && adjustOk(v.params, v.colors) && Object.keys(v).every((k) => ['effect', 'amount', 'params', 'colors'].includes(k)));
 
 const LAYER_PROPS: Record<string, (v: unknown) => boolean> = {
-  name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool, clip: isBool, mask: isBool, adjust: isAdjust,
+  name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool, clip: isBool, mask: isBool, adjust: isAdjust, color: (v) => v === null || isColor(v),
 };
 const FOLDER_PROPS: Record<string, (v: unknown) => boolean> = { name: isName, visible: isBool, color: (v) => v === null || isColor(v) };
 

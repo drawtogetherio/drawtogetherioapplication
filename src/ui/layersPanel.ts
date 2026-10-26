@@ -5,7 +5,7 @@ import type { Editor } from '../editor';
 import { h } from './dom';
 import { effectsBar } from './effectsBar';
 import { ADJUST_DEFAULTS, EFFECT_INFO } from '../engine/effects';
-import { ADJUSTMENTS } from '../core/model';
+import { ADJUSTMENTS, LAYER_TAGS } from '../core/model';
 import { icon } from './icons';
 import { Slider } from './slider';
 import { textDialog } from './dialogs';
@@ -38,6 +38,12 @@ export class LayersPanel {
   private thumbArea = '';
   private collapsed = new Set<string>();
   selectedFolder: string | null = null;
+  /** Extra layers picked with Shift or Ctrl, besides the active one. */
+  selected = new Set<string>();
+  private filter = '';
+  private search: HTMLInputElement;
+  private tags: HTMLElement;
+  private multiBar: HTMLElement;
   private rows: Row[] = [];
   open = false;
 
@@ -64,6 +70,8 @@ export class LayersPanel {
     });
     this.maskBtn = act('maskIc', 'Add mask', () => this.ed.setMask(!this.ed.layer?.mask));
     this.applyMaskBtn = act('check', 'Apply mask to pixels', () => this.ed.applyMask());
+    this.tags = h('div.row.layer-tags', {}, h('span.opt-label', {}, 'Tag'));
+    for (const c of [null, ...LAYER_TAGS]) this.tags.append(h('button.tag-dot', { title: c ? 'Tag' : 'No tag', 'aria-label': c ? `Tag ${c}` : 'No tag', style: c ? `--tag:${c}` : '', onclick: () => this.eachSelected((id) => this.ed.apply({ t: 'layer.props', id: uid(), layer: id, props: { color: c } })) }));
     this.footer = h('div.layer-props', {},
       h('div.row', {}, this.blend),
       this.opacity.el,
@@ -76,6 +84,7 @@ export class LayersPanel {
         act('trash', 'Delete layer', () => this.removeLayer(), 'danger'),
       ),
       this.maskHint,
+      this.tags,
     );
     this.folderFooter = h('div.layer-props', { hidden: true },
       h('div.row.layer-actions', {},
@@ -85,10 +94,24 @@ export class LayersPanel {
         act('trash', 'Delete folder and its layers', () => this.removeFolder(), 'danger'),
       ),
     );
+    this.search = h('input.layer-search', { type: 'search', placeholder: 'Find layers', 'aria-label': 'Find layers' });
+    this.search.addEventListener('input', () => { this.filter = this.search.value.trim().toLowerCase(); this.render(); });
+    this.multiBar = h('div.layer-props.multi-bar', { hidden: true },
+      h('span.opt-label'),
+      h('div.row.layer-actions', {},
+        act('copy', 'Duplicate selected', () => this.ed.duplicateLayers(this.allSelected())),
+        act('merge', 'Merge selected', () => { this.ed.mergeLayers(this.allSelected(), 'Merge selected'); this.selected.clear(); }),
+        act('eye', 'Show or hide selected', () => { const on = !this.ed.layer?.props.visible; this.eachSelected((id) => this.ed.apply({ t: 'layer.props', id: uid(), layer: id, props: { visible: on } })); }),
+        act('trash', 'Delete selected', () => { this.ed.removeLayers(this.allSelected()); this.selected.clear(); }, 'danger'),
+      ),
+      this.tags,
+    );
     this.el = h('div.panel.layers-panel', {},
       h('div.panel-head', {}, h('span.panel-title', {}, 'Layers'),
-        h('span.head-actions', {}, meter ?? null, act('sparkle', 'New adjustment layer', () => this.addAdjustment()), act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
+        h('span.head-actions', {}, meter ?? null, act('more', 'More', () => this.moreMenu()), act('sparkle', 'New adjustment layer', () => this.addAdjustment()), act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
+      this.search,
       this.list,
+      this.multiBar,
       this.footer,
       this.folderFooter,
     );
@@ -190,11 +213,20 @@ export class LayersPanel {
   render() {
     const ed = this.ed, doc = ed.doc;
     this.rows = [];
+    const f = this.filter;
+    const matches = (id: string): boolean => {
+      const n = doc.node(id)!;
+      if (!f) return true;
+      if (n.props.name.toLowerCase().includes(f) || (n.kind === 'layer' && n.props.color && f === 'tag')) return true;
+      return n.kind === 'folder' && doc.children(id).some(matches);
+    };
+    for (const id of this.selected) if (!doc.layer(id)) this.selected.delete(id);
     const walk = (parent: string | null, depth: number) => {
       const ids = [...doc.children(parent)].reverse(); // top of the stack first
       for (const id of ids) {
         const n = doc.node(id)!;
         if (depth === 0 && !this.listed(n)) continue;
+        if (!matches(id)) continue;
         this.rows.push({ node: n, depth, el: n.kind === 'layer' ? this.layerRow(n, depth) : this.folderRow(n, depth) });
         if (n.kind === 'folder' && !this.collapsed.has(id)) walk(id, depth + 1);
       }
@@ -203,9 +235,14 @@ export class LayersPanel {
     const empty = !this.rows.length ? h('div.layers-empty', {}, ed.room ? 'Your folder will appear here.' : 'No layers yet.') : null;
     this.list.replaceChildren(this.dropLine, ...this.rows.map((r) => r.el), ...(empty ? [empty] : []));
 
-    const folderMode = !!this.selectedFolder;
-    this.footer.hidden = folderMode;
-    this.folderFooter.hidden = !folderMode;
+    const folderMode = !!this.selectedFolder, multi = this.selected.size > 0;
+    this.footer.hidden = folderMode || multi;
+    this.folderFooter.hidden = !folderMode || multi;
+    this.multiBar.hidden = !multi;
+    if (multi) { this.multiBar.querySelector('.opt-label')!.textContent = `${this.allSelected().length} layers selected`; this.multiBar.append(this.tags); }
+    else this.footer.append(this.tags);
+    const tag = ed.layer?.props.color ?? null;
+    for (const b of this.tags.querySelectorAll<HTMLButtonElement>('.tag-dot')) b.classList.toggle('on', (b.style.getPropertyValue('--tag') || null) === tag);
     const l = ed.layer;
     const editable = !!l && ed.canEdit(l.props.id);
     this.footer.classList.toggle('disabled', !editable);
@@ -257,7 +294,7 @@ export class LayersPanel {
     const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : '', p.clip ? 'Clipped' : '', ed.referenceLayer === p.id ? 'Reference' : ''].filter(Boolean).join(' · ');
     const active = p.id === ed.activeLayer && !this.selectedFolder;
     const onMask = active && ed.onMask;
-    const row = h(`div.layer-row${active ? '.active' : ''}${l.shown ? '' : '.hidden-layer'}${p.clip ? '.clipped' : ''}` as 'div', { 'data-id': p.id, style: this.indent(depth) },
+    const row = h(`div.layer-row${active ? '.active' : ''}${this.selected.has(p.id) ? '.picked' : ''}${l.shown ? '' : '.hidden-layer'}${p.clip ? '.clipped' : ''}${p.color ? '.colored' : ''}` as 'div', { 'data-id': p.id, style: this.indent(depth) + (p.color ? `;--folder:${p.color}` : '') },
       p.clip ? h('span.clip-ic', { html: icon('clipMask', 14) }) : null,
       p.adjust
         ? h('div.layer-thumb.adjust-thumb', { title: 'Edit adjustment', html: icon('sparkle', 22),
@@ -296,9 +333,40 @@ export class LayersPanel {
     return b;
   }
 
-  private select(n: DocNode, mask = false) {
-    if (n.kind === 'folder') { this.selectedFolder = n.props.id; this.ed.targetFolder = n.props.id; this.render(); }
-    else { this.selectedFolder = null; this.ed.setActiveLayer(n.props.id, mask); }
+  private select(n: DocNode, mask = false, e?: PointerEvent) {
+    if (n.kind === 'folder') { this.selected.clear(); this.selectedFolder = n.props.id; this.ed.targetFolder = n.props.id; this.render(); return; }
+    const id = n.props.id, active = this.ed.activeLayer;
+    if (e?.ctrlKey || e?.metaKey) {
+      // Toggle this one in the pick; the active layer stays where it is.
+      if (id === active) { if (this.selected.size) { const next = [...this.selected][0]; this.selected.delete(next); this.ed.setActiveLayer(next); } }
+      else if (this.selected.has(id)) this.selected.delete(id); else this.selected.add(id);
+    } else if (e?.shiftKey && active && this.ed.doc.layer(active)) {
+      const rows = this.rows.filter((r) => r.node.kind === 'layer').map((r) => r.node.props.id);
+      const a = rows.indexOf(active), b = rows.indexOf(id);
+      if (a >= 0 && b >= 0) for (const x of rows.slice(Math.min(a, b), Math.max(a, b) + 1)) if (x !== active) this.selected.add(x);
+    } else {
+      this.selected.clear();
+      this.selectedFolder = null;
+      this.ed.setActiveLayer(id, mask);
+      return;
+    }
+    this.selectedFolder = null;
+    this.render();
+  }
+
+  /** The active layer and the picked ones, in stack order. */
+  allSelected(): string[] {
+    const ids = new Set([this.ed.activeLayer, ...this.selected]);
+    return this.ed.doc.layers.map((l) => l.props.id).filter((id) => ids.has(id));
+  }
+  private eachSelected(fn: (id: string) => void) { this.ed.commitPending(); for (const id of this.allSelected()) if (this.ed.canEdit(id)) fn(id); }
+
+  /** Merge visible and flatten, out of the way of everyday actions. */
+  private moreMenu() {
+    const item = (label: string, fn: () => void) => h('button.menu-item', { html: `<span>${label}</span>`, onclick: () => { pop.remove(); fn(); } });
+    const pop = h('div.popover.panel.adjust-pick', {}, item('Merge visible', () => this.ed.mergeVisible()), item('Flatten', () => this.ed.flatten()), item('Select all layers', () => { for (const l of this.ed.doc.layers) if (l.props.id !== this.ed.activeLayer && this.ed.canEdit(l.props.id)) this.selected.add(l.props.id); this.render(); }));
+    this.el.append(pop);
+    setTimeout(() => document.addEventListener('pointerdown', (e) => { if (!pop.contains(e.target as Node)) pop.remove(); }, { once: true, capture: true }));
   }
 
   private dragStart(e: PointerEvent, row: HTMLElement, node: DocNode) {
@@ -322,7 +390,7 @@ export class LayersPanel {
       row.removeEventListener('pointercancel', up);
       this.dropLine.hidden = true;
       this.list.querySelector('.drop-into')?.classList.remove('drop-into');
-      if (!dragging) { this.select(node, mask); return; }
+      if (!dragging) { this.select(node, mask, e); return; }
       row.style.transform = '';
       row.classList.remove('dragging');
       if (target) this.ed.apply({ t: 'node.move', id: uid(), node: node.props.id, parent: target.parent, index: target.index });

@@ -355,6 +355,57 @@ export class Editor {
     return this.doc.layer(props.id) ?? null;
   }
 
+  /** Merges these layers (same folder) into one, bottom-most kept; hidden ones in between are left alone. */
+  mergeLayers(ids: string[], label = 'Merge') {
+    this.commitPending();
+    const doc = this.doc;
+    const layers = ids.map((id) => doc.layer(id)).filter((l): l is Layer => !!l && this.canEdit(l.props.id) && !l.props.adjust);
+    const parent = layers[0]?.parent ?? null;
+    const inOrder = doc.children(parent).filter((id) => layers.some((l) => l.props.id === id && l.parent === parent));
+    if (inOrder.length < 2) { this.toast('Pick two or more of your layers in one folder'); return; }
+    // Gather them at the bottom of the folder, then merge each into the one beneath, from the top down.
+    const base = doc.children(parent).indexOf(inOrder[0]);
+    const ops: Op[] = inOrder.map((id, i) => ({ t: 'node.move', id: uid(), node: id, parent, index: base + i }));
+    for (let i = inOrder.length - 1; i > 0; i--) ops.push({ t: 'layer.merge', id: uid(), layer: inOrder[i] });
+    this.run(ops, label);
+    this.setActiveLayer(inOrder[0]);
+  }
+
+  /** The shown layers of the active layer's folder, bottom to top. */
+  visibleLayers(): string[] {
+    const parent = this.layer?.parent ?? null;
+    return this.doc.children(parent).filter((id) => { const l = this.doc.layer(id); return l && l.shown && !l.props.adjust && this.canEdit(id); });
+  }
+
+  mergeVisible() { this.mergeLayers(this.visibleLayers(), 'Merge visible'); }
+
+  /** One layer: hidden layers in the folder go, the rest merge. */
+  flatten() {
+    this.commitPending();
+    const parent = this.layer?.parent ?? null;
+    const hidden = this.doc.children(parent).filter((id) => { const l = this.doc.layer(id); return l && !l.props.visible && this.canEdit(id); });
+    const keep = this.visibleLayers();
+    if (!keep.length) { this.toast('Nothing visible to flatten'); return; }
+    if (hidden.length) this.run(hidden.map((id) => ({ t: 'layer.remove', id: uid(), layer: id })), 'Flatten');
+    if (keep.length > 1) this.mergeLayers(keep, 'Flatten');
+  }
+
+  removeLayers(ids: string[]) {
+    this.commitPending();
+    const mine = ids.filter((id) => this.doc.layer(id) && this.canEdit(id));
+    if (!mine.length) return;
+    this.run(mine.map((id) => ({ t: 'layer.remove', id: uid(), layer: id })), 'Delete layers');
+  }
+
+  duplicateLayers(ids: string[]) {
+    this.commitPending();
+    const doc = this.doc;
+    // Highest first, so the indices below stay put as copies land above each original.
+    const places = ids.map((id) => ({ id, ...doc.place(id) })).filter((p) => doc.layer(p.id) && this.canEdit(p.id)).sort((a, b) => b.index - a.index);
+    const ops: Op[] = places.map((p) => ({ t: 'layer.add', id: uid(), parent: p.parent, index: p.index + 1, layer: { ...doc.layer(p.id)!.props, id: uid('ly_'), name: doc.layer(p.id)!.props.name + ' copy', owner: this.room?.you }, copyOf: p.id }));
+    if (ops.length) this.run(ops, 'Duplicate layers');
+  }
+
   duplicateLayer() {
     this.commitPending();
     const src = this.layer;

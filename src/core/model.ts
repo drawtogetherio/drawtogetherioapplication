@@ -32,7 +32,10 @@ export interface LayerProps {
   owner?: string;
   /** An adjustment layer: no pixels of its own, it recolours what lies below (its mask limits where). */
   adjust?: Adjustment | null;
+  /** A colour tag, for finding layers in the stack. */
+  color?: string | null;
 }
+export const LAYER_TAGS = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'];
 
 export interface FolderProps {
   id: string;

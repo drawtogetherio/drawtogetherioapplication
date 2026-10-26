@@ -457,6 +457,14 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .swatch-row .swatch-input { width: 30px; height: 26px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
 .menu-label { font-size: 11px; color: var(--muted); padding: 4px 10px 2px; }
 .layers-panel { position: relative; }
+.layer-search { width: 100%; box-sizing: border-box; margin: 0 0 6px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); font-size: 12.5px; }
+.layer-row.picked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.layer-row.colored:not(.folder-row) { box-shadow: inset 3px 0 0 var(--folder); }
+.layer-row.picked.colored:not(.folder-row) { box-shadow: inset 3px 0 0 var(--folder), inset 0 0 0 1px var(--accent); }
+.layer-tags { align-items: center; gap: 6px; }
+.tag-dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); background: var(--tag, transparent); padding: 0; cursor: pointer; }
+.tag-dot.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text); }
+.multi-bar .opt-label { display: block; margin-bottom: 4px; }
 .adjust-pick { position: absolute; right: 8px; top: 40px; z-index: 5; }
 .optionsbar .opt-select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; height: 28px; padding: 0 6px; font-size: 12.5px; }
 .optionsbar .swatch-input { width: 30px; height: 26px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
