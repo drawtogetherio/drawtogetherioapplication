@@ -444,6 +444,14 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .crop-zoom { display: flex !important; align-items: center; gap: 10px; width: 280px; max-width: 100%; margin: 0 auto; color: var(--muted); font-weight: 700; }
 .crop-zoom input { flex: 1; accent-color: var(--accent); }
 .crop-body small { text-align: center; display: block; }
+.adjust-thumb { display: flex; align-items: center; justify-content: center; color: var(--accent); background: var(--panel-2); }
+.adjust-row { flex-wrap: wrap; }
+.adjust-row .slider { width: 130px; }
+.swatch-row { display: flex; gap: 6px; align-items: center; }
+.swatch-row .swatch-input { width: 30px; height: 26px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.menu-label { font-size: 11px; color: var(--muted); padding: 4px 10px 2px; }
+.layers-panel { position: relative; }
+.adjust-pick { position: absolute; right: 8px; top: 40px; z-index: 5; }
 .optionsbar .swatch-input { width: 30px; height: 26px; padding: 1px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
 .profile-form input[type="color"] { width: 44px; height: 34px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); flex: none; }
 .profile-form #fav-hex { width: 120px !important; font-family: ui-monospace, monospace; }

@@ -30,6 +30,8 @@ export interface LayerProps {
   mask?: boolean;
   /** Creator in a room; only they or a host may edit it. */
   owner?: string;
+  /** An adjustment layer: no pixels of its own, it recolours what lies below (its mask limits where). */
+  adjust?: Adjustment | null;
 }
 
 export interface FolderProps {
@@ -68,8 +70,13 @@ export interface BrushParams {
   grainScale?: number;
 }
 
-export const EFFECTS = ['blur', 'motion', 'mosaic', 'chroma', 'glitch', 'sharpen', 'noise'] as const;
+export const EFFECTS = ['blur', 'motion', 'mosaic', 'chroma', 'glitch', 'sharpen', 'noise', 'hsb', 'balance', 'curves', 'levels', 'invert', 'gradientMap'] as const;
 export type EffectId = (typeof EFFECTS)[number];
+/** Colour adjustments: pointwise, so they can also live on an adjustment layer. */
+export const ADJUSTMENTS: EffectId[] = ['hsb', 'balance', 'curves', 'levels', 'invert', 'gradientMap'];
+export const isAdjustment = (e: EffectId) => ADJUSTMENTS.includes(e);
+/** A colour adjustment with its settings; on a layer it applies to everything beneath. */
+export interface Adjustment { effect: EffectId; amount: number; params?: number[]; colors?: string[] }
 
 /** A polygon; `holes` are rings cut out of it (magic wand). */
 export interface Selection { pts: number[]; holes?: number[][] }
@@ -93,7 +100,7 @@ export type Op =
   /** Drags the layer's own pixels along the path; flow is the strength. */
   | (OpBase & { t: 'smudge'; layer: string; brush: BrushParams; pts: number[]; clip?: Selection })
   /** Baked into the layer's pixels once, the same way everywhere; `angle` only for motion blur. */
-  | (OpBase & { t: 'effect'; layer: string; effect: EffectId; amount: number; angle?: number; clip?: Selection })
+  | (OpBase & { t: 'effect'; layer: string; effect: EffectId; amount: number; angle?: number; params?: number[]; colors?: string[]; clip?: Selection })
   | (OpBase & {
       t: 'shape'; layer: string; shape: ShapeKind; x0: number; y0: number; x1: number; y1: number;
       width: number; fill: boolean; color: string; opacity: number; erase: boolean; clip?: Selection;

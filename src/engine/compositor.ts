@@ -1,5 +1,6 @@
 import { Rect, ctx2d, makeCanvas, transformRect } from '../core/geom';
-import { blendOp } from '../core/model';
+import { type Adjustment, blendOp } from '../core/model';
+import { adjustPixels } from './effects';
 import type { DrawDoc, Layer } from '../core/document';
 import { TiledSurface } from '../core/tiles';
 
@@ -68,6 +69,31 @@ export function composite(
     sc.drawImage(mc.canvas, 0, 0, bw, bh, 0, 0, bw, bh);
     sc.restore();
   };
+  /** How much of the adjustment lands at each scratch pixel: where the layer's mask lets it through. */
+  const maskWeight = (layer: Layer, mine: LiveLayer[]): Uint8ClampedArray | undefined => {
+    const maskLives = mine.filter((l) => l.mask);
+    if (!layer.mask && !maskLives.length) return undefined;
+    const mc = fresh(3);
+    layer.mask?.drawTo(mc, region);
+    for (const live of maskLives) drawLive(mc, live, region);
+    const md = mc.getImageData(0, 0, bw, bh).data, w = new Uint8ClampedArray(bw * bh);
+    for (let j = 0; j < w.length; j++) w[j] = 255 - md[j * 4 + 3];
+    return w;
+  };
+  /** Recolours what `sc` holds so far (its pixels at sx, sy) with an adjustment layer. */
+  const adjust = (sc: CanvasRenderingContext2D, sx: number, sy: number, layer: Layer, adj: Adjustment, mine: LiveLayer[]) => {
+    const img = sc.getImageData(sx, sy, bw, bh);
+    adjustPixels(img.data, { ...adj, amount: adj.amount * layer.props.opacity }, maskWeight(layer, mine));
+    // Through a scratch canvas, so the target's clip still applies.
+    const tmp = fresh(2);
+    tmp.setTransform(1, 0, 0, 1, 0, 0);
+    tmp.putImageData(img, 0, 0);
+    sc.save();
+    sc.setTransform(1, 0, 0, 1, 0, 0);
+    sc.globalCompositeOperation = 'copy';
+    sc.drawImage(tmp.canvas, 0, 0, bw, bh, sx, sy, bw, bh);
+    sc.restore();
+  };
   const blit = (sc: CanvasRenderingContext2D, alpha: number, op: GlobalCompositeOperation) => {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -93,6 +119,7 @@ export function composite(
     while (i + 1 < layers.length && layers[i + 1].props.clip && layers[i + 1].parent === layer.parent) clipped.push(layers[++i]);
     if (!layer.shown) continue;
     const mine = livesOf(p.id);
+    if (p.adjust) { if (bw > 0 && bh > 0) adjust(ctx, bx, by, layer, p.adjust, mine); continue; }
     // Painting over a plain layer: source-over is associative, so the stroke can go straight on
     // top with the layer's opacity, no group needed.
     const plain = !mine.length || (p.opacity === 1 && p.blend === 'normal' && mine.every((l) => !l.mask && !l.hole && !l.floating && (l.bufferOp ?? 'source-over') === 'source-over'));
@@ -114,6 +141,7 @@ export function composite(
       base.drawImage(group.canvas, 0, 0, bw, bh, 0, 0, bw, bh);
       for (const c of clipped) {
         if (!c.props.visible) continue;
+        if (c.props.adjust) { adjust(group, 0, 0, c, c.props.adjust, livesOf(c.props.id)); continue; }
         const sc = fresh(2);
         drawRaw(sc, c, livesOf(c.props.id));
         sc.setTransform(1, 0, 0, 1, 0, 0);

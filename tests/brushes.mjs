@@ -155,7 +155,7 @@ check(await page.locator('.slider-preview').isHidden(), 'it goes away after the 
 // ---- Effects: baked, undoable, and replay the same ----
 const before = await ed((e) => e.doc.log.length);
 await page.locator('.topbar [aria-label="Effects"]').click();
-check(await page.locator('.effects-pop .menu-item').count() === 7, 'the Effects button by the flip buttons lists 7 effects');
+check(await page.locator('.effects-pop .menu-item').count() === 13, 'the Effects button by the flip buttons lists 7 effects and 6 adjustments');
 await page.locator('.effects-pop .menu-item', { hasText: 'Mosaic' }).click();
 await page.waitForSelector('.effect-bar');
 check(await page.locator('#effect-kind').inputValue() === 'mosaic' && (await page.locator('.effect-note').textContent()).includes('undo'), 'picking one opens the floating bar on it, with the undo warning');

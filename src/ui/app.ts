@@ -23,7 +23,7 @@ import { ReferencePanel } from './reference';
 import { Minimap } from './minimap';
 import { isNativeApp } from '../io/native';
 import { frameBar } from './frame';
-import { EFFECTS, POINT_SHAPES } from '../core/model';
+import { EFFECTS, type EffectId, POINT_SHAPES, isAdjustment } from '../core/model';
 import { EFFECT_INFO } from '../engine/effects';
 import { avatarEl, badges, nameLine } from './people';
 import { THEMES, canUseTheme, customTheme } from '../shared/themes';
@@ -131,8 +131,9 @@ export class App {
     menuBtn.append(this.menuDot);
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
-    const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {}, ...EFFECTS.map((e) =>
-      h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsBar(ed, e); } }))));
+    const effectItem = (e: EffectId) => h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsBar(ed, e); } });
+    const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {},
+      ...EFFECTS.filter((e) => !isAdjustment(e)).map(effectItem), h('div.menu-sep'), h('div.menu-label', {}, 'Adjust'), ...EFFECTS.filter(isAdjustment).map(effectItem)));
     const effectsBtn = btn('sparkle', 'Effects', () => {
       effectsPop.style.left = `${effectsBtn.getBoundingClientRect().left}px`;
       effectsPop.hidden = !effectsPop.hidden;

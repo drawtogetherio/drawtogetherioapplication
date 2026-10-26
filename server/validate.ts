@@ -42,8 +42,14 @@ const isClip = (v: unknown) => v === undefined || isSel(v);
 const isMask = (v: unknown) => v === undefined || v === true;
 
 
+/** An adjustment's numbers (sliders, curve points) and colours. */
+const adjustOk = (params: unknown, colors: unknown) =>
+  (params === undefined || (Array.isArray(params) && params.length <= 32 && params.every((n) => inRange(n, -4, 4))))
+  && (colors === undefined || (Array.isArray(colors) && colors.length <= 8 && colors.every(isColor)));
+const isAdjust = (v: unknown) => v === null || (obj(v) && EFFECTS.includes(v.effect as never) && inRange(v.amount, 0, 1) && adjustOk(v.params, v.colors) && Object.keys(v).every((k) => ['effect', 'amount', 'params', 'colors'].includes(k)));
+
 const LAYER_PROPS: Record<string, (v: unknown) => boolean> = {
-  name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool, clip: isBool, mask: isBool,
+  name: isName, visible: isBool, opacity: (v) => inRange(v, 0, 1), blend: (v) => BLEND_MODES.includes(v as never), alphaLock: isBool, clip: isBool, mask: isBool, adjust: isAdjust,
 };
 const FOLDER_PROPS: Record<string, (v: unknown) => boolean> = { name: isName, visible: isBool, color: (v) => v === null || isColor(v) };
 
@@ -66,7 +72,8 @@ export function validOp(op: unknown): op is Op {
     case 'smudge':
       return isId(op.layer) && validBrush(op.brush) && isClip(op.clip) && strokePts(op.pts, MAX_STROKE_PTS, op.brush.size);
     case 'effect':
-      return isId(op.layer) && EFFECTS.includes(op.effect as never) && inRange(op.amount, 0, 1) && (op.angle === undefined || inRange(op.angle, -7, 7)) && isClip(op.clip);
+      return isId(op.layer) && EFFECTS.includes(op.effect as never) && inRange(op.amount, 0, 1) && (op.angle === undefined || inRange(op.angle, -7, 7)) && isClip(op.clip)
+        && adjustOk(op.params, op.colors);
     case 'shape':
       return isId(op.layer) && SHAPE_KINDS_ALL.includes(op.shape as never) && nums([op.x0, op.y0, op.x1, op.y1], 4, 4)
         && inRange(op.width, 0, MAX_BRUSH) && isBool(op.fill) && isColor(op.color) && inRange(op.opacity, 0, 1) && isBool(op.erase) && isClip(op.clip)

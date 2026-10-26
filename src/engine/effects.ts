@@ -1,4 +1,6 @@
-import type { EffectId, Op } from '../core/model';
+import { type Adjustment, type EffectId, type Op, isAdjustment } from '../core/model';
+import { curveAt } from '../shared/curve';
+import { hexToRgb } from './brush';
 
 // Layer effects, baked into pixels once. Everything here is plain arithmetic in a fixed order, so
 // every device gets the same bytes and the op replays exactly. `amount` is 0..1.
@@ -13,6 +15,22 @@ export const EFFECT_INFO: Record<EffectId, { name: string; amount: string; angle
   glitch: { name: 'Glitch', amount: 'Intensity' },
   sharpen: { name: 'Sharpen', amount: 'Strength' },
   noise: { name: 'Noise', amount: 'Amount' },
+  hsb: { name: 'Hue / saturation / brightness', amount: 'Mix' },
+  balance: { name: 'Colour balance', amount: 'Mix' },
+  curves: { name: 'Curves', amount: 'Mix' },
+  levels: { name: 'Levels', amount: 'Mix' },
+  invert: { name: 'Invert', amount: 'Mix' },
+  gradientMap: { name: 'Gradient map', amount: 'Mix' },
+};
+
+/** Default settings of each adjustment: its params (sliders / curve points) and colours. */
+export const ADJUST_DEFAULTS: Record<string, { params?: number[]; colors?: string[] }> = {
+  hsb: { params: [0, 0, 0] },
+  balance: { params: [0, 0, 0] },
+  curves: { params: [0, 0, 1, 1] },
+  levels: { params: [0, 1, 1, 0, 1] },
+  invert: {},
+  gradientMap: { colors: ['#1b1b4a', '#ff9a3c'] },
 };
 
 const blurRadius = (a: number) => Math.round(a * 40);
@@ -29,7 +47,83 @@ export function effectReach(op: EffectOp): number {
     case 'chroma': return chromaOffset(op.amount);
     case 'glitch': return Math.round(op.amount * 60);
     case 'sharpen': return 2;
-    case 'noise': return 0;
+    default: return 0;
+  }
+}
+
+const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
+
+/** A 256-entry lookup for one channel, from a 0..1 → 0..1 function. */
+function lut(fn: (x: number) => number): Uint8Array {
+  const t = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) t[i] = clamp(Math.round(fn(i / 255) * 255));
+  return t;
+}
+
+/**
+ * Recolours straight (not premultiplied) RGBA in place. `amount` mixes the result with the original;
+ * `weight`, when given, scales it per pixel (an adjustment layer's mask).
+ */
+export function adjustPixels(d: Uint8ClampedArray, adj: Adjustment, weight?: Uint8ClampedArray) {
+  const p = adj.params ?? ADJUST_DEFAULTS[adj.effect].params ?? [], cols = (adj.colors ?? ADJUST_DEFAULTS[adj.effect].colors ?? []).map(hexToRgb);
+  let f: (r: number, g: number, b: number, o: Float64Array) => void;
+  switch (adj.effect) {
+    case 'hsb': {
+      const hue = (p[0] ?? 0) * 180, sat = 1 + (p[1] ?? 0), bri = (p[2] ?? 0) * 255;
+      f = (r, g, b, o) => {
+        const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, c = max - min;
+        let h = 0;
+        if (c) { h = max === r ? ((g - b) / c) % 6 : max === g ? (b - r) / c + 2 : (r - g) / c + 4; h = (h * 60 + 360 + hue) % 360; }
+        const s0 = c ? c / (255 - Math.abs(2 * l - 255)) : 0, s = Math.min(1, s0 * sat);
+        const c2 = (255 - Math.abs(2 * l - 255)) * s, x = c2 * (1 - Math.abs(((h / 60) % 2) - 1)), m = l - c2 / 2;
+        const k = Math.floor(h / 60);
+        const [rr, gg, bb] = k === 0 ? [c2, x, 0] : k === 1 ? [x, c2, 0] : k === 2 ? [0, c2, x] : k === 3 ? [0, x, c2] : k === 4 ? [x, 0, c2] : [c2, 0, x];
+        o[0] = rr + m + bri; o[1] = gg + m + bri; o[2] = bb + m + bri;
+      };
+      break;
+    }
+    case 'balance': {
+      // Midtone-weighted shifts: strongest at 50% grey, fading towards black and white.
+      const sh = [(p[0] ?? 0) * 110, (p[1] ?? 0) * 110, (p[2] ?? 0) * 110];
+      f = (r, g, b, o) => {
+        const l = (r + g + b) / 3, w = 1 - Math.abs(l - 128) / 128;
+        o[0] = r + sh[0] * w; o[1] = g + sh[1] * w; o[2] = b + sh[2] * w;
+      };
+      break;
+    }
+    case 'curves': {
+      const t = lut((x) => curveAt(p.length >= 4 ? p : [0, 0, 1, 1], x));
+      f = (r, g, b, o) => { o[0] = t[r]; o[1] = t[g]; o[2] = t[b]; };
+      break;
+    }
+    case 'levels': {
+      const [ib = 0, iw = 1, gamma = 1, ob = 0, ow = 1] = p;
+      const t = lut((x) => { const v = Math.max(0, Math.min(1, (x - ib) / Math.max(0.001, iw - ib))); return ob + Math.pow(v, 1 / Math.max(0.1, gamma)) * (ow - ob); });
+      f = (r, g, b, o) => { o[0] = t[r]; o[1] = t[g]; o[2] = t[b]; };
+      break;
+    }
+    case 'invert':
+      f = (r, g, b, o) => { o[0] = 255 - r; o[1] = 255 - g; o[2] = 255 - b; };
+      break;
+    case 'gradientMap': {
+      const n = Math.max(2, cols.length);
+      f = (r, g, b, o) => {
+        const l = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 * (n - 1), i = Math.min(n - 2, Math.floor(l)), t = l - i;
+        const a = cols[i] ?? cols[0], c = cols[i + 1] ?? cols[cols.length - 1];
+        o[0] = a[0] + (c[0] - a[0]) * t; o[1] = a[1] + (c[1] - a[1]) * t; o[2] = a[2] + (c[2] - a[2]) * t;
+      };
+      break;
+    }
+    default: return;
+  }
+  const o = new Float64Array(3);
+  for (let i = 0, j = 0; i < d.length; i += 4, j++) {
+    if (!d[i + 3]) continue;
+    const k = adj.amount * (weight ? weight[j] / 255 : 1);
+    if (!k) continue;
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    f(r, g, b, o);
+    d[i] = clamp(Math.round(r + (o[0] - r) * k)); d[i + 1] = clamp(Math.round(g + (o[1] - g) * k)); d[i + 2] = clamp(Math.round(b + (o[2] - b) * k));
   }
 }
 
@@ -167,6 +261,7 @@ function noise(p: Float32Array, amount: number, rnd: () => number) {
 
 /** Applies `op` to `img`, whose top-left is at (ox, oy) on the canvas. */
 export function applyEffect(img: ImageData, op: EffectOp, ox: number, oy: number) {
+  if (isAdjustment(op.effect)) { adjustPixels(img.data, op); return; }
   const w = img.width, h = img.height, rnd = seeded(hash(op.id));
   let p = toPre(img.data);
   switch (op.effect) {

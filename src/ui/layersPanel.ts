@@ -3,6 +3,9 @@ import { BLEND_LABELS, BLEND_MODES, BlendMode, LayerProps } from '../core/model'
 import type { DocNode, Folder, Layer } from '../core/document';
 import type { Editor } from '../editor';
 import { h } from './dom';
+import { effectsBar } from './effectsBar';
+import { ADJUST_DEFAULTS, EFFECT_INFO } from '../engine/effects';
+import { ADJUSTMENTS } from '../core/model';
 import { icon } from './icons';
 import { Slider } from './slider';
 import { textDialog } from './dialogs';
@@ -78,7 +81,7 @@ export class LayersPanel {
     );
     this.el = h('div.panel.layers-panel', {},
       h('div.panel-head', {}, h('span.panel-title', {}, 'Layers'),
-        h('span.head-actions', {}, meter ?? null, act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
+        h('span.head-actions', {}, meter ?? null, act('sparkle', 'New adjustment layer', () => this.addAdjustment()), act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
       this.list,
       this.footer,
       this.folderFooter,
@@ -249,15 +252,32 @@ export class LayersPanel {
     const onMask = active && ed.onMask;
     const row = h(`div.layer-row${active ? '.active' : ''}${l.shown ? '' : '.hidden-layer'}${p.clip ? '.clipped' : ''}` as 'div', { 'data-id': p.id, style: this.indent(depth) },
       p.clip ? h('span.clip-ic', { html: icon('clipMask', 14) }) : null,
-      h(`div.layer-thumb${active && !onMask ? '.editing' : ''}` as 'div', { title: l.mask ? 'Edit pixels' : null }, this.thumb(l)),
+      p.adjust
+        ? h('div.layer-thumb.adjust-thumb', { title: 'Edit adjustment', html: icon('sparkle', 22),
+          // On the active row the badge opens the settings instead of starting a drag (which would re-render the row under the click).
+          onpointerdown: (e: Event) => { if (active && mine) e.stopPropagation(); },
+          onclick: () => { if (active && mine) effectsBar(this.ed, p.adjust!.effect, l); } })
+        : h(`div.layer-thumb${active && !onMask ? '.editing' : ''}` as 'div', { title: l.mask ? 'Edit pixels' : null }, this.thumb(l)),
       l.mask ? h(`div.layer-thumb.mask-thumb${onMask ? '.editing' : ''}` as 'div', { title: 'Edit mask', 'data-mask': '1' }, this.maskThumb(l)) : null,
       h('div.layer-name', {}, h('div', {}, p.name), meta ? h('small', {}, meta) : null),
       mine ? null : h('span.lock-ic', { title: `Belongs to ${ed.ownerName(p.owner)}`, html: icon('lock', 14) }),
       vis,
     );
     row.addEventListener('pointerdown', (e) => this.dragStart(e, row, l));
-    row.addEventListener('dblclick', () => this.renameLayer());
+    row.addEventListener('dblclick', (e) => { if (p.adjust && mine && !(e.target as Element).closest('.layer-name')) effectsBar(this.ed, p.adjust.effect, l); else this.renameLayer(); });
     return row;
+  }
+
+  /** Picks which adjustment the new layer makes, then opens its settings. */
+  private addAdjustment() {
+    const pop = h('div.popover.panel.adjust-pick', {}, ...ADJUSTMENTS.map((e) =>
+      h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => {
+        pop.remove();
+        const d = ADJUST_DEFAULTS[e], l = this.ed.addAdjustmentLayer({ effect: e, amount: 1, params: d.params ? [...d.params] : undefined, colors: d.colors ? [...d.colors] : undefined });
+        if (l) effectsBar(this.ed, e, l);
+      } })));
+    this.el.append(pop);
+    setTimeout(() => document.addEventListener('pointerdown', (e) => { if (!pop.contains(e.target as Node)) pop.remove(); }, { once: true, capture: true }));
   }
 
   private visButton(visible: boolean, enabled: boolean, toggle: () => void) {

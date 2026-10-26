@@ -1,6 +1,7 @@
 import { DrawDoc, Layer, newFolderProps, newLayerProps, opsCost, wireOps } from './core/document';
 import { Point, Rect, selPath, uid } from './core/geom';
-import { BrushParams, Op, Selection, ShapeKind } from './core/model';
+import { Adjustment, BrushParams, Op, Selection, ShapeKind } from './core/model';
+import { EFFECT_INFO } from './engine/effects';
 import { DEFAULT_GUIDES, GuideSettings } from './ui/guides';
 import { BrushPreset, DEFAULT_BRUSH, DEFAULT_ERASER, DEFAULT_SMUDGE, SMUDGE_PARAMS, brushById } from './engine/brush';
 import { CanvasView } from './view/canvasView';
@@ -208,6 +209,7 @@ export class Editor {
     if (!l) { this.toast(this.room ? 'Add a layer in your folder to start drawing' : 'Add a layer to start drawing'); return null; }
     if (!this.canEdit(l.props.id)) { this.toast(`This layer belongs to ${this.ownerName(l.props.owner)}`); return null; }
     if (!l.shown) { this.toast('This layer is hidden'); return null; }
+    if (l.props.adjust && !this.onMask) { this.toast('An adjustment layer has no pixels; paint its mask to limit where it applies'); return null; }
     return l;
   }
 
@@ -334,6 +336,17 @@ export class Editor {
     const { parent, index } = this.insertionPoint();
     const n = [...this.doc.nodes.values()].filter((x) => x.kind === 'folder' && !x.props.user).length + 1;
     this.run([{ t: 'folder.add', id: uid(), parent, index, folder: newFolderProps(`Folder ${n}`, this.room?.you) }], 'Add folder');
+  }
+
+  /** A layer that recolours everything beneath it; its settings open in the effects bar. */
+  addAdjustmentLayer(adjust: Adjustment) {
+    this.commitPending();
+    const { parent, index } = this.insertionPoint();
+    if (parent && !this.canEdit(parent)) return null;
+    const props = { ...newLayerProps(EFFECT_INFO[adjust.effect].name, this.room?.you), adjust };
+    this.run([{ t: 'layer.add', id: uid(), parent, index, layer: props }], 'Adjustment layer');
+    this.setActiveLayer(props.id);
+    return this.doc.layer(props.id) ?? null;
   }
 
   duplicateLayer() {
