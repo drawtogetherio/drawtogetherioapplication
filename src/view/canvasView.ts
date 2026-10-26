@@ -5,6 +5,8 @@ import { LiveLayer, composite } from '../engine/compositor';
 import { Viewport } from './viewport';
 
 const MAX_COMPOSITE_PIXELS = 14_000_000;
+/** A recomposite of the whole view (a zoom step on a big canvas with many layers) spreads over frames past this. */
+const FRAME_BUDGET_MS = 10;
 /** Dirty rects closer than this merge; past MAX_DIRTY they all collapse into one. */
 const DIRTY_JOIN = 32, MAX_DIRTY = 24;
 
@@ -25,6 +27,13 @@ export class CanvasView {
 
   private comp = makeCanvas(1, 1);
   private compKey = '';
+  private compRange: Rect = { x: 0, y: 0, w: 0, h: 0 };
+  private compScale = 1;
+  /** The previous composite, shown scaled under the rows not yet redrawn at the new scale. */
+  private stale: { c: HTMLCanvasElement; range: Rect; s: number } | null = null;
+  private spare = makeCanvas(1, 1);
+  /** Tile rows of a view-wide recomposite done so far. */
+  private rowsDone = 0;
   /** Separate areas waiting to be recomposited, so people drawing far apart don't repaint everything between them. */
   private dirty: Rect[] = [];
   private dirtyAll = true;
@@ -81,8 +90,8 @@ export class CanvasView {
   }
 
   invalidate(r: Rect | null) {
-    if (!r) this.dirtyAll = true;
-    else if (r.w > 0 && r.h > 0 && !this.dirtyAll) this.addDirty(r);
+    if (!r) { this.dirtyAll = true; this.rowsDone = 0; }
+    else if (r.w > 0 && r.h > 0 && (!this.dirtyAll || this.rowsDone)) this.addDirty(r);
     this.requestRender();
   }
 
@@ -139,16 +148,23 @@ export class CanvasView {
       const range = { x: ox, y: oy, w: nx * TILE, h: ny * TILE };
 
       if (key !== this.compKey) {
+        if (this.compKey) {
+          this.stale = { c: this.comp, range: this.compRange, s: this.compScale };
+          this.comp = this.spare;
+          this.spare = this.stale.c;
+        }
         this.compKey = key;
+        this.compRange = range;
+        this.compScale = s;
         this.comp.width = nx * k;
         this.comp.height = ny * k;
         this.dirtyAll = true;
+        this.rowsDone = 0;
       }
-      const regions = this.dirtyAll ? [range] : this.dirty.map((d) => rectIntersect(d, range)).filter((d): d is Rect => !!d);
       const lives = [...this.remoteLive.values()];
       if (this.live) lives.push(this.live);
       const cc = ctx2d(this.comp);
-      for (let region of regions) {
+      const draw = (region: Rect) => {
         const px0 = Math.floor((region.x - ox) * s), py0 = Math.floor((region.y - oy) * s);
         const px1 = Math.ceil((region.x + region.w - ox) * s), py1 = Math.ceil((region.y + region.h - oy) * s);
         region = { x: ox + px0 / s, y: oy + py0 / s, w: (px1 - px0) / s, h: (py1 - py0) / s };
@@ -164,10 +180,31 @@ export class CanvasView {
         cc.imageSmoothingQuality = 'high';
         composite(cc, doc, region, { lives });
         cc.restore();
+      };
+      if (this.dirtyAll) {
+        // Row by row within the frame budget; the rest next frame, with the old composite showing meanwhile.
+        const start = performance.now();
+        while (this.rowsDone < ny && (this.rowsDone === 0 || performance.now() - start < FRAME_BUDGET_MS)) {
+          draw({ x: ox, y: oy + this.rowsDone * TILE, w: nx * TILE, h: TILE });
+          this.rowsDone++;
+        }
+        if (this.rowsDone < ny) this.requestRender();
+        else { this.dirtyAll = false; this.stale = null; }
       }
+      for (const d of this.dirty) { const region = rectIntersect(d, range); if (region) draw(region); }
       this.dirty = [];
-      this.dirtyAll = false;
 
+      if (this.stale && this.rowsDone < ny) {
+        const st = this.stale, y = oy + this.rowsDone * TILE;
+        ctx.setTransform(D);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(ox, y, nx * TILE, (ny - this.rowsDone) * TILE);
+        ctx.clip();
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(st.c, 0, 0, st.c.width, st.c.height, st.range.x, st.range.y, st.c.width / st.s, st.c.height / st.s);
+        ctx.restore();
+      }
       ctx.setTransform(D);
       ctx.imageSmoothingEnabled = zd < 4;
       ctx.imageSmoothingQuality = this.blitQuality(zd / s);
