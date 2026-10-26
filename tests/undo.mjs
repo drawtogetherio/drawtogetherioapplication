@@ -98,6 +98,34 @@ const meter = await page.evaluate(async () => {
 });
 check(meter.before === 700 && meter.after === 100 && meter.level === '2' && meter.toast, `near the budget: undo history capped and a warning shown (${meter.text})`);
 
+// History panel: every edit listed, click to jump.
+await page.locator('[aria-label="History"]').click();
+await page.waitForSelector('.history-pop:not([hidden])');
+const states = () => page.locator('.history-row').evaluateAll((els) => els.map((e) => e.dataset.state + ':' + e.textContent));
+const st = await states();
+check(st[0] === 'done:Start' && st.length >= 4 && st.at(-1).startsWith('now:') && st.every((x) => /^(done|now|undone):(Start|Stroke|Layer settings)$/.test(x)), `the panel lists Start and every edit (${st.join(' ')})`);
+await page.locator('.history-row').nth(1).click();
+await page.waitForTimeout(60);
+check((await states())[1] === 'now:Stroke' && (await digest()) === one, 'clicking an edit undoes back to it exactly');
+await page.locator('.history-row').nth(3).click();
+await page.waitForTimeout(60);
+check((await digest()) === two, 'clicking a later edit redoes up to it');
+await page.keyboard.press('Escape');
+
+// Minimap: shows the drawing, a click past the frame recentres the view, and it can be turned off.
+check(await page.locator('.minimap:not(.empty)').isVisible(), 'the minimap shows');
+await ed((e) => e.view.viewport.zoomAt(400, 400, 4));
+await page.waitForTimeout(50);
+const mm = await page.locator('.minimap').boundingBox(), fr = await page.locator('.minimap-frame').boundingBox();
+check(fr.width < mm.width && fr.height < mm.height, 'zoomed in, the frame is smaller than the map');
+const c0 = await ed((e) => [e.view.viewport.cx, e.view.viewport.cy]);
+await page.mouse.click(mm.x + mm.width - 6, mm.y + mm.height - 6);
+const c1 = await ed((e) => [e.view.viewport.cx, e.view.viewport.cy]);
+check(c1[0] > c0[0] && c1[1] > c0[1], `clicking the map's corner recentres the view (${c0.map(Math.round)} → ${c1.map(Math.round)})`);
+await ed((e) => { e.prefs.minimap = false; window.doodlehive.applyPrefs(); });
+check(await page.locator('.minimap').isHidden(), 'the preference hides it');
+await ed((e) => { e.prefs.minimap = true; window.doodlehive.applyPrefs(); });
+
 await page.screenshot({ path: `${out}/01-undo.png` });
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 await browser.close();

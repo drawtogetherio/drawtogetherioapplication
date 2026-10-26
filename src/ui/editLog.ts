@@ -1,6 +1,7 @@
 import { DrawDoc } from '../core/document';
 import { ctx2d, uid } from '../core/geom';
 import type { Op } from '../core/model';
+import { OP_LABEL } from './opLabels';
 import { TILE, TiledSurface } from '../core/tiles';
 import type { Editor } from '../editor';
 import { api } from '../net/api';
@@ -11,11 +12,6 @@ import { confirmDialog, modal } from './dialogs';
 import { clear, h } from './dom';
 import { avatarEl, nameText } from './people';
 
-const LABEL: Record<Op['t'], string> = {
-  stroke: 'Stroke', smudge: 'Smudge', effect: 'Effect', shape: 'Shape', fill: 'Fill', fillPoly: 'Lasso fill', transform: 'Move', tiles: 'Pixels restored',
-  'layer.add': 'Layer added', 'layer.remove': 'Layer deleted', 'layer.clear': 'Layer cleared', 'layer.props': 'Layer settings', 'layer.merge': 'Merged down',
-  'layer.mask.apply': 'Mask applied', 'folder.add': 'Folder added', 'folder.remove': 'Folder deleted', 'folder.props': 'Folder settings', 'node.move': 'Reordered',
-};
 /** Edits that change pixels: the ones a host can take out of the canvas. */
 const PIXELS = new Set<string>(['stroke', 'smudge', 'effect', 'shape', 'fill', 'fillPoly', 'transform', 'tiles', 'layer.clear', 'layer.mask.apply']);
 const PAGE = 150;
@@ -44,12 +40,12 @@ export async function editLogDialog(ed: Editor) {
     const p = who(e.author);
     const el = h('div.log-row', {},
       p ? avatarEl(p, 20) : h('span.avatar', { style: 'width:20px;height:20px' }),
-      h('span.log-what', {}, h('b', {}, LABEL[e.t] ?? e.t), e.layer || e.folder ? h('small', {}, ' · ' + nodeName(e)) : null),
+      h('span.log-what', {}, h('b', {}, OP_LABEL[e.t] ?? e.t), e.layer || e.folder ? h('small', {}, ' · ' + nodeName(e)) : null),
       h('small.log-when', {}, when(e.at)),
     );
     if (PIXELS.has(e.t) && e.layer && ed.doc.layer(e.layer)) {
       el.append(h('button.btn.small.danger', { type: 'button', onclick: async () => {
-        if (!(await confirmDialog('Remove this edit?', `${p?.displayName ?? 'Their'} ${LABEL[e.t].toLowerCase()} on ${nodeName(e)} is taken off the canvas for everyone. Later edits stay.`, 'Remove'))) return;
+        if (!(await confirmDialog('Remove this edit?', `${p?.displayName ?? 'Their'} ${OP_LABEL[e.t].toLowerCase()} on ${nodeName(e)} is taken off the canvas for everyone. Later edits stay.`, 'Remove'))) return;
         el.classList.add('busy');
         const status = h('small.log-when', {}, 'Removing…');
         el.lastElementChild!.replaceWith(status);

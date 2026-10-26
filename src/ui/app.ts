@@ -17,6 +17,8 @@ import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { MemoryMeter } from './memory';
+import { HistoryPanel } from './historyPanel';
+import { Minimap } from './minimap';
 import { isNativeApp } from '../io/native';
 import { frameBar } from './frame';
 import { EFFECTS } from '../core/model';
@@ -67,6 +69,7 @@ export class App {
   private toolsSlot: HTMLElement;
   private topbar: HTMLElement;
   private undoBtn: HTMLButtonElement;
+  private historyBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
   private colorBtn: HTMLButtonElement;
   private zoomLabel = h('button.zoom-label', { title: 'Fit to screen' });
@@ -75,6 +78,7 @@ export class App {
   readonly roomUI: RoomUI;
   readonly session: Session;
   memory!: MemoryMeter;
+  minimap!: Minimap;
   readonly home: Home;
   private menuDyn = h('div.menu-dyn');
   private menuDot = h('span.red-dot', { hidden: true });
@@ -193,14 +197,19 @@ export class App {
     this.studioSliders = h('div.sp-sliders', {}, this.sliders[2].el, this.sliders[3].el);
     this.undoBtn = btn('undo', 'Undo (Ctrl+Z, two-finger tap)', () => ed.undo());
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
-    const sidebar = this.sidebar = h('aside.sidebar', {}, this.sliders[0].el, this.sliders[1].el, this.undoBtn, this.redoBtn);
+    const historyPanel = new HistoryPanel(ed), historyPop = h('div.popover.history-pop', { hidden: true }, historyPanel.el);
+    const historyBtn = this.historyBtn = btn('log', 'History', () => { historyPop.hidden = !historyPop.hidden; historyPanel.open = !historyPop.hidden; if (historyPanel.open) historyPanel.render(); });
+    dismissOnOutside(historyPop, [historyBtn], () => { historyPop.hidden = true; historyPanel.open = false; });
+    const sidebar = this.sidebar = h('aside.sidebar', {}, this.sliders[0].el, this.sliders[1].el, this.undoBtn, this.redoBtn, historyBtn);
+    this.minimap = new Minimap(ed);
+    stage.append(this.minimap.el);
     this.studio = new Studio(ed, stage);
 
-    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, this.home.el, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
-    ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); };
+    ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); this.minimap.place(); };
     this.bindKeys();
     this.applyPrefs();
     this.onChange('tool');
@@ -235,6 +244,7 @@ export class App {
     applyPressure(p, st.eraser);
     if (this.ed.room) this.ed.room.batchMs = p.remoteEvery * 1000;
     this.ed.view.setLowLatency(p.lowLatency);
+    this.minimap.el.hidden = !p.minimap;
     const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
     for (const t of TOOLS) {
       const b = this.toolButtons.get(t.id)!;
@@ -281,7 +291,7 @@ export class App {
     this.picker.setWheel(studio);
     const tools = [...this.toolButtons.values()];
     if (studio) {
-      this.studio.frame('tools', ...tools, h('span.sp-gap'), this.undoBtn, this.redoBtn);
+      this.studio.frame('tools', ...tools, h('span.sp-gap'), this.undoBtn, this.redoBtn, this.historyBtn);
       this.studio.frame('brush', this.studioSliders, this.options);
       this.studio.frame('color', this.picker.pickerEl);
       this.studio.frame('swatches', this.picker.swatchesEl);
@@ -294,7 +304,7 @@ export class App {
       for (const b of tools) this.toolsSlot.before(b);
       this.topbar.after(this.options);
       this.sidebar.before(ed.view.canvas.parentElement!);
-      this.sidebar.append(this.undoBtn, this.redoBtn);
+      this.sidebar.append(this.undoBtn, this.redoBtn, this.historyBtn);
       this.picker.el.append(this.picker.pickerEl, this.picker.swatchesEl);
       this.layersPop.append(this.layers.el);
       this.layers.open = false;

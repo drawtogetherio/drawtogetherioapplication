@@ -9,8 +9,8 @@ export interface HistoryEntry {
 
 /** Per-person undo stack. Undoing applies ops like any edit, so it reaches the room. */
 export class History {
-  private done: HistoryEntry[] = [];
-  private undone: HistoryEntry[] = [];
+  done: HistoryEntry[] = [];
+  undone: HistoryEntry[] = [];
   onChange: () => void = () => {};
 
   constructor(private maxEntries = 120, public maxCost = 700) {}
