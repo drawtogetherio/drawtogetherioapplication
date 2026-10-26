@@ -71,9 +71,9 @@ await page.screenshot({ path: `${out}/01-appearance.png` });
 
 // ---- Layout ----
 await group('Layout');
-check((await page.locator('.pref-page .switch-row:visible').allTextContents()).join() === 'Show the canvas overview (minimap)', 'panel toggles only show for studio; the minimap toggle always');
+check((await page.locator('.pref-page .switch-row:visible').allTextContents()).join() === 'Show the canvas overview (minimap),Left-handed: tools on the left, sliders on the right', 'panel toggles only show for studio; minimap and left-handed always');
 await page.locator('.segmented button', { hasText: 'Studio' }).click();
-check((await page.locator('.pref-page .switch-row:visible').allTextContents()).join() === 'Tools,Brush properties,Colour wheel,Swatches,Layers,Show the canvas overview (minimap)', 'studio lists its five panels');
+check((await page.locator('.pref-page .switch-row:visible').allTextContents()).join() === 'Tools,Brush properties,Colour wheel,Swatches,Layers,Show the canvas overview (minimap),Left-handed: tools on the left, sliders on the right', 'studio lists its five panels');
 await page.locator('.switch-row', { hasText: 'Swatches' }).locator('input').click();
 await page.locator('.segmented button', { hasText: 'Simple' }).click();
 await page.evaluate(() => { const p = window.doodlehive.ed.prefs; p.customBrushes.push({ id: 'cmine', name: 'Mine', cat: 'Pen', params: { ...window.doodlehive.ed.settings.brush, hardness: 0.25 } }); p.brushCategories.push('Inks'); });

@@ -47,6 +47,29 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 ## Features
 
+**Everyday drawing tools (v0.33)**
+- **Guides** (one top-bar button): symmetry (vertical, horizontal, quadrant, radial) mirrors strokes and
+  shapes; a grid with rulers and snapping; a floating reference image panel (`src/ui/guides.ts`,
+  `src/ui/reference.ts`).
+- **QuickShape**: hold still at the end of a stroke and it snaps to a line, circle, arc or polyline
+  (`src/engine/quickShape.ts`). Shapes gained polygon, star, arrow, speech bubble, polyline, curve and arc,
+  placed by clicks for the point shapes (`src/tools/shapeTool.ts`).
+- **Gradient** fill mode (linear or radial, to a colour or transparent) as a deterministic op
+  (`src/engine/gradient.ts`).
+- **Adjustments** in the Effects popover: HSB, colour balance, curves, levels, invert, gradient map; each
+  can also be an adjustment layer that recolours what is below it (`src/engine/effects.ts`, compositor).
+- **Palettes**: saved palettes in the colour picker, import `.aco`, `.ase`, `.swatches` and text, colour
+  harmony modes (`src/shared/palettes.ts`).
+- **Selection**: feather, grow/shrink, invert, colour range, select layer content, saved selections;
+  Alt+Backspace fills the layer or selection, Shift+Alt+Backspace recolours it (`src/engine/selection.ts`).
+- **Reference layer** for the fill tool and the magic wand (sample one layer instead of the active one or all).
+- **Layers**: search, colour tags, multi-select with Ctrl/Shift, merge visible, flatten.
+- **Quick menu**: right click, pen barrel button or Q opens a ring of eight shortcuts under the pointer;
+  its centre button customises them. **Ctrl+K** opens a searchable command palette. Both run from one
+  registry (`src/ui/commands.ts`).
+- **Accessibility**: icon-only controls are named by their tooltips, keyboard focus shows a ring, F6 moves
+  focus between bars, reduced motion is honoured, and a left-handed preference mirrors the layout.
+
 **Performance (v0.32)**
 - Fills, effects, PNG/JPG encoding, thumbnails and `.hivecanvas` zips run in a Web Worker
   (`src/engine/offload.ts`); the page falls back to doing them inline if the worker fails to start.
@@ -438,6 +461,16 @@ node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking
 node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
 node tests/tools.mjs http://localhost:4180/app.html     # fill lasso (inside lines or not), magic wand with holes, rope stabilizer, long strokes split
 node tests/undo.mjs http://localhost:4180/app.html      # partial-tile undo, memory meter, history panel, minimap
+node tests/guides.mjs http://localhost:4180/app.html    # symmetry, grid snapping, rulers, reference panel
+node tests/shapes.mjs http://localhost:4180/app.html    # QuickShape, point shapes, arrows, bubbles
+node tests/gradient.mjs http://localhost:4180/app.html  # gradient fill mode
+node tests/adjust.mjs http://localhost:4180/app.html    # adjustments and adjustment layers
+node tests/palettes.mjs http://localhost:4180/app.html  # saved palettes, import, harmonies
+node tests/selection.mjs http://localhost:4180/app.html # feather, grow/shrink, invert, colour range, fill/recolour shortcuts
+node tests/reference.mjs http://localhost:4180/app.html # reference layer for fills and the wand
+node tests/layers.mjs http://localhost:4180/app.html    # search, tags, multi-select, merge visible, flatten
+node tests/quickmenu.mjs http://localhost:4180/app.html # quick menu and command palette
+node tests/a11y.mjs http://localhost:4180/app.html      # names, focus ring, F6, reduced motion, left-handed layout
 node tests/pwa.mjs http://localhost:4180                # manifest, icons, service worker precache, offline /app
 node tests/compbench.mjs --layers 20                    # compositor timings at 4K with N layers
 
