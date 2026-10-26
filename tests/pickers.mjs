@@ -52,7 +52,7 @@ const selBtn = page.locator('.topbar [aria-label^="Selection (M)"]');
 await selBtn.click();
 await selBtn.click();
 await page.waitForSelector('.icon-choices');
-check(await page.locator('.icon-choices .icon-btn').count() === 4, 'selection drop-down has 4 icons');
+check(await page.locator('.icon-choices .icon-btn').count() === 5, 'selection drop-down has 5 icons');
 await page.screenshot({ path: `${out}/03-select-modes.png` });
 const before = await selBtn.innerHTML();
 await page.locator('.icon-choices [aria-label="Lasso"]').click();

@@ -179,7 +179,7 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - **History** panel (sidebar, beside undo): every edit in order; click one to jump there
 - **Minimap** in the stage corner: the whole drawing with the view on it; drag the window to pan,
   click outside it to recentre (Preferences → Layout turns it off)
-- **Focus mode** (F): fullscreen with the UI hidden; Tab or a four-finger tap hides and shows the UI
+- **Focus mode** (F): fullscreen with the UI hidden; Tab (from the canvas) or a four-finger tap hides and shows the UI; F6 moves keyboard focus between bars
 - Pen: predicted and coalesced samples, a low-latency canvas (Preferences → Performance), tilt and
   azimuth read into the brush, a pen test pad under Preferences → Pressure (pressure, tilt, express keys)
 - Touch: touch-and-hold opens the eyedropper, pinch-rotate snaps to 0°

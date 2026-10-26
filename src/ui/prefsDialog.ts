@@ -47,7 +47,8 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     };
     render();
     return [row('Layout', segmented(['classic', 'studio'] as const, (v) => (v === 'classic' ? 'Simple' : 'Studio'), () => p.layout, (v) => { p.layout = v; render(); })), panels,
-      toggle('Show the canvas overview (minimap)', () => p.minimap, (v) => { p.minimap = v; })];
+      toggle('Show the canvas overview (minimap)', () => p.minimap, (v) => { p.minimap = v; }),
+      toggle('Left-handed: tools on the left, sliders on the right', () => p.leftHanded, (v) => { p.leftHanded = v; })];
   };
 
   const canvas = () => [
@@ -112,7 +113,8 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     };
     renderKeys();
     return [keyRows, h('div.row', {}, h('small.muted', {}, 'Click a key, then press a new one. Backspace clears.'),
-      h('button.btn.small', { type: 'button', onclick: () => { p.keys = {}; changed(); renderKeys(); } }, 'Reset'))];
+      h('button.btn.small', { type: 'button', onclick: () => { p.keys = {}; changed(); renderKeys(); } }, 'Reset')),
+      h('div.shortcuts', { html: '<strong>Ctrl+K</strong> every command, searchable · <strong>Tab</strong> hide the UI · <strong>F6</strong> move keyboard focus between bars · <strong>Ctrl+Z / Y</strong> undo, redo · <strong>Ctrl+A / D</strong> select all, deselect · <strong>Alt+Backspace</strong> fill' })];
   };
 
   const performance = () => [

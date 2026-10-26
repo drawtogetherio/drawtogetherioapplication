@@ -16,6 +16,8 @@ const THUMB = 48;
 interface Row { node: DocNode; depth: number; el: HTMLElement }
 
 /** Layers and folders; drag rows to reorder or into a folder. */
+const TAG_NAMES = ['Red', 'Orange', 'Yellow', 'Green', 'Blue', 'Purple'];
+
 export class LayersPanel {
   readonly el: HTMLElement;
   private list: HTMLElement;
@@ -71,7 +73,7 @@ export class LayersPanel {
     this.maskBtn = act('maskIc', 'Add mask', () => this.ed.setMask(!this.ed.layer?.mask));
     this.applyMaskBtn = act('check', 'Apply mask to pixels', () => this.ed.applyMask());
     this.tags = h('div.row.layer-tags', {}, h('span.opt-label', {}, 'Tag'));
-    for (const c of [null, ...LAYER_TAGS]) this.tags.append(h('button.tag-dot', { title: c ? 'Tag' : 'No tag', 'aria-label': c ? `Tag ${c}` : 'No tag', style: c ? `--tag:${c}` : '', onclick: () => this.eachSelected((id) => this.ed.apply({ t: 'layer.props', id: uid(), layer: id, props: { color: c } })) }));
+    for (const c of [null, ...LAYER_TAGS]) this.tags.append(h('button.tag-dot', { title: c ? `Tag: ${TAG_NAMES[LAYER_TAGS.indexOf(c)]}` : 'No tag', 'aria-label': c ? `Tag: ${TAG_NAMES[LAYER_TAGS.indexOf(c)]}` : 'No tag', html: c ? `<span>${TAG_NAMES[LAYER_TAGS.indexOf(c)][0]}</span>` : '', style: c ? `--tag:${c}` : '', onclick: () => this.eachSelected((id) => this.ed.apply({ t: 'layer.props', id: uid(), layer: id, props: { color: c } })) }));
     this.footer = h('div.layer-props', {},
       h('div.row', {}, this.blend),
       this.opacity.el,

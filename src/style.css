@@ -462,7 +462,7 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 .layer-row.colored:not(.folder-row) { box-shadow: inset 3px 0 0 var(--folder); }
 .layer-row.picked.colored:not(.folder-row) { box-shadow: inset 3px 0 0 var(--folder), inset 0 0 0 1px var(--accent); }
 .layer-tags { align-items: center; gap: 6px; }
-.tag-dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); background: var(--tag, transparent); padding: 0; cursor: pointer; }
+.tag-dot { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--line); background: var(--tag, transparent); padding: 0; cursor: pointer; font-size: 9px; font-weight: 700; color: #000; line-height: 1; }
 .tag-dot.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--text); }
 .multi-bar .opt-label { display: block; margin-bottom: 4px; }
 .adjust-pick { position: absolute; right: 8px; top: 40px; z-index: 5; }
@@ -1109,3 +1109,15 @@ body.studio .tool-pop { right: auto; }
 .cmdk-row.active { background: var(--accent-soft); }
 .cmdk-row kbd { color: var(--muted); }
 .cmdk-empty { color: var(--muted); padding: 10px; font-size: 13px; }
+
+/* Accessibility: a visible focus ring everywhere, calm motion when asked, and a mirrored layout. */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+body.left-handed .topbar { flex-direction: row-reverse; }
+body.left-handed .sidebar { left: auto; right: calc(10px + env(safe-area-inset-left)); }
+body.left-handed .popover.history-pop { left: auto; right: calc(62px + env(safe-area-inset-left)); }
+body.left-handed .minimap { right: auto; left: calc(10px + env(safe-area-inset-left)); }
+body.left-handed .popover.layers-pop, body.left-handed .popover.color-pop { right: auto; left: 10px; }
+body.left-handed .menu-pop { left: auto; right: 10px; }
+body.left-handed .room-dock { right: auto; left: calc(12px + env(safe-area-inset-left)); }
+body.left-handed .chat { left: auto; right: calc(76px + env(safe-area-inset-right)); }

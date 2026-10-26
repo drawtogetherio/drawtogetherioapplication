@@ -14,6 +14,8 @@ export function h<K extends keyof HTMLElementTagNameMap>(sel: K | `${K}.${string
     else el.setAttribute(k, v === true ? '' : String(v));
   }
   for (const c of children) if (c !== null && c !== undefined && c !== false) el.append(c);
+  // An icon-only control is named by its tooltip.
+  if (attrs.title && attrs.html && !attrs['aria-label']) el.setAttribute('aria-label', String(attrs.title));
   return el;
 }
 

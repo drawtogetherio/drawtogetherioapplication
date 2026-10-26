@@ -89,7 +89,7 @@ await page.locator('.topbar [aria-label="Colour"]').click();
 await page.locator('.topbar [aria-label="Menu"]').click();
 await page.locator('.menu-item', { hasText: 'Preferences' }).click();
 await page.locator('.pref-group', { hasText: 'Layout' }).click();
-check((await page.locator('.pref-page .switch-row input').evaluateAll((els) => els.map((e) => e.checked))).join() === 'true,true,true,false,true,true', 'the Layout preferences list which panels show, and the minimap');
+check((await page.locator('.pref-page .switch-row input').evaluateAll((els) => els.map((e) => e.checked))).join() === 'true,true,true,false,true,true,false', 'the Layout preferences list which panels show, the minimap, and left-handed');
 await page.locator('.pref-page .btn', { hasText: 'Reset layout' }).click();
 check((await panel('layers')).order === 2 && (await panel('swatches')).show, 'Reset layout restores the default arrangement');
 await page.locator('.pref-page .segmented button', { hasText: 'Simple' }).click();

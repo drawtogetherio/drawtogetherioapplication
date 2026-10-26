@@ -305,6 +305,7 @@ export class App {
   applyLayout() {
     const studio = this.studioOn, ed = this.ed;
     document.body.classList.toggle('studio', studio);
+    document.body.classList.toggle('left-handed', ed.prefs.leftHanded);
     this.studio.el.hidden = !studio;
     this.closePicker();
     this.layersPop.hidden = this.colorPop.hidden = true;
@@ -832,7 +833,9 @@ export class App {
       if (mod && e.shiftKey && k === 'e') { e.preventDefault(); this.export(); return; }
       if (mod && k === 'k') { e.preventDefault(); this.commandPalette(); return; }
       if (mod) return;
-      if (e.key === 'Tab') { e.preventDefault(); this.toggleUI(); return; }
+      // Tab from the canvas hides the UI; from a control it moves focus as usual. F6 jumps between bars.
+      if (e.key === 'Tab') { if (t === document.body || t === ed.view.canvas) { e.preventDefault(); this.toggleUI(); } return; }
+      if (e.key === 'F6') { e.preventDefault(); this.focusNextBar(e.shiftKey); return; }
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === 'Alt') { this.input.altPick = true; e.preventDefault(); ed.view.requestRender(); return; }
       const hold = actionFor(ed.prefs, k);
@@ -871,7 +874,7 @@ export class App {
       else if (action === 'fit') ed.fitView();
       else if (action === 'zoomIn') this.zoomCenter(1.25);
       else if (action === 'zoomOut') this.zoomCenter(0.8);
-      else if (action === 'layers') this.layersBtn.click();
+      else if (action === 'layers') { this.layersBtn.click(); this.layers.el.querySelector('button')?.focus(); }
       else if (action === 'focus') this.toggleFocus();
       else if (action === 'quickMenu') this.quickMenu.open();
     });
@@ -887,6 +890,16 @@ export class App {
   }
 
   commandPalette() { commandPalette(this); }
+
+  /** Keyboard: moves focus to the first control of the next bar or open panel. */
+  private focusNextBar(back = false) {
+    const bars = [this.topbar, this.options, this.sidebar, ...document.querySelectorAll<HTMLElement>('.popover:not([hidden]), .sp:not([hidden])')];
+    const first = (b: HTMLElement) => b.querySelector<HTMLElement>('button:not([hidden]), input, select, [tabindex]');
+    const live = bars.filter((b) => b.offsetParent && first(b));
+    const i = live.findIndex((b) => b.contains(document.activeElement));
+    const next = live[(i + (back ? -1 : 1) + live.length) % live.length];
+    if (next) first(next)!.focus();
+  }
   preferences() { preferencesDialog(this); }
 
   zoomCenter(f: number) {
