@@ -38,7 +38,7 @@ export class LayersPanel {
   private rows: Row[] = [];
   open = false;
 
-  constructor(private ed: Editor) {
+  constructor(private ed: Editor, meter?: HTMLElement) {
     this.list = h('div.layer-list', {}, this.dropLine);
     this.blend = h('select.blend-select', { 'aria-label': 'Blend mode' });
     for (const m of BLEND_MODES) this.blend.append(h('option', { value: m }, BLEND_LABELS[m]));
@@ -80,7 +80,7 @@ export class LayersPanel {
     );
     this.el = h('div.panel.layers-panel', {},
       h('div.panel-head', {}, h('span.panel-title', {}, 'Layers'),
-        h('span.head-actions', {}, act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
+        h('span.head-actions', {}, meter ?? null, act('folderPlus', 'New folder', () => this.ed.addFolder()), act('plus', 'New layer', () => this.ed.addLayer()))),
       this.list,
       this.footer,
       this.folderFooter,

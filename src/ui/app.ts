@@ -16,6 +16,7 @@ import { Slider } from './slider';
 import { uid } from '../core/geom';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
+import { MemoryMeter } from './memory';
 import { isNativeApp } from '../io/native';
 import { frameBar } from './frame';
 import { EFFECTS } from '../core/model';
@@ -73,6 +74,7 @@ export class App {
   private toastTimer = 0;
   readonly roomUI: RoomUI;
   readonly session: Session;
+  memory!: MemoryMeter;
   readonly home: Home;
   private menuDyn = h('div.menu-dyn');
   private menuDot = h('span.red-dot', { hidden: true });
@@ -153,7 +155,8 @@ export class App {
     }
     right.append(this.toolsSlot);
 
-    const layers = this.layers = new LayersPanel(ed);
+    this.memory = new MemoryMeter(ed, (m) => this.toast(m));
+    const layers = this.layers = new LayersPanel(ed, this.memory.el);
     const layersPop = this.layersPop = h('div.popover.layers-pop', { hidden: true }, layers.el);
     const layersBtn = this.layersBtn = btn('layers', 'Layers', () => {
       if (this.studioOn) { this.studio.show('layers', !ed.prefs.panels.layers.show); return; }

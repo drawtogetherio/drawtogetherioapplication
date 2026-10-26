@@ -13,25 +13,28 @@ export class History {
   private undone: HistoryEntry[] = [];
   onChange: () => void = () => {};
 
-  constructor(private maxEntries = 120, private maxCost = 700) {}
+  constructor(private maxEntries = 120, public maxCost = 700) {}
+
+  /** Total pixel cost kept, in tiles. */
+  get cost() { return this.done.reduce((s, x) => s + x.cost, 0) + this.undone.reduce((s, x) => s + x.cost, 0); }
 
   record(e: HistoryEntry) {
     this.done.push(e);
     this.undone = [];
     this.trim();
-    this.onChange();
   }
 
   takeUndo() { return this.done.pop(); }
   takeRedo() { return this.undone.pop(); }
   putUndone(e: HistoryEntry) { this.undone.push(e); this.onChange(); }
-  putDone(e: HistoryEntry) { this.done.push(e); this.trim(); this.onChange(); }
+  putDone(e: HistoryEntry) { this.done.push(e); this.trim(); }
 
-  private trim() {
-    let cost = this.done.reduce((s, x) => s + x.cost, 0) + this.undone.reduce((s, x) => s + x.cost, 0);
+  trim() {
+    let cost = this.cost;
     while (this.done.length > 1 && (this.done.length > this.maxEntries || cost > this.maxCost)) {
       cost -= this.done.shift()!.cost;
     }
+    this.onChange();
   }
 
   clear() { this.done = []; this.undone = []; this.onChange(); }

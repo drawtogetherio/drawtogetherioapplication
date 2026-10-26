@@ -172,6 +172,12 @@ a.btn, .btn { text-decoration: none; color: var(--text); }
 }
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 .panel-title { font-weight: 600; font-size: 15px; }
+.mem-meter { display: inline-flex; flex-direction: column; gap: 2px; margin-right: 6px; font-size: 11px; color: var(--muted); min-width: 44px; cursor: help; }
+.mem-bar { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 30%, transparent); overflow: hidden; }
+.mem-fill { display: block; height: 100%; background: var(--muted); border-radius: 2px; }
+.mem-meter[data-level="1"] { color: #d9a21b; }
+.mem-meter[data-level="2"] { color: var(--danger); }
+.mem-meter[data-level] .mem-fill { background: currentColor; }
 .menu-pop .panel { width: 340px; display: flex; flex-direction: column; gap: 6px; }
 a.menu-item { color: inherit; text-decoration: none; }
 .menu-item { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 9px 8px; border-radius: 8px; text-align: left; cursor: pointer; }

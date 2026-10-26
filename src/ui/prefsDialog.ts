@@ -7,6 +7,7 @@ import { clear, h } from './dom';
 import { Slider } from './slider';
 import { native } from '../io/native';
 import { LOGO_SVG, WORDMARK_SVG } from '../site/brand';
+import { describe } from './memory';
 import { penTestPad } from './penTest';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
@@ -119,7 +120,14 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     row('Others’ edits land', segmented([...REMOTE_EVERY], (v) => (v ? `every ${v}s` : 'at once'), () => p.remoteEvery, (v) => { p.remoteEvery = v; })),
     toggle('Low-latency canvas', () => p.lowLatency, (v) => { p.lowLatency = v; }),
     h('small.muted', {}, 'Low latency puts the line on screen a frame sooner. Turn it off if the canvas tears or flickers.'),
+    row('Canvas memory', memoryText()),
+    h('small.muted', {}, 'Pixels and undo history held in memory. Undo history is kept shorter as it climbs; past the limit, Safari may drop the page.'),
   ];
+  const memoryText = () => {
+    const el = h('span.muted', {}, describe(app.memory.reading));
+    const off = app.memory.on((r) => { if (!el.isConnected) { off(); return; } el.textContent = describe(r); });
+    return el;
+  };
 
   const about = () => {
     const rows = [

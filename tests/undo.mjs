@@ -86,6 +86,18 @@ const area = await ed((e) => {
 });
 check(area.part < area.whole / 2, `inverse holds ${area.part} pixels instead of ${area.whole}`);
 
+// Memory meter: shows the canvas size and shortens undo history as it nears the device's budget.
+check(/MB|GB/.test(await page.locator('.layers-panel .mem-meter .mem-text').textContent()), 'the layers panel shows canvas memory');
+const meter = await page.evaluate(async () => {
+  const app = window.doodlehive, before = app.ed.doc.history.maxCost;
+  app.memory.budget = app.memory.reading.used * 1.05;
+  app.ed.apply({ t: 'layer.props', id: 'mm' + Date.now(), layer: app.ed.activeLayer, props: { opacity: 0.98 } });
+  await new Promise((r) => setTimeout(r, 600));
+  const toast = document.body.textContent.includes('near this device’s limit');
+  return { before, after: app.ed.doc.history.maxCost, level: app.memory.el.dataset.level, toast, text: app.memory.el.title };
+});
+check(meter.before === 700 && meter.after === 100 && meter.level === '2' && meter.toast, `near the budget: undo history capped and a warning shown (${meter.text})`);
+
 await page.screenshot({ path: `${out}/01-undo.png` });
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 await browser.close();
