@@ -31,6 +31,8 @@ export class InputController {
   /** A finger held still: the eyedropper until it lifts. */
   private hold: { timer: number; id: number; picking: boolean } | null = null;
   onGesture: (g: 'hideUI') => void = () => {};
+  /** A right click or pen barrel button, in client coordinates. */
+  onContext: (x: number, y: number) => void = () => {};
   private el!: HTMLCanvasElement;
   private off: (() => void) | null = null;
 
@@ -51,7 +53,7 @@ export class InputController {
       on('pointerup', (e) => this.up(e)),
       on('pointercancel', (e) => this.up(e)),
       on('pointerleave', () => { this.ed.hover = null; this.ed.view.requestRender(); }),
-      on('contextmenu', (e) => e.preventDefault()),
+      on('contextmenu', (e) => { e.preventDefault(); this.onContext(e.clientX, e.clientY); }),
       on('wheel', (e) => this.wheel(e), { passive: false }),
       ...(['touchstart', 'touchmove', 'gesturestart', 'gesturechange'] as const).map((t) => on(t as 'touchstart', (e) => e.preventDefault(), { passive: false })),
     ];
@@ -89,6 +91,7 @@ export class InputController {
   private activeTool!: Tool;
 
   private down(e: PointerEvent) {
+    if (e.button === 2) return; // the quick menu's; capturing would keep its release from reaching the menu
     try { this.el.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
     if (e.pointerType === 'touch') return this.touchDown(e);
     if (e.button === 0 && this.viewKey) {

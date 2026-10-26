@@ -1,5 +1,5 @@
 import { DrawDoc } from '../core/document';
-import { Editor, ToolId } from '../editor';
+import { Editor, TOOLS, ToolId } from '../editor';
 import { BrushTool } from '../tools/brushTool';
 import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
@@ -38,16 +38,13 @@ import { PREFS_KEY } from './session';
 import { Home } from './home';
 import { InvitePanel } from './invitePanel';
 import { shareDialog } from './share';
+import { QuickMenu } from './quickMenu';
+import { commandPalette } from './commandPalette';
 import { BrushTool as BrushToolId, FILL_MODES, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
 import { effectsBar } from './effectsBar';
 
 const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'smudge', 'fill', 'select', 'shape'];
 const isBrushTool = (id: ToolId): id is BrushToolId => id === 'brush' || id === 'eraser' || id === 'smudge';
-
-const TOOLS: { id: ToolId; label: string }[] = [
-  { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
-  { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
-];
 
 export const SAVE_BADGE = {
   cloud: { icon: 'cloud', short: '', label: 'Saved to your account', hint: 'Saved on the server. It’s on every device you log in from.' },
@@ -58,15 +55,18 @@ export const SAVE_BADGE = {
 export class App {
   ed: Editor;
   input: InputController;
-  private select: SelectTool;
+  readonly select: SelectTool;
   private shape: ShapeTool;
+  quickMenu: QuickMenu;
+  effectsBtn: HTMLButtonElement;
+  guidesBtn: HTMLButtonElement;
   private toolButtons = new Map<ToolId, HTMLElement>();
   private options = h('div.optionsbar');
   private sliders: Slider[] = []; // size and opacity, vertical for the classic sidebar and flat for the studio panel
   private sidebar: HTMLElement;
   private studio: Studio;
   private studioSliders: HTMLElement;
-  private layers: LayersPanel;
+  layers: LayersPanel;
   private layersPop: HTMLElement;
   private picker: ColorPicker;
   private colorPop: HTMLElement;
@@ -75,7 +75,7 @@ export class App {
   private undoBtn: HTMLButtonElement;
   private historyBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
-  private colorBtn: HTMLButtonElement;
+  colorBtn: HTMLButtonElement;
   private zoomLabel = h('button.zoom-label', { title: 'Fit to screen' });
   private toastEl = h('div.toast', { role: 'status' });
   private toastTimer = 0;
@@ -97,7 +97,7 @@ export class App {
   private sliderPreview = h('div.slider-preview', { hidden: true, 'aria-hidden': 'true' });
   private sliderPreviewTimer = 0;
   private toolPopFor: ToolId | null = null;
-  private layersBtn: HTMLButtonElement;
+  layersBtn: HTMLButtonElement;
   private prefsTimer = 0;
 
   constructor(root: HTMLElement, doc: DrawDoc) {
@@ -113,6 +113,8 @@ export class App {
     this.input = new InputController(ed, ed.view.canvas);
     ed.view.onCanvas = (c) => this.input.bind(c);
     this.input.onGesture = () => this.toggleUI();
+    this.quickMenu = new QuickMenu(this);
+    this.input.onContext = (x, y) => this.quickMenu.open(x, y);
     ed.view.overlay = (ctx, M) => this.drawOverlay(ctx, M);
     this.roomUI = new RoomUI(ed);
     this.session = new Session(this);
@@ -135,14 +137,14 @@ export class App {
     const effectItem = (e: EffectId) => h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsBar(ed, e); } });
     const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {},
       ...EFFECTS.filter((e) => !isAdjustment(e)).map(effectItem), h('div.menu-sep'), h('div.menu-label', {}, 'Adjust'), ...EFFECTS.filter(isAdjustment).map(effectItem)));
-    const effectsBtn = btn('sparkle', 'Effects', () => {
+    const effectsBtn = this.effectsBtn = btn('sparkle', 'Effects', () => {
       effectsPop.style.left = `${effectsBtn.getBoundingClientRect().left}px`;
       effectsPop.hidden = !effectsPop.hidden;
     }, '.edit-only');
     dismissOnOutside(effectsPop, [effectsBtn], () => { effectsPop.hidden = true; });
 
     const guidesPop = h('div.popover.guides-pop', { hidden: true });
-    const guidesBtn = btn('grid', 'Guides: symmetry, grid, reference', () => {
+    const guidesBtn = this.guidesBtn = btn('grid', 'Guides: symmetry, grid, reference', () => {
       guidesPop.style.left = `${guidesBtn.getBoundingClientRect().left}px`;
       guidesPop.hidden = !guidesPop.hidden;
       if (!guidesPop.hidden) guidesPop.replaceChildren(guidesPanel(this));
@@ -449,7 +451,7 @@ export class App {
 
   async copyInvite() { await this.session.flushThumb(); return this.copyText(this.session.inviteLink(), 'Invite link copied'); }
 
-  private export() { if (!this.ed.readOnly) exportDialog(this.ed); }
+  export() { if (!this.ed.readOnly) exportDialog(this.ed); }
 
   shareLinks() {
     const room = this.ed.room;
@@ -768,7 +770,8 @@ export class App {
     }
     if (!ed.readOnly) d.append(item('download', 'Export PNG / PSD / .hivecanvas…', () => this.export()));
     d.append(item('fit', `Focus mode${keyOf(ed.prefs, 'focus') ? ` (${keyOf(ed.prefs, 'focus').toUpperCase()})` : ''}`, () => this.toggleFocus()),
-      item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
+      item('search', 'Commands… (Ctrl+K)', () => this.commandPalette()),
+      item('settings', 'Preferences…', () => this.preferences()), h('div.menu-sep'));
     if (ed.room && !ed.readOnly) {
       const cb = h('input', { type: 'checkbox' });
       cb.checked = st.hideOthersFolders;
@@ -827,6 +830,7 @@ export class App {
       if (mod && k === 'a') { e.preventDefault(); ed.setTool('select'); this.select.selectAll(); return; }
       if (mod && k === 'd') { e.preventDefault(); this.select.deselect(); return; }
       if (mod && e.shiftKey && k === 'e') { e.preventDefault(); this.export(); return; }
+      if (mod && k === 'k') { e.preventDefault(); this.commandPalette(); return; }
       if (mod) return;
       if (e.key === 'Tab') { e.preventDefault(); this.toggleUI(); return; }
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
@@ -845,7 +849,8 @@ export class App {
       }
       if (e.key === 'Escape') {
         const pop = document.querySelector<HTMLElement>('.popover:not([hidden])');
-        if (!this.toolPop.hidden) this.closePicker();
+        if (this.quickMenu.open_) this.quickMenu.close();
+        else if (!this.toolPop.hidden) this.closePicker();
         else if (pop) pop.hidden = true;
         else if (this.shape.placing) this.shape.cancel();
         else if (this.roomUI.chatOpen) this.roomUI.toggleChat(false);
@@ -868,6 +873,7 @@ export class App {
       else if (action === 'zoomOut') this.zoomCenter(0.8);
       else if (action === 'layers') this.layersBtn.click();
       else if (action === 'focus') this.toggleFocus();
+      else if (action === 'quickMenu') this.quickMenu.open();
     });
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ') { this.input.spaceHeld = false; ed.view.canvas.style.cursor = ''; }
@@ -880,7 +886,10 @@ export class App {
     window.addEventListener('blur', () => { this.input.spaceHeld = false; this.input.altPick = false; this.input.viewKey = null; ed.view.canvas.style.cursor = ''; });
   }
 
-  private zoomCenter(f: number) {
+  commandPalette() { commandPalette(this); }
+  preferences() { preferencesDialog(this); }
+
+  zoomCenter(f: number) {
     const vp = this.ed.view.viewport;
     vp.zoomAt(vp.w / 2, vp.h / 2, f);
   }

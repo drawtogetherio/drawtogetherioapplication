@@ -1088,3 +1088,24 @@ body.studio .tool-pop { right: auto; }
 .cp-svwrap.wheel .cp-ring { display: block; width: 100%; height: 100%; }
 .cp-svwrap.wheel .cp-sv { position: absolute; left: 23.5%; top: 23.5%; width: 53%; height: 53%; border-radius: 6px; }
 .cp-svwrap.wheel .cp-hue-thumb { position: absolute; }
+
+/* Quick menu: a ring of shortcuts under the pointer. */
+.quick-menu { position: fixed; width: 144px; height: 144px; transform: translate(-72px, -72px); z-index: 40; }
+.quick-slot, .quick-centre { position: absolute; width: 44px; height: 44px; border-radius: 50%; transform: translate(-50%, -50%); border: 1px solid var(--line); background: var(--panel); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+.quick-centre { width: 36px; height: 36px; color: var(--muted); }
+.quick-slot:hover, .quick-slot:focus-visible, .quick-centre:hover { background: var(--accent); color: var(--on-accent); border-color: transparent; outline: none; }
+.quick-slot.editing { border-style: dashed; border-color: var(--accent); }
+.quick-pick { position: fixed; top: 50%; transform: translateY(-50%); width: 230px; max-height: 80vh; overflow-y: auto; display: flex; flex-direction: column; padding: 6px; }
+.quick-pick .menu-item { padding: 6px 8px; font-size: 13px; }
+
+/* Command palette. */
+.cmdk { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.35); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.cmdk-panel { width: min(440px, calc(100vw - 32px)); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.cmdk-input { font: inherit; font-size: 15px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); outline: none; }
+.cmdk-input:focus { border-color: var(--accent); }
+.cmdk-list { max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; }
+.cmdk-row { display: flex; align-items: center; gap: 10px; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px; text-align: left; cursor: pointer; color: var(--text); font-size: 14px; }
+.cmdk-row span { flex: 1; }
+.cmdk-row.active { background: var(--accent-soft); }
+.cmdk-row kbd { color: var(--muted); }
+.cmdk-empty { color: var(--muted); padding: 10px; font-size: 13px; }

@@ -186,7 +186,7 @@ export class LayersPanel {
     this.selectedFolder = null;
   }
 
-  private merge() {
+  merge() {
     this.ed.commitPending();
     const l = this.ed.layer;
     if (!l) return;
@@ -197,7 +197,7 @@ export class LayersPanel {
     this.ed.setActiveLayer(below.props.id);
   }
 
-  private removeLayer() {
+  removeLayer() {
     this.ed.commitPending();
     const l = this.ed.layer;
     if (!l || !this.ed.canEdit(l.props.id)) return;

@@ -16,6 +16,10 @@ import type { TiledSurface } from './core/tiles';
 import { Prefs, cleanPrefs } from './shared/prefs';
 
 export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
+export const TOOLS: { id: ToolId; label: string }[] = [
+  { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
+  { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' },
+];
 export type FillMode = 'bucket' | 'lasso' | 'gradient';
 export type SelectMode = 'rect' | 'ellipse' | 'lasso' | 'wand' | 'range';
 

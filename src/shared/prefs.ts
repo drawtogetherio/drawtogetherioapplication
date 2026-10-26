@@ -5,20 +5,23 @@ import { cleanBrush } from './brush';
 import type { BrushParams } from '../core/model';
 
 export type KeyAction = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper' | 'layers'
-  | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag' | 'focus';
+  | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag' | 'focus' | 'quickMenu';
 
 export const KEY_ACTIONS: { id: KeyAction; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
   { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' }, { id: 'layers', label: 'Layers' },
   { id: 'sizeUp', label: 'Bigger brush' }, { id: 'sizeDown', label: 'Smaller brush' }, { id: 'rotate', label: 'Rotate (hold + drag)' }, { id: 'zoomDrag', label: 'Zoom (hold + drag)' },
   { id: 'fit', label: 'Fit to screen' }, { id: 'zoomIn', label: 'Zoom in' }, { id: 'zoomOut', label: 'Zoom out' }, { id: 'flipH', label: 'Flip horizontal' }, { id: 'flipV', label: 'Flip vertical' },
-  { id: 'focus', label: 'Focus mode (fullscreen)' },
+  { id: 'focus', label: 'Focus mode (fullscreen)' }, { id: 'quickMenu', label: 'Quick menu' },
 ];
 
 export const DEFAULT_KEYS: Record<KeyAction, string> = {
   brush: 'b', eraser: 'e', smudge: 's', fill: 'g', select: 'm', shape: 'u', eyedropper: 'i', layers: 'l',
-  sizeUp: ']', sizeDown: '[', rotate: 'r', zoomDrag: 'z', fit: '0', zoomIn: '=', zoomOut: '-', flipH: 'h', flipV: 'v', focus: 'f',
+  sizeUp: ']', sizeDown: '[', rotate: 'r', zoomDrag: 'z', fit: '0', zoomIn: '=', zoomOut: '-', flipH: 'h', flipV: 'v', focus: 'f', quickMenu: 'q',
 };
+
+/** The eight commands around the quick menu, by command id. */
+export const DEFAULT_QUICK_MENU = ['undo', 'redo', 'brush', 'eraser', 'fill', 'select', 'flipH', 'layers'];
 
 export type Mode = 'dark' | 'light' | 'system';
 export const MODES: Mode[] = ['dark', 'light', 'system'];
@@ -81,6 +84,9 @@ export interface Prefs {
   palettes: Palette[];
   palette: string;
   layout: 'classic' | 'studio';
+  /** Mirror the layout: tools and sidebar swap sides. */
+  leftHanded: boolean;
+  quickMenu: string[];
   /** Where each studio panel sits. */
   panels: Record<PanelId, PanelState>;
 }
@@ -90,7 +96,7 @@ export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, minimap: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, quickShape: true, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], palettes: [], palette: '', layout: 'classic', panels: DEFAULT_PANELS,
+  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, quickShape: true, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], palettes: [], palette: '', layout: 'classic', leftHanded: false, quickMenu: DEFAULT_QUICK_MENU, panels: DEFAULT_PANELS,
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
@@ -164,6 +170,8 @@ export function cleanPrefs(raw: unknown): Prefs {
     palettes,
     palette: palettes.some((p) => p.id === r.palette) ? r.palette as string : '',
     layout: r.layout === 'studio' ? 'studio' : 'classic',
+    leftHanded: r.leftHanded === true,
+    quickMenu: DEFAULT_QUICK_MENU.map((d, i) => { const v = list(r.quickMenu)[i]; return typeof v === 'string' && /^[a-zA-Z0-9-]{1,24}$/.test(v) ? v : d; }),
     panels: cleanPanels(r.panels),
   };
 }
