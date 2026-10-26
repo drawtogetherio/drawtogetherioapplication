@@ -42,10 +42,38 @@ async function send(method: 'PUT' | 'DELETE', key: string, body?: Buffer, type?:
     headers: { ...rest, authorization: `AWS4-HMAC-SHA256 Credential=${m.accessKeyId}/${scope}, SignedHeaders=${signed}, Signature=${signature}` },
     signal: AbortSignal.timeout(20_000),
   });
-  if (!res.ok && !(method === 'DELETE' && res.status === 404)) throw new Error(`R2 ${method} ${key}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok && !(method === 'DELETE' && res.status === 404)) {
+    const text = await res.text();
+    const code = /<Code>([^<]+)<\/Code>/.exec(text)?.[1] ?? '';
+    throw new Error(`R2 ${method} ${key}: ${res.status} ${code || text.slice(0, 200)}${HINTS[code] ? ` (${HINTS[code]})` : ''}`);
+  }
 }
 
+/** What each R2 refusal usually means, for the deploy log. */
+const HINTS: Record<string, string> = {
+  SignatureDoesNotMatch: 'R2_SECRET_ACCESS_KEY does not belong to R2_ACCESS_KEY_ID',
+  InvalidAccessKeyId: 'R2_ACCESS_KEY_ID is wrong, or the token was deleted, or it belongs to another Cloudflare account than R2_ACCOUNT_ID',
+  AccessDenied: 'the API token is not allowed to write to this bucket: give it Object Read & Write on R2_MEDIA_BUCKET',
+  Unauthorized: 'the API token is not allowed to write to this bucket: give it Object Read & Write on R2_MEDIA_BUCKET',
+  NoSuchBucket: 'R2_MEDIA_BUCKET does not exist in this account (check the name, and for an EU bucket put the full EU endpoint in R2_ACCOUNT_ID)',
+};
+
 export const putMedia = (key: string, body: Buffer, type: string) => send('PUT', key, body, type);
+
+/** Writes and removes a tiny object at startup so the deploy log says whether uploads will work, and why not. */
+export async function checkMedia() {
+  if (!config.media) return;
+  const key = `${config.media.prefix}_check`;
+  try {
+    await send('PUT', key, Buffer.from('ok'), 'text/plain');
+    await send('DELETE', key);
+    console.log('  R2 check: uploads work.');
+  } catch (e) {
+    const cause = (e as { cause?: { code?: string } }).cause?.code;
+    console.error(`  R2 check FAILED, picture uploads will fail: ${e instanceof Error ? e.message : String(e)}${cause ? ` [${cause}]` : ''}` +
+      (cause === 'ENOTFOUND' || cause === 'EAI_AGAIN' ? ` (no such host ${new URL(config.media.endpoint).host}: check R2_ACCOUNT_ID)` : ''));
+  }
+}
 
 /** Best effort: a leftover object only costs storage. */
 export function deleteMedia(...keys: (string | null | undefined)[]) {

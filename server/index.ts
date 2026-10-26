@@ -16,7 +16,7 @@ import { FriendError, acceptFriend, areFriends, blockUser, forget, listBlocked, 
 import { closeAllStreams, isConnected, openStream, sendTo, streamCount } from './live.ts';
 import { clearNotices, listNotices, notify, premiumWarning, readNotices } from './notify.ts';
 import { sweep } from './sweep.ts';
-import { deleteMedia, mediaOn, mediaUrl, newMediaKey, putMedia } from './media.ts';
+import { checkMedia, deleteMedia, mediaOn, mediaUrl, newMediaKey, putMedia } from './media.ts';
 import { movePicturesToMedia } from './media-move.ts';
 import { restart, snapshot, syncDue } from './sync.ts';
 import { allow, clientIp, sameSite, securityHeaders } from './guard.ts';
@@ -797,7 +797,7 @@ server.listen(config.port, () => {
   console.log(`  Dev login: ${config.devLogin ? 'on' : 'off'}`);
   console.log(`  Database: ${config.dbPath}`);
   console.log(`  Pictures: ${config.media ? `R2 bucket ${config.media.bucket}${config.media.prefix ? ` under ${config.media.prefix}` : ''}, served from ${config.media.publicUrl}` : 'in the database (set the R2_* variables and MEDIA_URL to use R2)'}`);
-  if (config.media) movePicturesToMedia().catch((e) => console.error('Moving pictures to R2 stopped:', e));
+  if (config.media) checkMedia().then(movePicturesToMedia).catch((e) => console.error('Moving pictures to R2 stopped:', e));
   const pages = ['index.html', 'login.html', 'app.html', 'admin.html', '404.html'].map((f) => `${f} ${fs.existsSync(path.join(config.staticDir, f)) ? 'ok' : 'MISSING'}`);
   console.log(`  Pages in ${config.staticDir}: ${pages.join(', ')}`);
   if (path.resolve(config.dbPath).startsWith(path.resolve(config.staticDir) + path.sep)) {

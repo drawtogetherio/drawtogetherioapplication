@@ -33,10 +33,18 @@ const beta = env.BETA ? env.BETA === '1' : (env.RAILWAY_ENVIRONMENT_NAME ?? '').
 const publicUrl = (env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : `http://localhost:${port}`)).replace(/\/$/, '');
 
 /** Pictures on Cloudflare R2: on once the keys, the bucket and its public URL are all set. R2_ENDPOINT is for tests. */
-const r2Endpoint = (env.R2_ENDPOINT || (env.R2_ACCOUNT_ID ? `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '')).replace(/\/$/, '');
-const media = r2Endpoint && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_MEDIA_BUCKET && env.MEDIA_URL ? {
-  endpoint: r2Endpoint, accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY, bucket: env.R2_MEDIA_BUCKET,
-  publicUrl: env.MEDIA_URL.replace(/\/$/, ''),
+// Values pasted into a dashboard with quotes, spaces or a trailing newline still work: a stray space in
+// the secret would otherwise fail every upload with SignatureDoesNotMatch.
+const val = (v: string | undefined) => (v ?? '').trim().replace(/^["']|["']$/g, '').trim();
+/** R2_ACCOUNT_ID may also be the whole S3 endpoint Cloudflare shows (needed for EU buckets: <id>.eu.r2...). */
+const r2Account = val(env.R2_ACCOUNT_ID);
+const r2Endpoint = (val(env.R2_ENDPOINT) || (/r2\.cloudflarestorage\.com/i.test(r2Account)
+  ? 'https://' + r2Account.replace(/^https?:\/\//i, '').split('/')[0]
+  : r2Account ? `https://${r2Account}.r2.cloudflarestorage.com` : '')).replace(/\/$/, '');
+const r2Key = val(env.R2_ACCESS_KEY_ID), r2Secret = val(env.R2_SECRET_ACCESS_KEY), r2Bucket = val(env.R2_MEDIA_BUCKET), mediaUrl = val(env.MEDIA_URL);
+const media = r2Endpoint && r2Key && r2Secret && r2Bucket && mediaUrl ? {
+  endpoint: r2Endpoint, accessKeyId: r2Key, secretAccessKey: r2Secret, bucket: r2Bucket,
+  publicUrl: mediaUrl.replace(/\/$/, ''),
   /** Keeps one site's pictures apart from another's in a shared bucket, e.g. "beta/". */
   prefix: (env.MEDIA_PREFIX ?? (beta ? 'beta/' : '')).replace(/^\/+/, ''),
 } : null;
