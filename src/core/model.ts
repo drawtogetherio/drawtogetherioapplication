@@ -110,7 +110,8 @@ export type Op =
     })
   | (OpBase & {
       t: 'fill'; layer: string; x: number; y: number; color: string; tolerance: number;
-      sampleAll: boolean; expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
+      sampleAll: boolean; /** Read the edges from this layer instead (a reference layer). */ sampleLayer?: string;
+      expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
     })
   /** A lasso filled with colour; `inside` fills only the parts closed off by lines. */
   | (OpBase & {
@@ -118,7 +119,7 @@ export type Op =
       stops: GradientStop[]; opacity: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
     })
   | (OpBase & {
-      t: 'fillPoly'; layer: string; pts: number[]; color: string; inside: boolean; tolerance: number;
+      t: 'fillPoly'; layer: string; pts: number[]; color: string; inside: boolean; tolerance: number; sampleLayer?: string;
       sampleAll: boolean; expand: number; region: { x: number; y: number; w: number; h: number }; clip?: Selection;
     })
   | (OpBase & {

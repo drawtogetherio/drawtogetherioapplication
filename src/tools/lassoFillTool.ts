@@ -37,7 +37,7 @@ export class LassoFillTool implements Tool {
     ed.pushRecent(ed.color);
     ed.applyPrepared({
       t: 'fillPoly', id: uid(), layer: ed.activeLayer, pts: pts.map((v) => Math.round(v * 100) / 100), color: ed.color, inside: st.lassoInside,
-      tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, expand: st.fillExpand, region, clip: ed.selection ?? undefined, mask: ed.onMask,
+      tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, sampleLayer: ed.sampleLayer(), expand: st.fillExpand, region, clip: ed.selection ?? undefined, mask: ed.onMask,
     });
   }
 

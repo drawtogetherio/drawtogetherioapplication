@@ -230,7 +230,7 @@ export class SelectTool implements Tool {
     const region = fillRegion(ed, x, y);
     if (!layer || !rectContains(region, x, y)) return null;
     const src = ed.onMask && layer.mask ? layer.mask.extract(region)
-      : renderRegion(ed.doc, region, { paper: false, only: st.fillSampleAll ? undefined : layer.props.id, raw: !st.fillSampleAll });
+      : renderRegion(ed.doc, region, { paper: false, only: ed.sampleLayer() ?? (st.fillSampleAll ? undefined : layer.props.id), raw: !!ed.sampleLayer() || !st.fillSampleAll });
     const data = ctx2d(src, true).getImageData(0, 0, region.w, region.h);
     if (everywhere) return colourRangeSel(data, region, x, y, st.fillTolerance);
     const m = regionMask(data, region, x, y, st.fillTolerance);

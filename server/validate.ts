@@ -80,7 +80,7 @@ export function validOp(op: unknown): op is Op {
         && (op.atop === undefined || isBool(op.atop)) && (op.sides === undefined || inRange(op.sides, 3, 24)) && (op.pts === undefined ? !POINT_SHAPES.includes(op.shape as never) : nums(op.pts, MAX_CLIP_PTS, 2, 4));
     case 'fill': {
       const r = op.region;
-      return isId(op.layer) && nums([op.x, op.y], 2, 2) && isColor(op.color) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && inRange(op.expand, 0, 16)
+      return isId(op.layer) && nums([op.x, op.y], 2, 2) && isColor(op.color) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && (op.sampleLayer === undefined || isId(op.sampleLayer)) && inRange(op.expand, 0, 16)
         && obj(r) && nums([r.x, r.y], 2, 2) && inRange(r.w, 1, 16384) && inRange(r.h, 1, 16384) && (r.w as number) * (r.h as number) <= MAX_REGION_PX && isClip(op.clip);
     }
     case 'gradient': {
@@ -91,7 +91,7 @@ export function validOp(op: unknown): op is Op {
     }
     case 'fillPoly': {
       const r = op.region;
-      return isId(op.layer) && nums(op.pts, MAX_CLIP_PTS, 2, 6) && isColor(op.color) && isBool(op.inside) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll)
+      return isId(op.layer) && nums(op.pts, MAX_CLIP_PTS, 2, 6) && isColor(op.color) && isBool(op.inside) && inRange(op.tolerance, 0, 1) && isBool(op.sampleAll) && (op.sampleLayer === undefined || isId(op.sampleLayer))
         && inRange(op.expand, 0, 16) && obj(r) && nums([r.x, r.y], 2, 2) && inRange(r.w, 1, 16384) && inRange(r.h, 1, 16384) && (r.w as number) * (r.h as number) <= MAX_REGION_PX && isClip(op.clip);
     }
     case 'transform':

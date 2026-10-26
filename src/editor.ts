@@ -28,6 +28,8 @@ export interface EditorSettings {
   smudgePreset: string;
   fillTolerance: number; // 0..1
   fillSampleAll: boolean;
+  /** Fill and wand read edges from the reference layer when one is set. */
+  fillUseRef: boolean;
   fillExpand: number;
   fillMode: FillMode;
   gradientKind: 'linear' | 'radial';
@@ -79,7 +81,7 @@ export class Editor {
     brush: { ...brushById(DEFAULT_BRUSH).params }, brushPreset: DEFAULT_BRUSH,
     eraser: { ...brushById(DEFAULT_ERASER).params }, eraserPreset: DEFAULT_ERASER,
     smudge: { ...SMUDGE_PARAMS }, smudgePreset: DEFAULT_SMUDGE,
-    fillTolerance: 0.12, fillSampleAll: true, fillExpand: 1, fillMode: 'bucket', lassoInside: true, gradientKind: 'linear', gradientEnd: null, gradientAlpha: 1,
+    fillTolerance: 0.12, fillSampleAll: true, fillUseRef: true, fillExpand: 1, fillMode: 'bucket', lassoInside: true, gradientKind: 'linear', gradientEnd: null, gradientAlpha: 1,
     selectMode: 'rect', selectFeather: 0, selectGrow: 8, shape: 'rect', shapeFill: false, shapeSides: 6,
     guides: structuredClone(DEFAULT_GUIDES),
     hideOthersFolders: false,
@@ -386,6 +388,14 @@ export class Editor {
     if (!sel?.feather) return undefined;
     if (this.softClip?.sel !== sel) this.softClip = { sel, mask: selMask(sel, rectRoundOut(rectFromPoints(sel.pts, featherPad(sel))!, 0)) };
     return this.softClip.mask;
+  }
+
+  /** The layer fills and the wand read their edges from, when it is marked as the reference (this device only). */
+  referenceLayer: string | null = null;
+  /** The layer to sample edges from for a fill or wand, or undefined for the usual choice. */
+  sampleLayer(): string | undefined {
+    const r = this.referenceLayer;
+    return this.settings.fillUseRef && r && this.doc.layer(r) && !this.onMask ? r : undefined;
   }
 
   /** Selections kept by name for this session. */

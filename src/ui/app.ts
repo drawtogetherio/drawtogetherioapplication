@@ -687,9 +687,11 @@ export class App {
       if (ed.toolId === 'fill' && st.fillMode === 'lasso') o.append(toggle('Fill inside lines', st.lassoInside, (v) => { st.lassoInside = v; }));
       o.append(range('Tolerance', st.fillTolerance, 0, 1, (v) => { st.fillTolerance = v; }));
       if (ed.toolId !== 'select') o.append(range('Expand', st.fillExpand, 0, 4, (v) => { st.fillExpand = Math.round(v); }, (v) => Math.round(v) + 'px'));
+      const ref = ed.referenceLayer && ed.doc.layer(ed.referenceLayer);
       o.append(
         label('Reference:'),
-        seg([['all', 'All layers'], ['layer', 'This layer']] as const, st.fillSampleAll ? 'all' : 'layer', (v) => { st.fillSampleAll = v === 'all'; }),
+        seg([['all', 'All layers'], ['layer', 'This layer'], ...(ref ? [['ref', ref.props.name] as const] : [])] as [string, string][], ref && st.fillUseRef ? 'ref' : st.fillSampleAll ? 'all' : 'layer',
+          (v) => { st.fillUseRef = v === 'ref'; if (v !== 'ref') st.fillSampleAll = v === 'all'; }),
       );
       if (ed.toolId === 'select') this.selectionTools(o);
     } else if (ed.toolId === 'select') {

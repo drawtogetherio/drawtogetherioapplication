@@ -46,7 +46,7 @@ export class FillTool implements Tool {
     this.pending = true;
     ed.applyPrepared({
       t: 'fill', id: uid(), layer: ed.activeLayer, x: Math.floor(p.x), y: Math.floor(p.y), color: ed.color,
-      tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, expand: st.fillExpand, region,
+      tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, sampleLayer: ed.sampleLayer(), expand: st.fillExpand, region,
       clip: ed.selection ?? undefined, mask: ed.onMask,
     }).finally(() => { this.pending = false; });
   }

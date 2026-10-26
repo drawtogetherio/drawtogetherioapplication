@@ -23,6 +23,7 @@ export class LayersPanel {
   private opacity: Slider;
   private lockBtn: HTMLButtonElement;
   private clipBtn: HTMLButtonElement;
+  private refBtn: HTMLButtonElement;
   private maskBtn: HTMLButtonElement;
   private applyMaskBtn: HTMLButtonElement;
   private maskHint = h('div.mask-hint', { hidden: true }, 'Editing the mask: paint hides, erase shows.');
@@ -56,6 +57,11 @@ export class LayersPanel {
 
     const act = (name: string, title: string, fn: () => void, cls = '') => h('button.icon-btn', { title, 'aria-label': title, class: cls, html: icon(name, 18), onclick: fn });
     this.clipBtn = act('clipMask', 'Clip to the layer below', () => this.ed.toggleClip());
+    this.refBtn = act('target', 'Reference: fills and the wand read their edges from this layer', () => {
+      const id = this.ed.activeLayer;
+      this.ed.referenceLayer = this.ed.referenceLayer === id ? null : id;
+      this.ed.emit('layers'); this.ed.emit('tool');
+    });
     this.maskBtn = act('maskIc', 'Add mask', () => this.ed.setMask(!this.ed.layer?.mask));
     this.applyMaskBtn = act('check', 'Apply mask to pixels', () => this.ed.applyMask());
     this.footer = h('div.layer-props', {},
@@ -65,7 +71,7 @@ export class LayersPanel {
         act('rename', 'Rename layer', () => this.renameLayer()),
         act('copy', 'Duplicate layer', () => this.ed.duplicateLayer()),
         act('merge', 'Merge down', () => this.merge()),
-        this.lockBtn, this.clipBtn, this.maskBtn, this.applyMaskBtn,
+        this.lockBtn, this.clipBtn, this.refBtn, this.maskBtn, this.applyMaskBtn,
         act('clear', 'Clear layer', () => { this.ed.commitPending(); if (this.ed.layer) this.ed.apply({ t: 'layer.clear', id: uid(), layer: this.ed.activeLayer, mask: this.ed.onMask }); }),
         act('trash', 'Delete layer', () => this.removeLayer(), 'danger'),
       ),
@@ -209,6 +215,7 @@ export class LayersPanel {
       if (!this.pendingOpacity) this.opacity.set(l.props.opacity);
       this.lockBtn.classList.toggle('on', l.props.alphaLock);
       this.clipBtn.classList.toggle('on', !!l.props.clip);
+      this.refBtn.classList.toggle('on', ed.referenceLayer === l.props.id);
       this.maskBtn.classList.toggle('on', !!l.mask);
       this.maskBtn.title = this.maskBtn.ariaLabel = l.mask ? 'Delete mask' : 'Add mask';
       this.applyMaskBtn.hidden = !l.mask;
@@ -247,7 +254,7 @@ export class LayersPanel {
     const p = l.props;
     const mine = ed.canEdit(p.id);
     const vis = this.visButton(p.visible, mine, () => ed.apply({ t: 'layer.props', id: uid(), layer: p.id, props: { visible: !p.visible } }));
-    const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : '', p.clip ? 'Clipped' : ''].filter(Boolean).join(' · ');
+    const meta = [p.blend !== 'normal' ? BLEND_LABELS[p.blend] : '', p.opacity < 1 ? Math.round(p.opacity * 100) + '%' : '', p.alphaLock ? 'Locked α' : '', p.clip ? 'Clipped' : '', ed.referenceLayer === p.id ? 'Reference' : ''].filter(Boolean).join(' · ');
     const active = p.id === ed.activeLayer && !this.selectedFolder;
     const onMask = active && ed.onMask;
     const row = h(`div.layer-row${active ? '.active' : ''}${l.shown ? '' : '.hidden-layer'}${p.clip ? '.clipped' : ''}` as 'div', { 'data-id': p.id, style: this.indent(depth) },

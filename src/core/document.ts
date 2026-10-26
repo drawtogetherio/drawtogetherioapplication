@@ -162,7 +162,7 @@ export class DrawDoc {
     const layer = this.layer(op.layer), surface = this.target(layer, op);
     if (!layer || !surface) return null;
     if (op.t === 'fillPoly' && !op.inside) return polyFill(op.region, op.pts, op.color);
-    const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
+    const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleLayer ?? (op.sampleAll ? undefined : op.layer), raw: !!op.sampleLayer || !op.sampleAll });
     const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
     const m = op.t === 'fill' ? await fillMask(data, op.region, op.x, op.y, op.tolerance, op.expand)
       : await enclosedFillMask(data, polyMask(op.region, op.pts), op.tolerance, op.expand);
@@ -275,7 +275,7 @@ export class DrawDoc {
         if (fill === undefined) {
           if (op.t === 'fillPoly' && !op.inside) fill = polyFill(op.region, op.pts, op.color);
           else {
-            const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleAll ? undefined : op.layer, raw: !op.sampleAll });
+            const sample = op.mask ? surface.extract(op.region) : renderRegion(this, op.region, { paper: false, only: op.sampleLayer ?? (op.sampleAll ? undefined : op.layer), raw: !!op.sampleLayer || !op.sampleAll });
             const data = ctx2d(sample, true).getImageData(0, 0, op.region.w, op.region.h);
             fill = op.t === 'fill' ? floodFill(data, op.region, op.x, op.y, op.color, op.tolerance, op.expand)
               : enclosedFill(data, op.region, op.pts, op.color, op.tolerance, op.expand);
