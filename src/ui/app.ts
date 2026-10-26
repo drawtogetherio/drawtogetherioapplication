@@ -99,6 +99,8 @@ export class App {
       select: this.select, shape: new ShapeTool(ed), eyedropper: new EyedropperTool(ed),
     };
     this.input = new InputController(ed, ed.view.canvas);
+    ed.view.onCanvas = (c) => this.input.bind(c);
+    this.input.onGesture = () => this.toggleUI();
     ed.view.overlay = (ctx, M) => this.drawOverlay(ctx, M);
     this.roomUI = new RoomUI(ed);
     this.session = new Session(this);
@@ -229,6 +231,7 @@ export class App {
     applyPressure(p, st.brush);
     applyPressure(p, st.eraser);
     if (this.ed.room) this.ed.room.batchMs = p.remoteEvery * 1000;
+    this.ed.view.setLowLatency(p.lowLatency);
     const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
     for (const t of TOOLS) {
       const b = this.toolButtons.get(t.id)!;
@@ -242,6 +245,26 @@ export class App {
   }
 
   get studioOn() { return this.ed.prefs.layout === 'studio'; }
+
+  /** Hides every bar and panel, leaving the canvas (Tab, or a four-finger tap). */
+  toggleUI(on = document.body.classList.contains('ui-hidden')) {
+    document.body.classList.toggle('ui-hidden', !on);
+    this.closePicker();
+    this.layersPop.hidden = this.colorPop.hidden = this.toolPop.hidden = true;
+    this.ed.view.resize();
+    if (!on) this.toast('UI hidden. Press Tab or tap with four fingers to bring it back.');
+  }
+
+  /** Fullscreen with the UI hidden; Escape or the key again leaves it. */
+  toggleFocus() {
+    const on = !!document.fullscreenElement;
+    if (on) { document.exitFullscreen().catch(() => {}); this.toggleUI(true); return; }
+    const req = document.documentElement.requestFullscreen?.();
+    this.toggleUI(false);
+    req?.catch(() => {});
+    const back = () => { if (!document.fullscreenElement) { this.toggleUI(true); document.removeEventListener('fullscreenchange', back); } };
+    document.addEventListener('fullscreenchange', back);
+  }
 
   resetLayout() { this.studio.reset(); }
 
@@ -690,7 +713,8 @@ export class App {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
     if (!ed.readOnly) d.append(item('download', 'Export PNG / PSD / .hivecanvas…', () => this.export()));
-    d.append(item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
+    d.append(item('fit', `Focus mode${keyOf(ed.prefs, 'focus') ? ` (${keyOf(ed.prefs, 'focus').toUpperCase()})` : ''}`, () => this.toggleFocus()),
+      item('settings', 'Preferences…', () => preferencesDialog(this)), h('div.menu-sep'));
     if (ed.room && !ed.readOnly) {
       const cb = h('input', { type: 'checkbox' });
       cb.checked = st.hideOthersFolders;
@@ -749,6 +773,7 @@ export class App {
       if (mod && k === 'd') { e.preventDefault(); this.select.deselect(); return; }
       if (mod && e.shiftKey && k === 'e') { e.preventDefault(); this.export(); return; }
       if (mod) return;
+      if (e.key === 'Tab') { e.preventDefault(); this.toggleUI(); return; }
       if (e.key === ' ') { this.input.spaceHeld = true; ed.view.canvas.style.cursor = 'grab'; e.preventDefault(); return; }
       if (e.key === 'Alt') { this.input.altPick = true; e.preventDefault(); ed.view.requestRender(); return; }
       const hold = actionFor(ed.prefs, k);
@@ -783,6 +808,7 @@ export class App {
       else if (action === 'zoomIn') this.zoomCenter(1.25);
       else if (action === 'zoomOut') this.zoomCenter(0.8);
       else if (action === 'layers') this.layersBtn.click();
+      else if (action === 'focus') this.toggleFocus();
     });
     window.addEventListener('keyup', (e) => {
       if (e.key === ' ') { this.input.spaceHeld = false; ed.view.canvas.style.cursor = ''; }

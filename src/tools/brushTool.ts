@@ -15,6 +15,8 @@ export class BrushTool implements Tool {
   private flushTimer = 0;
   /** With the stabilizer on: where the brush is, and the cursor pulling it. */
   tether: { bx: number; by: number; cx: number; cy: number } | null = null;
+  /** The browser's guess at the next few samples, drawn ahead of the real line and replaced as it arrives. */
+  private ahead: PointerInfo[] = [];
 
   constructor(private ed: Editor, private erase: boolean) {}
 
@@ -44,9 +46,36 @@ export class BrushTool implements Tool {
 
   move(p: PointerInfo) {
     if (!this.buffer) return;
+    this.ahead = [];
     this.add(this.pull(p));
     // The rope moves even when the brush doesn't.
     if (this.tether) this.ed.view.requestRender();
+  }
+
+  predict(pts: PointerInfo[]) {
+    if (!this.buffer || this.erase || this.tether) return;
+    this.ahead = pts;
+    if (pts.length) this.ed.view.requestRender();
+  }
+
+  /** The predicted tail as a plain line in the stroke's colour, at the pen's width. */
+  overlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) {
+    const n = this.pts.length;
+    if (!this.ahead.length || n < 3) return;
+    const b = this.params, zoom = this.ed.view.viewport.zoom;
+    const width = (p: number) => b.size * (1 - b.pressureSize * (1 - (b.minSize + (1 - b.minSize) * p))) * zoom;
+    ctx.save();
+    ctx.strokeStyle = this.ed.color;
+    ctx.globalAlpha = b.opacity * Math.min(1, b.flow * 1.5);
+    ctx.lineCap = ctx.lineJoin = 'round';
+    let last = M.transformPoint({ x: this.pts[n - 3], y: this.pts[n - 2] }), lp = this.pts[n - 1];
+    for (const p of this.ahead) {
+      const q = M.transformPoint({ x: p.x, y: p.y });
+      ctx.lineWidth = Math.max(0.5, width((lp + p.pressure) / 2));
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+      last = q; lp = p.pressure;
+    }
+    ctx.restore();
   }
 
   /** The brush trails the cursor on a rope: it only moves once the rope is taut. */
@@ -89,6 +118,7 @@ export class BrushTool implements Tool {
     if (!this.buffer) return;
     // The line ends where the brush is, not where the cursor was.
     this.tether = null;
+    this.ahead = [];
     const r = this.renderer!.end();
     if (r) this.ed.view.invalidate(r);
     this.flush();
@@ -110,6 +140,7 @@ export class BrushTool implements Tool {
     this.ed.room?.send({ type: 'live-end', stroke: this.id });
     this.buffer = null;
     this.tether = null;
+    this.ahead = [];
     this.ed.view.live = null;
     this.ed.view.invalidate(null);
   }

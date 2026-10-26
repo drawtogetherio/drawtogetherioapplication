@@ -7,6 +7,7 @@ import { clear, h } from './dom';
 import { Slider } from './slider';
 import { native } from '../io/native';
 import { LOGO_SVG, WORDMARK_SVG } from '../site/brand';
+import { penTestPad } from './penTest';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
 const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'About'] as const;
@@ -73,7 +74,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       }
     };
     render();
-    return [row('Editor', segmented(['simple', 'advanced'] as const, (v) => (v === 'simple' ? 'Simple' : 'Advanced'), () => p.pressureMode, (v) => { p.pressureMode = v; render(); })), body];
+    return [row('Editor', segmented(['simple', 'advanced'] as const, (v) => (v === 'simple' ? 'Simple' : 'Advanced'), () => p.pressureMode, (v) => { p.pressureMode = v; render(); })), body, penTestPad(ed)];
   };
 
   const shortcuts = () => {
@@ -116,6 +117,8 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     h('small.muted', {}, 'For slow devices in busy rooms. Your own drawing is never delayed.'),
     toggle('Show others’ strokes as they draw', () => p.showLive, (v) => { p.showLive = v; }),
     row('Others’ edits land', segmented([...REMOTE_EVERY], (v) => (v ? `every ${v}s` : 'at once'), () => p.remoteEvery, (v) => { p.remoteEvery = v; })),
+    toggle('Low-latency canvas', () => p.lowLatency, (v) => { p.lowLatency = v; }),
+    h('small.muted', {}, 'Low latency puts the line on screen a frame sooner. Turn it off if the canvas tears or flickers.'),
   ];
 
   const about = () => {

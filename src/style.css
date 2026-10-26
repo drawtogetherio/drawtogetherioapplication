@@ -114,6 +114,13 @@ input, select { font: inherit; }
   overflow: hidden; background: var(--workspace);
 }
 .stage { display: block; touch-action: none; cursor: crosshair; }
+/* Tab / four-finger tap: only the canvas */
+body.ui-hidden .topbar, body.ui-hidden .optionsbar, body.ui-hidden .sidebar, body.ui-hidden .room-dock, body.ui-hidden .dock, body.ui-hidden .sp.float, body.ui-hidden .chat, body.ui-hidden .save-badge { display: none !important; }
+body.ui-hidden .stage-wrap, body.ui-hidden .studio { top: 0; }
+.pen-test { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.pen-sub, .pref-sub { font-weight: 600; flex: 1; }
+.pen-pad { width: 100%; max-width: 320px; aspect-ratio: 8 / 3; border-radius: 10px; border: 1px solid var(--line); touch-action: none; cursor: crosshair; display: block; }
+.pen-read, .pen-keys { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* Procreate-style floating sidebar with vertical sliders */
 .sidebar {

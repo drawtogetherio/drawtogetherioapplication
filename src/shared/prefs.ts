@@ -4,18 +4,19 @@ import { cleanBrush } from './brush';
 import type { BrushParams } from '../core/model';
 
 export type KeyAction = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper' | 'layers'
-  | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag';
+  | 'fit' | 'flipH' | 'flipV' | 'zoomIn' | 'zoomOut' | 'sizeUp' | 'sizeDown' | 'rotate' | 'zoomDrag' | 'focus';
 
 export const KEY_ACTIONS: { id: KeyAction; label: string }[] = [
   { id: 'brush', label: 'Brush' }, { id: 'eraser', label: 'Eraser' }, { id: 'smudge', label: 'Smudge' }, { id: 'fill', label: 'Fill' },
   { id: 'select', label: 'Selection' }, { id: 'shape', label: 'Shapes' }, { id: 'eyedropper', label: 'Eyedropper' }, { id: 'layers', label: 'Layers' },
   { id: 'sizeUp', label: 'Bigger brush' }, { id: 'sizeDown', label: 'Smaller brush' }, { id: 'rotate', label: 'Rotate (hold + drag)' }, { id: 'zoomDrag', label: 'Zoom (hold + drag)' },
   { id: 'fit', label: 'Fit to screen' }, { id: 'zoomIn', label: 'Zoom in' }, { id: 'zoomOut', label: 'Zoom out' }, { id: 'flipH', label: 'Flip horizontal' }, { id: 'flipV', label: 'Flip vertical' },
+  { id: 'focus', label: 'Focus mode (fullscreen)' },
 ];
 
 export const DEFAULT_KEYS: Record<KeyAction, string> = {
   brush: 'b', eraser: 'e', smudge: 's', fill: 'g', select: 'm', shape: 'u', eyedropper: 'i', layers: 'l',
-  sizeUp: ']', sizeDown: '[', rotate: 'r', zoomDrag: 'z', fit: '0', zoomIn: '=', zoomOut: '-', flipH: 'h', flipV: 'v',
+  sizeUp: ']', sizeDown: '[', rotate: 'r', zoomDrag: 'z', fit: '0', zoomIn: '=', zoomOut: '-', flipH: 'h', flipV: 'v', focus: 'f',
 };
 
 export type Mode = 'dark' | 'light' | 'system';
@@ -51,6 +52,8 @@ export interface Prefs {
   /** Performance: paint other people's strokes as they draw, and how often their finished edits land (seconds, 0 = at once). */
   showLive: boolean;
   remoteEvery: number;
+  /** A desynchronized stage canvas: the line lands a frame sooner; off if a device shows tearing. */
+  lowLatency: boolean;
   pressureGamma: number;
   /** Advanced pressure: a curve through points instead of the exponent. */
   pressureMode: 'simple' | 'advanced';
@@ -79,7 +82,7 @@ export interface Prefs {
 export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
 
 export const DEFAULT_PREFS: Prefs = {
-  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
+  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
   fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], layout: 'classic', panels: DEFAULT_PANELS,
 };
 
@@ -131,6 +134,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     chime: r.chime !== false,
     showLive: r.showLive !== false,
     remoteEvery: REMOTE_EVERY.includes(r.remoteEvery as number) ? r.remoteEvery as number : 0,
+    lowLatency: r.lowLatency !== false,
     pressureGamma: gamma >= 0.4 && gamma <= 2.5 ? gamma : DEFAULT_PREFS.pressureGamma,
     pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],

@@ -40,6 +40,9 @@ type Listener = (what: string) => void;
 /** Rotation and flips of the view. */
 export interface ViewTurn { rot: number; flipX: number; flipY: number }
 
+/** The last pointer sample as the device reported it (raw pressure, tilt in degrees, lean), for the pen test and tilt brushes. */
+export interface PenState { type: 'pen' | 'mouse' | 'touch'; pressure: number; tiltX: number; tiltY: number; altitude: number; azimuth: number; at: number }
+
 /** Per-user state around a document: tool, layer, colour, selection, room. */
 export class Editor {
   doc: DrawDoc;
@@ -58,6 +61,7 @@ export class Editor {
   room: RoomClient | null = null;
   /** Every op this person commits, for the copy kept on the device. */
   onOp: ((op: Op) => void) | null = null;
+  pen: PenState | null = null;
   prefs: Prefs = cleanPrefs({});
   settings: EditorSettings = {
     brush: { ...brushById(DEFAULT_BRUSH).params }, brushPreset: DEFAULT_BRUSH,

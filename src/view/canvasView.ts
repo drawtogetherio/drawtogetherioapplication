@@ -10,8 +10,12 @@ const DIRTY_JOIN = 32, MAX_DIRTY = 24;
 
 /** Layers composite into a cached, tile-aligned canvas, which is drawn with the view transform. */
 export class CanvasView {
-  readonly canvas: HTMLCanvasElement;
+  canvas: HTMLCanvasElement;
   readonly viewport = new Viewport();
+  /** The stage canvas was replaced (see `setLowLatency`); input listeners must move to the new one. */
+  onCanvas: (c: HTMLCanvasElement) => void = () => {};
+  private lowLatency = true;
+  private ctx!: CanvasRenderingContext2D;
   dpr = 1;
   live: LiveLayer | null = null;
   readonly remoteLive = new Map<string, LiveLayer>();
@@ -33,11 +37,31 @@ export class CanvasView {
   private settleTimer = 0;
 
   constructor(public doc: DrawDoc, parent: HTMLElement) {
-    this.canvas = document.createElement('canvas');
-    this.canvas.className = 'stage';
+    this.canvas = this.makeStage();
     parent.appendChild(this.canvas);
     this.viewport.onChange = () => this.requestRender();
     new ResizeObserver(() => this.resize()).observe(parent);
+    this.resize();
+  }
+
+  /**
+   * A desynchronized canvas skips the compositor's queue, so the line reaches the screen a frame or
+   * two sooner. The context is fixed at creation, so changing the setting means a new canvas.
+   */
+  private makeStage(): HTMLCanvasElement {
+    const c = document.createElement('canvas');
+    c.className = 'stage';
+    this.ctx = c.getContext('2d', { desynchronized: this.lowLatency, alpha: false })!;
+    return c;
+  }
+
+  setLowLatency(on: boolean) {
+    if (on === this.lowLatency) return;
+    this.lowLatency = on;
+    const old = this.canvas;
+    this.canvas = this.makeStage();
+    old.replaceWith(this.canvas);
+    this.onCanvas(this.canvas);
     this.resize();
   }
 
@@ -92,7 +116,7 @@ export class CanvasView {
 
   private render() {
     const vp = this.viewport, doc = this.doc, dpr = this.dpr;
-    const ctx = ctx2d(this.canvas);
+    const ctx = this.ctx;
     const M = vp.matrix();
     const D = new DOMMatrix().scaleSelf(dpr, dpr).multiplySelf(M);
 

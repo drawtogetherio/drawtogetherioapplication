@@ -4,7 +4,15 @@ import { PointerInfo, Tool } from '../tools/tool';
 
 interface Touch { x: number; y: number; x0: number; y0: number }
 
-/** Pen and mouse draw; fingers draw until a pen is used, then pan, pinch and rotate. Two-finger tap undoes, three redoes. */
+/** A finger held still this long picks a colour (Procreate's touch and hold). */
+const HOLD_MS = 450, HOLD_SLOP = 8;
+/** Pinch-rotating this close to a right angle snaps to it. */
+const SNAP_DEG = 3;
+
+/**
+ * Pen and mouse draw; fingers draw until a pen is used, then pan, pinch and rotate. Two-finger tap
+ * undoes, three redoes, four hides the UI; a finger held still picks a colour.
+ */
 export class InputController {
   private toolPointer: number | null = null;
   private toolStart = 0;
@@ -20,19 +28,34 @@ export class InputController {
   viewKey: 'rotate' | 'zoom' | null = null;
   private viewDrag: { id: number; mode: 'rotate' | 'zoom'; x0: number; y0: number; m0: DOMMatrix; a0: number } | null = null;
   altPick = false; // Alt held: temporary eyedropper
+  /** A finger held still: the eyedropper until it lifts. */
+  private hold: { timer: number; id: number; picking: boolean } | null = null;
+  onGesture: (g: 'hideUI') => void = () => {};
+  private el!: HTMLCanvasElement;
+  private off: (() => void) | null = null;
 
-  constructor(private ed: Editor, private el: HTMLCanvasElement) {
+  constructor(private ed: Editor, el: HTMLCanvasElement) { this.bind(el); }
+
+  /** The stage canvas can be replaced (low-latency setting); listeners move with it. */
+  bind(el: HTMLCanvasElement) {
+    this.off?.();
+    this.el = el;
     el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', (e) => this.down(e));
-    el.addEventListener('pointermove', (e) => this.move(e));
-    el.addEventListener('pointerup', (e) => this.up(e));
-    el.addEventListener('pointercancel', (e) => this.up(e));
-    el.addEventListener('pointerleave', () => { this.ed.hover = null; this.ed.view.requestRender(); });
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
-    el.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
-    for (const t of ['touchstart', 'touchmove', 'gesturestart', 'gesturechange']) {
-      el.addEventListener(t, (e) => e.preventDefault(), { passive: false });
-    }
+    const on = <K extends keyof HTMLElementEventMap>(t: K, fn: (e: HTMLElementEventMap[K]) => void, opts?: AddEventListenerOptions) => {
+      el.addEventListener(t, fn, opts);
+      return () => el.removeEventListener(t, fn, opts);
+    };
+    const offs = [
+      on('pointerdown', (e) => this.down(e)),
+      on('pointermove', (e) => this.move(e)),
+      on('pointerup', (e) => this.up(e)),
+      on('pointercancel', (e) => this.up(e)),
+      on('pointerleave', () => { this.ed.hover = null; this.ed.view.requestRender(); }),
+      on('contextmenu', (e) => e.preventDefault()),
+      on('wheel', (e) => this.wheel(e), { passive: false }),
+      ...(['touchstart', 'touchmove', 'gesturestart', 'gesturechange'] as const).map((t) => on(t as 'touchstart', (e) => e.preventDefault(), { passive: false })),
+    ];
+    this.off = () => { for (const f of offs) f(); };
   }
 
   private info(e: PointerEvent, r: DOMRect = this.el.getBoundingClientRect()): PointerInfo {
@@ -40,13 +63,23 @@ export class InputController {
     const d = this.ed.view.viewport.toDoc(sx, sy);
     const type = (e.pointerType === 'pen' || e.pointerType === 'touch' ? e.pointerType : 'mouse') as PointerInfo['type'];
     let p = 1;
+    const tiltX = e.tiltX || 0, tiltY = e.tiltY || 0;
+    // Safari and Chrome report altitude/azimuth; everything else only the tilts, which give the same lean.
+    const pe = e as PointerEvent & { altitudeAngle?: number; azimuthAngle?: number };
+    let altitude = pe.altitudeAngle ?? Math.PI / 2, azimuth = pe.azimuthAngle ?? 0;
+    if (pe.altitudeAngle === undefined && (tiltX || tiltY)) {
+      const tx = Math.tan((tiltX * Math.PI) / 180), ty = Math.tan((tiltY * Math.PI) / 180);
+      altitude = Math.atan(1 / Math.hypot(tx, ty));
+      azimuth = (Math.atan2(ty, tx) + Math.PI * 2) % (Math.PI * 2);
+    }
     if (type === 'pen') {
       // Some drivers report 0 pressure on the first sample.
       p = e.pressure > 0 ? e.pressure : this.lastPressure;
       this.lastPressure = p;
       p = pressureMap(this.ed.prefs, p);
     }
-    return { x: d.x, y: d.y, sx, sy, pressure: p, type, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
+    this.ed.pen = { type, pressure: e.pressure, tiltX, tiltY, altitude, azimuth, at: e.timeStamp };
+    return { x: d.x, y: d.y, sx, sy, pressure: p, type, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey, tiltX, tiltY, altitude, azimuth };
   }
 
   private get tool() {
@@ -112,10 +145,14 @@ export class InputController {
     const n = this.touches.size;
     if (n === 1) this.tap = { t0: performance.now(), max: 1, moved: false };
     else if (this.tap) this.tap.max = Math.max(this.tap.max, n);
+    this.endHold();
 
     if (n === 1 && this.ed.prefs.fingerDraws && !this.ed.readOnly && this.toolPointer === null) {
       this.startTool(e);
       return;
+    }
+    if (n === 1 && this.toolPointer === null && !this.ed.readOnly) {
+      this.hold = { id: e.pointerId, picking: false, timer: window.setTimeout(() => this.startPick(e), HOLD_MS) };
     }
     if (this.toolPointer !== null && this.toolType === 'touch') {
       // Second finger: a gesture. Drop a stroke that just started, keep a long one.
@@ -132,6 +169,23 @@ export class InputController {
       ids,
       pts: ids.map((id) => this.local(this.touches.get(id)!)),
     };
+  }
+
+  /** The finger stayed put: pick colours under it until it lifts. */
+  private startPick(e: PointerEvent) {
+    const hd = this.hold;
+    if (!hd || this.toolPointer !== null) return;
+    hd.picking = true;
+    this.tap = null;
+    this.gesture = null;
+    this.ed.tools.eyedropper.down(this.info(e));
+    this.ed.view.requestRender();
+  }
+
+  private endHold() {
+    if (!this.hold) return;
+    clearTimeout(this.hold.timer);
+    this.hold = null;
   }
 
   private local(t: { x: number; y: number }) {
@@ -151,12 +205,21 @@ export class InputController {
       const r = this.el.getBoundingClientRect(); // once per event, not per coalesced sample
       for (const ce of events.length ? events : [e]) if (this.started(ce)) this.activeTool.move(this.info(ce, r));
       const p = this.info(e, r), at = this.activeTool.pen?.() ?? p;
+      if (this.activeTool.predict && !this.pendingDown) {
+        const ahead = e.getPredictedEvents?.() ?? [];
+        this.activeTool.predict(ahead.map((pe) => this.info(pe, r)));
+      }
       this.ed.sendCursor(at.x, at.y, true);
       return;
     }
     const t = this.touches.get(e.pointerId);
     if (t) {
       t.x = e.clientX; t.y = e.clientY;
+      const hd = this.hold;
+      if (hd?.id === e.pointerId) {
+        if (hd.picking) { this.ed.tools.eyedropper.move(this.info(e)); return; }
+        if (Math.hypot(t.x - t.x0, t.y - t.y0) > HOLD_SLOP) this.endHold();
+      }
       if (this.tap && Math.hypot(t.x - t.x0, t.y - t.y0) > 12) this.tap.moved = true;
       if (this.gesture) this.updateGesture();
       return;
@@ -204,6 +267,17 @@ export class InputController {
       m = new DOMMatrix().translateSelf(c1.x, c1.y).rotateSelf((ang * 180) / Math.PI).scaleSelf(d1 / d0).translateSelf(-c0.x, -c0.y);
     }
     vp.setFromMatrix(m.multiplySelf(g.m0));
+    if (cur.length === 2) this.snapRotation(cur[0], cur[1]);
+  }
+
+  /** Close to upright (or a quarter turn), the canvas settles exactly there. */
+  private snapRotation(a: { x: number; y: number }, b: { x: number; y: number }) {
+    const vp = this.ed.view.viewport, q = Math.PI / 2;
+    const near = Math.round(vp.rot / q) * q, d = near - vp.rot;
+    if (!d || Math.abs(d) > (SNAP_DEG * Math.PI) / 180) return;
+    const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    vp.setFromMatrix(new DOMMatrix().translateSelf(c.x, c.y).rotateSelf((d * 180) / Math.PI).translateSelf(-c.x, -c.y).multiplySelf(vp.matrix()));
+    vp.rot = near;
   }
 
   private up(e: PointerEvent) {
@@ -218,6 +292,10 @@ export class InputController {
     }
     if (!this.touches.has(e.pointerId)) return;
     this.touches.delete(e.pointerId);
+    if (this.hold?.id === e.pointerId) {
+      if (this.hold.picking) { this.ed.tools.eyedropper.up(this.info(e)); this.ed.view.requestRender(); }
+      this.endHold();
+    }
     if (this.touches.size === 0) {
       const tap = this.tap;
       this.tap = null;
@@ -225,6 +303,7 @@ export class InputController {
       if (tap && !tap.moved && performance.now() - tap.t0 < 350) {
         if (tap.max === 2) this.ed.undo();
         else if (tap.max === 3) this.ed.redo();
+        else if (tap.max === 4) this.onGesture('hideUI');
       }
     } else if (this.gesture) {
       this.startGesture();

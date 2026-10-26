@@ -32,7 +32,26 @@ const r = await page.evaluate(async () => {
   c.dispatchEvent(new PointerEvent('pointerup', { pointerId: 9, pointerType: 'pen', clientX: 300, clientY: 300, bubbles: true }));
   const n = ed.doc.log.length;
   fire('pointerdown', 1, 300, 500); for (let i = 0; i < 10; i++) fire('pointermove', 1, 300 + i * 10, 500); fire('pointerup', 1, 400, 500);
-  return { afterStroke, z0, z1, rot, canUndo, undone, redone: ed.doc.history.canUndo, fingerIgnoredAfterPen: ed.doc.log.length === n };
+  // four-finger tap hides the UI, and again shows it
+  const four = async () => { for (let i = 1; i <= 4; i++) fire('pointerdown', i, 400 + i * 50, 400); await wait(60); for (let i = 1; i <= 4; i++) fire('pointerup', i, 400 + i * 50, 400); await wait(20); };
+  await four(); const hidden = document.body.classList.contains('ui-hidden'); await four(); const shown = !document.body.classList.contains('ui-hidden');
+  // a finger held still picks the colour under it: the stroke drawn at the start was dark on white
+  ed.setColor('#ff0000');
+  const sample = () => { const b = ed.layer.surface.contentBounds(); return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; };
+  const s = ed.view.viewport.toScreen(sample().x, sample().y), rc = c.getBoundingClientRect();
+  fire('pointerdown', 1, rc.left + s.x, rc.top + s.y); await wait(600);
+  const picking = ed.color !== '#ff0000'; fire('pointerup', 1, rc.left + s.x, rc.top + s.y); await wait(20);
+  const picked = ed.color;
+  // a pinch that ends within a few degrees of upright snaps to exactly 0
+  ed.view.viewport.rot = 0; ed.view.viewport.onChange();
+  fire('pointerdown', 1, 500, 400); fire('pointerdown', 2, 600, 400);
+  for (let i = 1; i <= 5; i++) { fire('pointermove', 1, 500 + i * 4, 400); fire('pointermove', 2, 600 + i * 4, 400 + i); }
+  fire('pointerup', 1, 520, 400); fire('pointerup', 2, 620, 405);
+  const snapped = ed.view.viewport.rot === 0;
+  return { afterStroke, z0, z1, rot, canUndo, undone, redone: ed.doc.history.canUndo, fingerIgnoredAfterPen: ed.doc.log.length === n, hidden, shown, picking, picked, snapped };
 });
 console.log(r);
+const ok = r.hidden && r.shown && r.picking && r.picked !== '#ff0000' && r.snapped;
+console.log(ok ? 'ok   four-finger tap, hold to pick and rotation snap' : 'FAIL gestures');
 await browser.close();
+if (!ok) process.exit(1);
