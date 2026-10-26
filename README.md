@@ -90,6 +90,8 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   6+, `src/shared/abr.ts`: sampled tips, computed tips, scatter, texture, dual brush, colour dynamics) and
   Procreate `.brush` / `.brushset` (`src/shared/bplist.ts` unarchives the `Brush.archive` plist; `Shape.png`
   and `Grain.png` become the tip and texture). A set lands in a category named after the file.
+  Procreate is a trademark of Savage Interactive; Photoshop is a trademark of Adobe. Doodlehive reads
+  their file formats and is not affiliated with or endorsed by either.
 
 **Performance (v0.32)**
 - Fills, effects, PNG/JPG encoding, thumbnails and `.hivecanvas` zips run in a Web Worker
