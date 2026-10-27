@@ -197,6 +197,27 @@ await bob.waitForSelector('.toast:has-text("mentioned you")', { timeout: 3000 })
 check(await alice.locator('.chat-msg.mentioned').count() === 0, 'Alice’s own message is not highlighted for her');
 await bob.screenshot({ path: `${out}/03a-bob-mentioned.png` });
 
+// ---- The chat is a window: drag it by its bar, in both layouts ----
+await alice.locator('canvas.stage').hover();
+await alice.keyboard.press('Enter');
+const chatHead = alice.locator('.chat-head');
+check(await chatHead.isVisible(), 'the open chat has a bar to drag it by');
+const ch = await chatHead.boundingBox(), ch0 = await alice.locator('.chat').boundingBox();
+await alice.mouse.move(ch.x + 20, ch.y + ch.height / 2); await alice.mouse.down(); await alice.mouse.move(ch.x + 320, ch.y + ch.height / 2 - 200, { steps: 5 }); await alice.mouse.up();
+const ch1 = await alice.locator('.chat').boundingBox();
+check(Math.abs(ch1.x - ch0.x - 300) < 3 && Math.abs(ch1.y - ch0.y + 200) < 3, `dragging moves the chat (${Math.round(ch0.x)},${Math.round(ch0.y)} → ${Math.round(ch1.x)},${Math.round(ch1.y)})`);
+check(!!(await alice.evaluate(() => localStorage.getItem('doodlehive.chatPos'))), 'the spot is kept on this device');
+await alice.evaluate(() => { const a = window.doodlehive; a.ed.prefs.layout = 'studio'; a.applyPrefs(); });
+await alice.waitForTimeout(100);
+const ch2 = await alice.locator('.chat').boundingBox();
+check(await alice.locator('body.studio').count() === 1 && Math.abs(ch2.x - ch1.x) < 3 && Math.abs(ch2.y - ch1.y) < 3, 'the studio layout keeps the chat where it was put');
+await alice.locator('.chat [aria-label="Back to the corner"]').click();
+const ch3 = await alice.locator('.chat').boundingBox();
+check(Math.abs(ch3.x - ch0.x) < 3 && Math.abs(ch3.y - ch0.y) < 3, 'back to the corner');
+await alice.evaluate(() => { const a = window.doodlehive; a.ed.prefs.layout = 'classic'; a.applyPrefs(); });
+await alice.locator('.chat [aria-label="Close chat"]').click();
+check(await alice.locator('.chat-form').isHidden(), 'the bar’s X closes the chat');
+
 // ---- Friends from a chat picture; notifications in the menu ----
 await bob.locator('.chat-msg:has-text("hello bob") .chat-pic').click();
 await bob.waitForSelector('.modal .profile-card');

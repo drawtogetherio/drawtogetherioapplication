@@ -14,6 +14,7 @@ import { confirmDialog, exportDialog, modal } from './dialogs';
 import { blockPerson, unblockPerson } from './blocks';
 import { api } from '../net/api';
 import { EMOJI, emojiMatches, emojify } from '../shared/emoji';
+import { floating } from './float';
 
 const MENTION = /<@([\w-]+)>/g;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -27,6 +28,7 @@ const BUBBLE_LINGER = 1200;
 export class RoomUI {
   readonly membersPanel = h('div.panel.members-panel');
   readonly chatEl: HTMLElement;
+  private chatReset: HTMLButtonElement;
   private chatLog = h('div.chat-log', { 'aria-live': 'polite' });
   private typingEl = h('div.chat-typing');
   private chatInput: HTMLInputElement;
@@ -49,7 +51,11 @@ export class RoomUI {
     this.chatInput = h('input.chat-input', { type: 'text', id: 'chat-input', maxlength: CHAT_MAX, placeholder: 'Say something…', autocomplete: 'off', 'aria-label': 'Chat message' });
     this.chatForm = h('form.chat-form', {}, this.chatInput, h('button.icon-btn', { type: 'submit', title: 'Send', 'aria-label': 'Send', html: icon('send', 18) }));
     this.chatForm.hidden = true;
-    this.chatEl = h('div.chat', { hidden: true }, this.chatLog, this.typingEl, this.suggest, this.chatForm);
+    this.chatReset = h('button.icon-btn.small', { type: 'button', title: 'Back to the corner', 'aria-label': 'Back to the corner', html: icon('undo', 14), hidden: true, onclick: () => win.reset() });
+    const head = h('div.chat-head', {}, h('span', {}, 'Chat'), h('span.row', {}, this.chatReset,
+      h('button.icon-btn.small', { type: 'button', title: 'Close chat', 'aria-label': 'Close chat', html: icon('x', 14), onclick: () => this.toggleChat(false) })));
+    this.chatEl = h('div.chat', { hidden: true }, head, this.chatLog, this.typingEl, this.suggest, this.chatForm);
+    const win = floating(this.chatEl, head, 'doodlehive.chatPos', { onMove: (moved) => { this.chatReset.hidden = !moved; } });
     this.chatForm.addEventListener('submit', (e) => { e.preventDefault(); this.sendChat(); });
     this.chatInput.addEventListener('input', () => { this.typing(this.chatInput.value.trim().length > 0); this.renderSuggest(); });
     this.chatInput.addEventListener('keydown', (e) => this.suggestKey(e));

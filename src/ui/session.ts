@@ -143,12 +143,22 @@ export class Session {
   }
 
   /** The grey start screen stays up until there is something to look at. */
-  private booted(text?: string) {
+  private booted() {
+    this.app.loading(null);
     const el = document.getElementById('boot');
     if (!el) return;
-    if (text) { el.lastElementChild!.textContent = text; return; }
     el.classList.add('out');
     setTimeout(() => el.remove(), 300);
+  }
+
+  /** Replay progress, 0..1: on the start screen while it is up, as a bar over the app after. */
+  private progress(f: number) {
+    const el = document.getElementById('boot');
+    if (!el) { this.app.loading(f); return; }
+    el.querySelector('span')!.textContent = `Loading… ${Math.round(f * 100)}%`;
+    const bar = el.querySelector<HTMLElement>('.bar')!;
+    bar.hidden = false;
+    (bar.firstElementChild as HTMLElement).style.width = `${Math.round(f * 100)}%`;
   }
 
   createNew() {
@@ -259,10 +269,10 @@ export class Session {
 
   /** Builds the canvas from its log; a log heavy with old undo pixels is rewritten as a snapshot. */
   private async loadCopy(copy: LocalCopy, ops: Op[]) {
-    this.booted('Opening…');
+    this.progress(0);
     const heavy = LocalCopy.heavy(ops);
     if (heavy && !document.getElementById('boot')) this.app.toast('Opening a big canvas. It gets smaller after this first time.');
-    const doc = await copy.toDoc(ops, (f) => this.booted(`Opening… ${Math.round(f * 100)}%`));
+    const doc = await copy.toDoc(ops, (f) => this.progress(f));
     if (heavy) await copy.replaceWith(doc.compactLog());
     return doc;
   }
@@ -335,7 +345,7 @@ export class Session {
       const name = manifest.name || (file.name ?? '').replace(/\.hivecanvas$/i, '') || 'Opened canvas';
       if (this.me.premium) { this.joinRoom((await api.importRoom(file, name, { ...DEFAULT_SHARE, visibility: 'private' })).id); return; }
       const copy = await LocalCopy.create(this.me.id, name, manifest.settings, { ...DEFAULT_SHARE, visibility: 'private' });
-      const doc = await copy.toDoc(ops);
+      const doc = await copy.toDoc(ops, (f) => this.progress(f));
       await copy.replaceWith(doc.log);
       this.startLocal(copy, doc);
     } catch (e) { this.app.toast((e as Error).message || 'That file couldn’t be opened.'); }
@@ -431,7 +441,7 @@ export class Session {
         if (e.first && opts.takeLocal) api.updateRoom(id, { ephemeral: true }).catch(() => {});
         this.syncCopy(room, this.local, !!opts.takeLocal);
       } else if (e.kind === 'progress') {
-        this.booted(`Loading… ${Math.round((100 * e.done) / e.total)}%`);
+        this.progress(e.done / e.total);
       } else if (e.kind === 'op') {
         this.scheduleThumb();
         this.local?.push(e.op);

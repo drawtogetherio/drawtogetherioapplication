@@ -150,7 +150,7 @@ export class Studio {
 }
 
 /** Follows one pointer on the document, so a frame that moves in the DOM mid-drag keeps getting events. */
-function track(e: PointerEvent, move: (ev: PointerEvent) => void, up: (ev: PointerEvent) => void) {
+export function track(e: PointerEvent, move: (ev: PointerEvent) => void, up: (ev: PointerEvent) => void) {
   const onMove = (ev: PointerEvent) => { if (ev.pointerId === e.pointerId) move(ev); };
   const onUp = (ev: PointerEvent) => {
     if (ev.pointerId !== e.pointerId) return;

@@ -96,6 +96,16 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   Procreate is a trademark of Savage Interactive; Photoshop is a trademark of Adobe. Doodlehive reads
   their file formats and is not affiliated with or endorsed by either.
 
+**Windows, loading bar, gestures (v0.34)**
+- The room **chat**, the **minimap** and the **reference** image are small windows: drag by the bar, and the
+  spot (and the reference's size, via its corner grip) is kept on the device in localStorage
+  (`src/ui/float.ts`); an undo arrow puts a window back in its corner. The minimap's X hides it
+  (Preferences → Layout turns it on again). The reference zooms with buttons, wheel or pinch, rotates by
+  twisting or a quarter-turn button, and swaps its image with the file button.
+- A **loading bar** shows a canvas replaying: on the start screen at first, then as a bar over the app when
+  another canvas is opened or a room joined (`Session.progress`, `App.loading`).
+- Preferences → **Gestures** lists every touch and pen gesture, next to Shortcuts.
+
 **Performance (v0.32)**
 - Fills, effects, PNG/JPG encoding, thumbnails and `.hivecanvas` zips run in a Web Worker
   (`src/engine/offload.ts`); the page falls back to doing them inline if the worker fails to start.

@@ -49,7 +49,7 @@ check(await banner.isHidden(), 'it stays closed after a reload');
 // ---- Groups ----
 await openPrefs();
 const groups = await page.locator('.pref-group').evaluateAll((els) => els.map((e) => e.textContent));
-check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Performance,Shortcuts,About', 'groups down the left: appearance, layout, canvas, pressure, performance, shortcuts, about');
+check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Performance,Shortcuts,Gestures,About', 'groups down the left: appearance, layout, canvas, pressure, performance, shortcuts, gestures, about');
 check((await page.locator('.pref-page h3').textContent()) === 'Appearance', 'opens on appearance');
 
 // ---- Performance ----
@@ -106,6 +106,11 @@ await page.mouse.move(cb.x + cb.width / 2, cb.y + cb.height * 0.25, { steps: 8 }
 await page.mouse.up();
 check(await page.evaluate(() => window.doodlehive.ed.prefs.pressureCurve[3] > 0.65), 'dragging moves it');
 await page.screenshot({ path: `${out}/02-pressure.png` });
+
+// ---- Gestures ----
+await group('Gestures');
+const gestures = await page.locator('.pref-row.gesture').allTextContents();
+check(gestures.length >= 10 && gestures.some((g) => g.startsWith('Two-finger tap')) && gestures.some((g) => g.startsWith('Reference window')), `Gestures lists what fingers and the pen can do (${gestures.length} rows)`);
 
 // ---- Shortcuts ----
 await group('Shortcuts');

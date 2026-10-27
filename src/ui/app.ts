@@ -80,6 +80,7 @@ export class App {
   colorBtn: HTMLButtonElement;
   private zoomLabel = h('button.zoom-label', { title: 'Fit to screen' });
   private toastEl = h('div.toast', { role: 'status' });
+  private loadEl = h('div.load-bar', { hidden: true, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('span'), h('div.track', {}, h('i')));
   private toastTimer = 0;
   readonly roomUI: RoomUI;
   readonly session: Session;
@@ -227,7 +228,7 @@ export class App {
     stage.append(this.minimap.el);
     this.studio = new Studio(ed, stage);
 
-    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, guidesPop, this.home.el, this.toastEl);
+    root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, guidesPop, this.home.el, this.loadEl, this.toastEl);
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
@@ -446,6 +447,16 @@ export class App {
       h('button.save-pill', { type: 'button', 'aria-label': text.label, html: icon(text.icon, 16) + (text.short ? `<span>${text.short}</span>` : '') }),
       h('div.hint', { role: 'tooltip' }, text.hint, kind === 'cache' ? h('a', { href: '/' }, 'Get the app') : null),
     );
+  }
+
+  /** The bar shown while a canvas is replayed; null hides it. */
+  loading(f: number | null) {
+    this.loadEl.hidden = f === null;
+    if (f === null) return;
+    const pct = Math.round(f * 100);
+    this.loadEl.setAttribute('aria-valuenow', String(pct));
+    this.loadEl.querySelector('span')!.textContent = `Opening canvas… ${pct}%`;
+    this.loadEl.querySelector<HTMLElement>('i')!.style.width = pct + '%';
   }
 
   async copyText(text: string, done: string) {

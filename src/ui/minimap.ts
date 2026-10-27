@@ -4,6 +4,8 @@ import { TILE } from '../core/tiles';
 import type { Editor } from '../editor';
 import { composite } from '../engine/compositor';
 import { h } from './dom';
+import { icon } from './icons';
+import { floating } from './float';
 
 const W = 176, H = 120, REDRAW_MS = 500;
 
@@ -11,7 +13,10 @@ const W = 176, H = 120, REDRAW_MS = 500;
 export class Minimap {
   private canvas = h('canvas.minimap-img');
   private frame = h('div.minimap-frame');
-  readonly el = h('div.minimap', { 'aria-label': 'Canvas overview' }, this.canvas, this.frame);
+  private reset = h('button.icon-btn.small', { type: 'button', title: 'Back to the corner', 'aria-label': 'Back to the corner', html: icon('undo', 12), hidden: true });
+  private head = h('div.minimap-head', {}, h('span', {}, 'Map'), h('span.row', {}, this.reset,
+    h('button.icon-btn.small', { type: 'button', title: 'Hide the minimap', 'aria-label': 'Hide the minimap', html: icon('x', 12) })));
+  readonly el = h('div.minimap', { 'aria-label': 'Canvas overview' }, this.head, this.canvas, this.frame);
   private area: Rect | null = null;
   private timer = 0;
 
@@ -21,8 +26,12 @@ export class Minimap {
       if (w === 'doc' || w === 'layers' || w.startsWith('pixels:')) this.schedule();
       else if (w === 'view') this.place();
     });
+    const win = floating(this.el, this.head, 'doodlehive.minimapPos', { onMove: (moved) => { this.reset.hidden = !moved; } });
+    this.reset.onclick = () => win.reset();
+    (this.head.lastElementChild!.lastElementChild as HTMLElement).onclick = () => { ed.prefs.minimap = false; this.el.hidden = true; ed.emit('prefs'); };
     let drag: { x: number; y: number } | null = null;
     this.el.addEventListener('pointerdown', (e) => {
+      if (this.head.contains(e.target as Node)) return;
       e.preventDefault();
       this.el.setPointerCapture(e.pointerId);
       drag = { x: e.clientX, y: e.clientY };

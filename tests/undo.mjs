@@ -125,6 +125,20 @@ check(c1[0] > c0[0] && c1[1] > c0[1], `clicking the map's corner recentres the v
 await ed((e) => { e.prefs.minimap = false; window.doodlehive.applyPrefs(); });
 check(await page.locator('.minimap').isHidden(), 'the preference hides it');
 await ed((e) => { e.prefs.minimap = true; window.doodlehive.applyPrefs(); });
+// It moves by its bar, remembers the spot, and goes back to the corner.
+const mh = await page.locator('.minimap-head').boundingBox(), m0 = await page.locator('.minimap').boundingBox();
+await page.mouse.move(mh.x + 20, mh.y + mh.height / 2); await page.mouse.down(); await page.mouse.move(mh.x + 20 - 200, mh.y + mh.height / 2 - 150, { steps: 5 }); await page.mouse.up();
+const m1 = await page.locator('.minimap').boundingBox();
+check(Math.abs(m1.x - (m0.x - 200)) < 3 && Math.abs(m1.y - (m0.y - 150)) < 3, `dragging the bar moves the minimap (${Math.round(m0.x)},${Math.round(m0.y)} → ${Math.round(m1.x)},${Math.round(m1.y)})`);
+check(!!(await page.evaluate(() => localStorage.getItem('doodlehive.minimapPos'))), 'the spot is kept on this device');
+const c2 = await ed((e) => [e.view.viewport.cx, e.view.viewport.cy]);
+check(c2[0] === c1[0] && c2[1] === c1[1], 'moving the minimap did not pan the view');
+await page.locator('.minimap [aria-label="Back to the corner"]').click();
+const m2 = await page.locator('.minimap').boundingBox();
+check(Math.abs(m2.x - m0.x) < 2 && Math.abs(m2.y - m0.y) < 2 && !(await page.evaluate(() => localStorage.getItem('doodlehive.minimapPos'))), 'back to the corner');
+await page.locator('.minimap [aria-label="Hide the minimap"]').click();
+check(await page.locator('.minimap').isHidden() && !(await ed((e) => e.prefs.minimap)), 'the X hides it through the preference');
+await ed((e) => { e.prefs.minimap = true; window.doodlehive.applyPrefs(); });
 
 await page.screenshot({ path: `${out}/01-undo.png` });
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);

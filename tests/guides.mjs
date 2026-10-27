@@ -158,6 +158,42 @@ const picked = await ed((e) => e.color);
 check(/^#ff0000$/i.test(picked), `eyedropper picks from the reference image (${picked})`);
 await m.click(rb.x + rb.width * 0.8, rb.y + rb.height / 2);
 check(/^#00ff00$/i.test(await ed((e) => e.color)), 'and the other half is green');
+// Rotate: a quarter turn puts the red half on top and the green below.
+await page.locator('.ref-head button[title="Rotate"]').click();
+await m.click(rb.x + rb.width / 2, rb.y + rb.height * 0.3);
+const top = await ed((e) => e.color);
+await m.click(rb.x + rb.width / 2, rb.y + rb.height * 0.7);
+check(/^#ff0000$/i.test(top) && /^#00ff00$/i.test(await ed((e) => e.color)), `rotating turns the image a quarter (${top} over ${await ed((e) => e.color)})`);
+await page.locator('.ref-head button[title="Rotate"]').click(); await page.locator('.ref-head button[title="Rotate"]').click(); await page.locator('.ref-head button[title="Rotate"]').click();
+// Zoom: fitted, the image fills the window; zoom out bares the panel grey at the edge, zoom in covers it again.
+await page.locator('.ref-head button[title="Fit"]').click();
+await page.locator('.ref-head button[title="Zoom out"]').click();
+await m.click(rb.x + 3, rb.y + rb.height / 2);
+const edge = await ed((e) => e.color);
+await page.locator('.ref-head button[title="Zoom in"]').click();
+await m.click(rb.x + 3, rb.y + rb.height / 2);
+check(/^#333333$/i.test(edge) && /^#ff0000$/i.test(await ed((e) => e.color)), `zoom out and in (${edge} → ${await ed((e) => e.color)})`);
+// Pinch: two pointers spreading apart zoom out again when they close.
+await page.evaluate(([x, y]) => {
+  const c = document.querySelector('.ref-canvas');
+  const ev = (type, id, px, py) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: px, clientY: py, bubbles: true, isPrimary: id === 1 }));
+  ev('pointerdown', 1, x - 60, y); ev('pointerdown', 2, x + 60, y);
+  ev('pointermove', 2, x + 30, y); ev('pointermove', 1, x - 30, y);
+  ev('pointerup', 1, x - 30, y); ev('pointerup', 2, x + 30, y);
+}, [rb.x + rb.width / 2, rb.y + rb.height / 2]);
+await m.click(rb.x + 3, rb.y + rb.height / 2);
+check(/^#333333$/i.test(await ed((e) => e.color)), 'a pinch zooms the reference');
+// Move by the bar and resize by the corner grip.
+const r0 = await ref.boundingBox(), hd = await page.locator('.ref-head').boundingBox();
+await m.move(hd.x + 30, hd.y + hd.height / 2); await m.down(); await m.move(hd.x + 80, hd.y + hd.height / 2 + 40, { steps: 4 }); await m.up();
+const r1 = await ref.boundingBox();
+check(Math.abs(r1.x - r0.x - 50) < 3 && Math.abs(r1.y - r0.y - 40) < 3, 'the reference window moves by its bar');
+const gp = await page.locator('.ref-resize').boundingBox();
+await m.move(gp.x + 7, gp.y + 7); await m.down(); await m.move(gp.x + 67, gp.y + 37, { steps: 4 }); await m.up();
+const r2 = await ref.boundingBox();
+check(Math.abs(r2.width - r1.width - 60) < 3 && Math.abs(r2.height - r1.height - 30) < 3, `the corner grip resizes it (${Math.round(r1.width)}×${Math.round(r1.height)} → ${Math.round(r2.width)}×${Math.round(r2.height)})`);
+const kept = JSON.parse(await page.evaluate(() => localStorage.getItem('doodlehive.refBox')));
+check(kept && kept.w === Math.round(r2.width) && kept.h === Math.round(r2.height), 'place and size are kept on this device');
 await page.screenshot({ path: `${out}/04-reference.png` });
 await page.locator('.ref-head button[title="Close"]').click();
 check(await ref.isHidden(), 'Close hides the panel');

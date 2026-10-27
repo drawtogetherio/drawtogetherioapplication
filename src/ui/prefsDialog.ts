@@ -11,7 +11,23 @@ import { describe } from './memory';
 import { penTestPad } from './penTest';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
-const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'About'] as const;
+const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'Gestures', 'About'] as const;
+
+/** Every touch and pen gesture the canvas understands, for the Gestures page. */
+const GESTURES: [string, string][] = [
+  ['Two fingers', 'Pan; pinch to zoom; twist to rotate (snaps near right angles)'],
+  ['Two-finger tap', 'Undo'],
+  ['Three-finger tap', 'Redo'],
+  ['Four-finger tap', 'Hide or show the UI'],
+  ['Touch and hold a finger', 'Pick the colour under it until you lift'],
+  ['One finger', 'Draws until a pen is used, then pans (Canvas → Draw with a finger)'],
+  ['Hold the pen still at the end of a stroke', 'QuickShape: the stroke snaps to a line, circle, arc or polyline'],
+  ['Pen barrel button or right click', 'Quick menu under the pointer'],
+  ['Scroll wheel', 'Pan; Ctrl or Alt + wheel zooms'],
+  ['R or Z + drag', 'Rotate or zoom the view'],
+  ['Reference window', 'Drag to pan; pinch or wheel to zoom; twist to rotate; eyedropper picks from it'],
+  ['Chat, minimap, reference', 'Drag by the bar to move; the corner grip resizes the reference'],
+];
 
 export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'Appearance') {
   const ed = app.ed, p = ed.prefs;
@@ -142,7 +158,9 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     return rows;
   };
 
-  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Performance: performance, Shortcuts: shortcuts, About: about };
+  const gestures = () => GESTURES.map(([g, what]) => h('div.pref-row.gesture', {}, h('strong', {}, g), h('span', {}, what)));
+
+  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Performance: performance, Shortcuts: shortcuts, Gestures: gestures, About: about };
   const page = h('div.pref-page');
   const nav = h('nav.pref-nav', { 'aria-label': 'Preference groups' });
   const show = (g: (typeof GROUPS)[number]) => {
