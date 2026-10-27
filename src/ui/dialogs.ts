@@ -11,7 +11,7 @@ export function modal(title: string, body: HTMLElement, actions: HTMLElement[], 
   const close = () => { overlay.remove(); onClose?.(); };
   const overlay = h('div.modal-overlay', {},
     h('div.modal', { role: 'dialog', 'aria-label': title },
-      h('div.modal-head', {}, h('h2', {}, title), closable ? h('button.icon-btn', { title: 'Close', 'aria-label': 'Close', html: icon('x', 18), onclick: close }) : null),
+      h('div.modal-head', {}, h('h2', {}, title), closable ? h('button.icon-btn', { title: 'Close', html: icon('x', 18), onclick: close }) : null),
       body,
       h('div.modal-actions', {}, ...actions),
     ),

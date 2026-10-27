@@ -11,7 +11,8 @@
   --accent: #fdb302;
   --accent-hover: #e5a200;
   --accent-soft: rgba(253, 179, 2, 0.18);
-  --accent-tint: #42361c;
+  /* Selected rows and cards: a quarter accent over the panel, so it works in light mode too. */
+  --accent-tint: color-mix(in srgb, var(--accent) 25%, var(--panel));
   --on-accent: #212021;
   --danger: #ff5a5f;
   --alert: #e5484d;
@@ -749,7 +750,7 @@ button.friend-row:hover { background: var(--panel-2); }
 .sec-all:hover { color: var(--text); background: var(--hover); }
 .home.guest .sec-all { display: none; }
 /* One section opened as a full list: the others step aside and its row wraps down the page. */
-.home.expanded .home-sec:not(.open), .home.expanded .start-card, .home.expanded .resume, .home.expanded .home-cards { display: none; }
+.home.expanded .home-sec:not(.open), .home.expanded .start-card, .home.expanded .resume, .home.expanded .home-cards, .home.expanded .ad-slot { display: none; }
 .home-sec.open .project-row { flex-wrap: wrap; overflow: visible; scroll-snap-type: none; }
 .resume { display: flex; align-items: center; gap: 10px; align-self: center; width: min(100%, 720px); padding: 8px 10px 8px 14px; border-radius: var(--r-lg); background: var(--panel); border: 1px solid var(--line); }
 .resume .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -768,6 +769,14 @@ button.friend-row:hover { background: var(--panel-2); }
 .start-btn:first-child { border-radius: var(--r-lg) 0 0 var(--r-lg); }
 .start-btn:last-child { border-radius: 0 var(--r-lg) var(--r-lg) 0; }
 .home-cards { display: flex; gap: 14px; flex-wrap: wrap; margin-top: auto; }
+.ad-slot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ad-slot:not([hidden]) + .home-cards { margin-top: 0; }
+.ad-head { display: flex; justify-content: space-between; width: min(100%, 728px); font-size: 11px; color: var(--muted); }
+.ad-head a { color: inherit; }
+.ad-head a:hover { color: var(--accent); }
+.ad-frame { display: block; width: min(100%, 728px); height: 90px; border: 0; border-radius: var(--r-md); background: var(--panel-2); }
+.ad-placeholder { display: grid; place-items: center; border: 1px dashed var(--line); color: var(--muted); font-size: 12px; }
+@media (max-width: 600px) { .ad-frame { height: 100px; } }
 .home-cards:empty { display: none; }
 .promo-card {
   display: flex; align-items: center; gap: 12px; flex: 1 1 260px; padding: 12px 14px; border-radius: var(--r-xl);
