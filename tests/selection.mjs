@@ -33,6 +33,18 @@ const inside = (x, y) => ed((e, p) => { const path = new Path2D(); const pts = e
 // Selections are given in document coordinates through the tool itself.
 await page.keyboard.press('m');
 await ed((e) => { e.settings.selectMode = 'rect'; e.emit('tool'); });
+// With the canvas turned, a dragged box still stands upright on screen.
+await ed((e) => { const vp = e.view.viewport; vp.rot = Math.PI / 6; vp.onChange(); });
+await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(640, 400, { steps: 4 }); await page.mouse.up();
+const corners = await ed((e) => { const M = e.view.viewport.matrix(), p = e.selection.pts, out = []; for (let i = 0; i < p.length; i += 2) { const q = M.transformPoint({ x: p[i], y: p[i + 1] }); out.push([q.x, q.y]); } return out; });
+const upright = corners.length === 4 && Math.abs(corners[0][0] - corners[3][0]) < 0.5 && Math.abs(corners[1][0] - corners[2][0]) < 0.5 && Math.abs(corners[0][1] - corners[1][1]) < 0.5 && Math.abs(corners[2][1] - corners[3][1]) < 0.5;
+check(upright, `rectangle select follows the screen on a rotated view (${corners.map((c) => c.map(Math.round)).join(' ')})`);
+await ed((e) => { e.settings.selectMode = 'ellipse'; e.emit('tool'); });
+await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(640, 400, { steps: 4 }); await page.mouse.up();
+const ell = await ed((e) => { const M = e.view.viewport.matrix(), p = e.selection.pts; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let i = 0; i < p.length; i += 2) { const q = M.transformPoint({ x: p[i], y: p[i + 1] }); x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); } return [x0, y0, x1, y1]; });
+const sb = await page.locator('canvas.stage').boundingBox();
+check(Math.abs(ell[0] + sb.x - 500) < 2 && Math.abs(ell[1] + sb.y - 300) < 2 && Math.abs(ell[2] + sb.x - 640) < 2 && Math.abs(ell[3] + sb.y - 400) < 2, `oval select fills the dragged screen box (${ell.map(Math.round)})`);
+await ed((e) => { const vp = e.view.viewport; vp.rot = 0; vp.onChange(); e.selection = null; e.settings.selectMode = 'rect'; e.emit('tool'); e.view.invalidate(null); });
 const setSel = (x0, y0, x1, y1) => ed((e, r) => e.tools.select.set({ pts: [r[0], r[1], r[2], r[1], r[2], r[3], r[0], r[3]] }), [x0, y0, x1, y1]);
 await setSel(800, 800, 1200, 1200);
 check((await sel()).n === 4, 'a rectangle selection');

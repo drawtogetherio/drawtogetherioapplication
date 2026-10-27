@@ -45,12 +45,18 @@ function saveMark(p: ProjectInfo): HTMLElement {
   return h(`span.save-mark.${kind}` as 'span', { title: t.hint, 'aria-label': t.label, html: icon(t.icon, 13) + (t.short ? `<span>${t.short}</span>` : '') });
 }
 
+const RECENT_MAX = 6;
+
 export class Home {
   readonly el = h('div.home', { hidden: true });
   private friendsEl = h('div.friends-list');
   private requestsEl = h('div.friend-requests');
   private recent = h('div.project-row');
+  private mine = h('div.project-row');
+  private mineSec = h('section.home-sec', { hidden: true }, h('h2', {}, 'My canvases'), this.mine);
   private shared = h('div.project-row');
+  private projects: ProjectInfo[] = [];
+  private visits: VisitInfo[] = [];
   private sharedSec = h('section.home-sec', { hidden: true }, h('h2', {}, 'Shared with you'), this.shared);
   private start = h('div.start-card');
   private promo = h('div.home-cards');
@@ -119,6 +125,7 @@ export class Home {
           this.start,
           this.resume,
           h('section.home-sec', {}, this.projectsHead, this.recent),
+          this.mineSec,
           this.sharedSec,
           this.promo,
         ),
@@ -453,7 +460,7 @@ export class Home {
     const me = this.app.ed.me!;
     clearInterval(this.timer);
     this.projectsHead.textContent = 'You’re a guest';
-    this.sharedSec.hidden = true;
+    this.sharedSec.hidden = this.mineSec.hidden = true;
     clear(this.recent);
     this.recent.append(h('div.guest-card', {},
       h('p', {}, 'You’re drawing as ', h('strong', {}, me.displayName), ' (@' + me.handle + ').'),
@@ -465,6 +472,15 @@ export class Home {
   }
 
   // ---- Projects ----
+
+  /** Recent: the last few canvases touched, yours and other people's, newest first. */
+  private renderRecent() {
+    const items = [...this.projects.map((p) => ({ at: p.updatedAt, el: () => this.projectTile(p) })), ...this.visits.map((v) => ({ at: v.at, el: () => this.visitTile(v) }))];
+    items.sort((a, b) => b.at - a.at);
+    clear(this.recent);
+    for (const it of items.slice(0, RECENT_MAX)) this.recent.append(it.el());
+    if (!items.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet.'));
+  }
 
   /** Server canvases and the ones kept in this browser, newest first. */
   async loadProjects() {
@@ -481,31 +497,38 @@ export class Home {
       list.push({ id: c.id, name: c.name, private: !c.room, visibility: c.room ? c.share.visibility : 'private', createdAt: c.createdAt, updatedAt: c.updatedAt, thumb, online: 0, local: true });
     }
     list.sort((a, b) => b.updatedAt - a.updatedAt);
-    clear(this.recent);
-    for (const p of list) this.recent.append(this.projectTile(p));
-    if (!list.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet.'));
+    this.projects = list;
+    clear(this.mine);
+    this.mineSec.hidden = !list.length;
+    for (const p of list) this.mine.append(this.projectTile(p));
+    this.renderRecent();
   }
 
   /** Rooms of other people you joined; open ones can be rejoined. */
   async loadVisits() {
     let visits: VisitInfo[] = [];
     try { visits = await api.visits(); } catch { /* shown empty */ }
+    this.visits = visits;
     clear(this.shared);
     this.sharedSec.hidden = !visits.length;
-    for (const v of visits) {
-      const who = v.owner?.displayName ?? 'Someone';
-      this.shared.append(h('div.project-tile', {},
-        h('button.tile-open', { type: 'button', 'aria-label': `Open ${v.name}`, onclick: () => this.app.session.joinRoom(v.id) },
-          this.thumb(v.thumb, v.online, v.private ? 'lock' : 'brush'),
-          h('span.tile-name', {}, v.name),
-          h('span.tile-meta', {}, v.owner ? avatarEl(v.owner, 16) : null, `${who} · ${v.online ? 'Open now' : timeAgo(v.at)}`)),
-      ));
-    }
+    for (const v of visits) this.shared.append(this.visitTile(v));
+    this.renderRecent();
+  }
+
+  private visitTile(v: VisitInfo): HTMLElement {
+    const who = v.owner?.displayName ?? 'Someone';
+    return h('div.project-tile', {},
+      h('button.tile-open', { type: 'button', 'aria-label': `Open ${v.name}`, onclick: () => this.app.session.joinRoom(v.id) },
+        this.thumb(v.thumb, v.online, v.private ? 'lock' : 'brush'),
+        h('span.tile-name', {}, v.name),
+        h('span.tile-meta', {}, v.owner ? avatarEl(v.owner, 16) : null, `${who} · ${v.online ? 'Open now' : timeAgo(v.at)}`)),
+    );
   }
 
   private thumb(src: string | null, online: number, blank: string): HTMLElement {
     const thumb = h('span.tile-thumb', {});
-    if (src) thumb.append(h('img', { src, alt: '', loading: 'lazy' }));
+    // The tile takes the canvas's own shape, within reason, instead of boxing it into a square.
+    if (src) { const img: HTMLImageElement = h('img', { src, alt: '', loading: 'lazy' }); img.onload = () => { thumb.style.aspectRatio = String(Math.max(0.6, Math.min(2, img.naturalWidth / img.naturalHeight))); }; thumb.append(img); }
     else thumb.append(h('span.tile-blank', { html: icon(blank, 28) }));
     if (online) thumb.append(h('span.live-pill', {}, `${online} drawing`));
     return thumb;

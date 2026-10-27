@@ -97,11 +97,17 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   their file formats and is not affiliated with or endorsed by either.
 
 **Windows, loading bar, gestures (v0.34)**
-- The room **chat**, the **minimap** and the **reference** image are small windows: drag by the bar, and the
-  spot (and the reference's size, via its corner grip) is kept on the device in localStorage
-  (`src/ui/float.ts`); an undo arrow puts a window back in its corner. The minimap's X hides it
-  (Preferences → Layout turns it on again). The reference zooms with buttons, wheel or pinch, rotates by
-  twisting or a quarter-turn button, and swaps its image with the file button.
+- The room **chat** and the **overview** window drag by their bar; the spot (and the overview's size, via
+  its corner grip) is kept on the device in localStorage (`src/ui/float.ts`); an undo arrow puts the chat
+  back in its corner. The overview (`src/ui/reference.ts`) has two tabs: **Canvas**, the minimap
+  (`src/ui/minimap.ts`, filling the window), and **Image**, a reference picture that zooms with buttons,
+  wheel or pinch, rotates by twisting or a quarter-turn button, and swaps with the file button. The image
+  and its framing are kept per canvas in IndexedDB (`refs` store) on the device. The X on the Canvas tab
+  turns the overview preference off (Preferences → Layout turns it on again).
+- Rectangle and oval selections stand upright on screen however the canvas is rotated
+  (`SelectTool.buildSelection` works in screen axes).
+- Home: **Recent** shows the last six canvases touched, yours and others'; **My canvases** lists all of
+  yours; **Shared with you** the rooms you visited. Tiles take each canvas's own aspect ratio.
 - A **loading bar** shows a canvas replaying: on the start screen at first, then as a bar over the app when
   another canvas is opened or a room joined (`Session.progress`, `App.loading`).
 - Preferences → **Gestures** lists every touch and pen gesture, next to Shortcuts.

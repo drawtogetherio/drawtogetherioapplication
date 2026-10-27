@@ -105,7 +105,7 @@ await page.selectOption('#canvas-preset', 'square');
 await page.getByText('Create canvas').click();
 check(await page.evaluate(() => document.body.classList.contains('left-handed')), 'left-handed pref survives a reload');
 check((await sideX()) > 640 && (await toolX()) < 640, 'left-handed: tools left, sliders right');
-check((await page.locator('.minimap').boundingBox()).x < 640, 'minimap moves to the left');
+check((await page.locator('.ref-panel').boundingBox()).x < 640, 'the overview panel moves to the left');
 await page.keyboard.press('l');
 check((await page.locator('.layers-pop').boundingBox()).x < 640, 'the layers popover opens by the tools');
 await page.keyboard.press('Escape');

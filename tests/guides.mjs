@@ -35,7 +35,7 @@ const log = () => ed((e) => e.doc.log.map((o) => o.t));
 await page.locator('.topbar button[title^="Guides"]').click();
 const pop = page.locator('.guides-pop');
 check(await pop.isVisible(), 'the Guides button opens its popover');
-for (const t of ['Symmetry', 'Grid', 'Rulers', 'Open reference image…']) check(await pop.getByText(t, { exact: false }).first().isVisible(), `popover shows ${t}`);
+for (const t of ['Symmetry', 'Grid', 'Rulers', 'Reference image…']) check(await pop.getByText(t, { exact: false }).first().isVisible(), `popover shows ${t}`);
 check((await page.locator('.topbar .bar-group:first-child .icon-btn:visible').count()) <= 8, 'top bar stays lean');
 
 // ---- Vertical symmetry mirrors a stroke ----
@@ -141,7 +141,9 @@ await page.keyboard.press('Control+d');
 // ---- Reference panel ----
 await ed((e) => { e.settings.guides.grid.mode = 'off'; e.settings.guides.grid.rulers = false; e.view.invalidate(null); });
 const ref = page.locator('.ref-panel');
-check(await ref.isHidden(), 'reference panel hidden by default');
+check(await ref.isVisible() && (await page.locator('.ref-tab.active').textContent()) === 'Canvas', 'the overview panel starts on the canvas map');
+// Offline canvases have no id of their own; give the panel one so the image can be kept.
+await page.evaluate(() => window.doodlehive.reference.bind('test-canvas'));
 // Load a red image through the panel's loader.
 await page.evaluate(async () => {
   const c = document.createElement('canvas'); c.width = 80; c.height = 60;
@@ -150,7 +152,7 @@ await page.evaluate(async () => {
   window.doodlehive.reference.load(new File([blob], 'ref.png', { type: 'image/png' }));
 });
 await page.waitForTimeout(300);
-check(await ref.isVisible(), 'loading an image shows the reference panel');
+check(await ref.isVisible() && (await page.locator('.ref-tab.active').textContent()) === 'Image' && await page.locator('.ref-canvas').isVisible(), 'loading an image switches the panel to the Image tab');
 const rb = await page.locator('.ref-canvas').boundingBox();
 await page.keyboard.press('i');
 await m.click(rb.x + rb.width * 0.25, rb.y + rb.height / 2);
@@ -165,15 +167,16 @@ const top = await ed((e) => e.color);
 await m.click(rb.x + rb.width / 2, rb.y + rb.height * 0.7);
 check(/^#ff0000$/i.test(top) && /^#00ff00$/i.test(await ed((e) => e.color)), `rotating turns the image a quarter (${top} over ${await ed((e) => e.color)})`);
 await page.locator('.ref-head button[title="Rotate"]').click(); await page.locator('.ref-head button[title="Rotate"]').click(); await page.locator('.ref-head button[title="Rotate"]').click();
-// Zoom: fitted, the image fills the window; zoom out bares the panel grey at the edge, zoom in covers it again.
+// Zoom: the image covers fewer pixels after zooming out, more after zooming in.
+const painted = () => page.evaluate(() => { const c = document.querySelector('.ref-canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] !== 0x33 || d[i + 1] !== 0x33 || d[i + 2] !== 0x33) n++; return n; });
 await page.locator('.ref-head button[title="Fit"]').click();
+const fitPx = await painted();
 await page.locator('.ref-head button[title="Zoom out"]').click();
-await m.click(rb.x + 3, rb.y + rb.height / 2);
-const edge = await ed((e) => e.color);
+const outPx = await painted();
 await page.locator('.ref-head button[title="Zoom in"]').click();
-await m.click(rb.x + 3, rb.y + rb.height / 2);
-check(/^#333333$/i.test(edge) && /^#ff0000$/i.test(await ed((e) => e.color)), `zoom out and in (${edge} → ${await ed((e) => e.color)})`);
-// Pinch: two pointers spreading apart zoom out again when they close.
+const inPx = await painted();
+check(outPx < fitPx * 0.8 && inPx > outPx * 1.3, `zoom out and in (${fitPx} → ${outPx} → ${inPx} px)`);
+// Pinch: two pointers closing in zoom out.
 await page.evaluate(([x, y]) => {
   const c = document.querySelector('.ref-canvas');
   const ev = (type, id, px, py) => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: px, clientY: py, bubbles: true, isPrimary: id === 1 }));
@@ -181,19 +184,32 @@ await page.evaluate(([x, y]) => {
   ev('pointermove', 2, x + 30, y); ev('pointermove', 1, x - 30, y);
   ev('pointerup', 1, x - 30, y); ev('pointerup', 2, x + 30, y);
 }, [rb.x + rb.width / 2, rb.y + rb.height / 2]);
-await m.click(rb.x + 3, rb.y + rb.height / 2);
-check(/^#333333$/i.test(await ed((e) => e.color)), 'a pinch zooms the reference');
+check((await painted()) < inPx * 0.6, 'a pinch zooms the reference');
 // Move by the bar and resize by the corner grip.
-const r0 = await ref.boundingBox(), hd = await page.locator('.ref-head').boundingBox();
-await m.move(hd.x + 30, hd.y + hd.height / 2); await m.down(); await m.move(hd.x + 80, hd.y + hd.height / 2 + 40, { steps: 4 }); await m.up();
+const r0 = await ref.boundingBox(), hd = await page.locator('.ref-head .grow').boundingBox();
+await m.move(hd.x + hd.width / 2, hd.y + hd.height / 2); await m.down(); await m.move(hd.x + hd.width / 2 - 50, hd.y + hd.height / 2 - 40, { steps: 4 }); await m.up();
 const r1 = await ref.boundingBox();
-check(Math.abs(r1.x - r0.x - 50) < 3 && Math.abs(r1.y - r0.y - 40) < 3, 'the reference window moves by its bar');
+check(Math.abs(r1.x - r0.x + 50) < 3 && Math.abs(r1.y - r0.y + 40) < 3, 'the overview window moves by its bar');
 const gp = await page.locator('.ref-resize').boundingBox();
 await m.move(gp.x + 7, gp.y + 7); await m.down(); await m.move(gp.x + 67, gp.y + 37, { steps: 4 }); await m.up();
 const r2 = await ref.boundingBox();
 check(Math.abs(r2.width - r1.width - 60) < 3 && Math.abs(r2.height - r1.height - 30) < 3, `the corner grip resizes it (${Math.round(r1.width)}×${Math.round(r1.height)} → ${Math.round(r2.width)}×${Math.round(r2.height)})`);
 const kept = JSON.parse(await page.evaluate(() => localStorage.getItem('doodlehive.refBox')));
 check(kept && kept.w === Math.round(r2.width) && kept.h === Math.round(r2.height), 'place and size are kept on this device');
+// The image belongs to this canvas: another canvas has none, and coming back restores it.
+const key = 'test-canvas';
+await page.waitForTimeout(600);
+await page.evaluate(() => window.doodlehive.reference.bind('some-other-canvas'));
+await m.click(rb.x + rb.width / 2, rb.y + rb.height / 2);
+const none = await ed((e) => e.color);
+await page.evaluate((k) => window.doodlehive.reference.bind(k), key);
+await page.waitForTimeout(400);
+await m.click(rb.x + rb.width / 2, rb.y + rb.height / 2);
+check(/^#333333$/i.test(none) && !/^#333333$/i.test(await ed((e) => e.color)), `the reference is per canvas, kept on the device (${none} → ${await ed((e) => e.color)})`);
+// Canvas tab shows the map again; the X there is just a close while an image is loaded.
+await page.locator('.ref-tab', { hasText: 'Canvas' }).click();
+check(await page.locator('.minimap').isVisible() && await page.locator('.ref-canvas').isHidden(), 'the Canvas tab shows the map');
+await page.locator('.ref-tab', { hasText: 'Image' }).click();
 await page.screenshot({ path: `${out}/04-reference.png` });
 await page.locator('.ref-head button[title="Close"]').click();
 check(await ref.isHidden(), 'Close hides the panel');

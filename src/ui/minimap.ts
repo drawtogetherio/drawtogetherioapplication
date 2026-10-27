@@ -4,34 +4,24 @@ import { TILE } from '../core/tiles';
 import type { Editor } from '../editor';
 import { composite } from '../engine/compositor';
 import { h } from './dom';
-import { icon } from './icons';
-import { floating } from './float';
 
-const W = 176, H = 120, REDRAW_MS = 500;
+const REDRAW_MS = 500;
 
-/** The whole drawing in a corner with the screen's window on it; drag the window to pan. */
+/** The whole drawing with the screen's window on it, filling the overview panel; drag the window to pan, tap to recentre. */
 export class Minimap {
   private canvas = h('canvas.minimap-img');
   private frame = h('div.minimap-frame');
-  private reset = h('button.icon-btn.small', { type: 'button', title: 'Back to the corner', 'aria-label': 'Back to the corner', html: icon('undo', 12), hidden: true });
-  private head = h('div.minimap-head', {}, h('span', {}, 'Map'), h('span.row', {}, this.reset,
-    h('button.icon-btn.small', { type: 'button', title: 'Hide the minimap', 'aria-label': 'Hide the minimap', html: icon('x', 12) })));
-  readonly el = h('div.minimap', { 'aria-label': 'Canvas overview' }, this.head, this.canvas, this.frame);
+  readonly el = h('div.minimap', { 'aria-label': 'Canvas overview' }, this.canvas, this.frame);
   private area: Rect | null = null;
   private timer = 0;
 
   constructor(private ed: Editor) {
-    this.canvas.width = W * 2; this.canvas.height = H * 2;
     ed.on((w) => {
       if (w === 'doc' || w === 'layers' || w.startsWith('pixels:')) this.schedule();
       else if (w === 'view') this.place();
     });
-    const win = floating(this.el, this.head, 'doodlehive.minimapPos', { onMove: (moved) => { this.reset.hidden = !moved; } });
-    this.reset.onclick = () => win.reset();
-    (this.head.lastElementChild!.lastElementChild as HTMLElement).onclick = () => { ed.prefs.minimap = false; this.el.hidden = true; ed.emit('prefs'); };
     let drag: { x: number; y: number } | null = null;
     this.el.addEventListener('pointerdown', (e) => {
-      if (this.head.contains(e.target as Node)) return;
       e.preventDefault();
       this.el.setPointerCapture(e.pointerId);
       drag = { x: e.clientX, y: e.clientY };
@@ -54,8 +44,13 @@ export class Minimap {
     this.timer = window.setTimeout(() => { this.timer = 0; this.draw(); }, REDRAW_MS);
   }
 
+  /** Redraws now, e.g. after the panel holding it changed size. */
+  refresh() { clearTimeout(this.timer); this.timer = 0; this.draw(); }
+
+  private get size() { return { w: Math.max(40, this.el.clientWidth - 8), h: Math.max(30, this.el.clientHeight - 8) }; }
+
   /** Screen pixels per document pixel on the map. */
-  private scale() { return this.area ? Math.min(W / this.area.w, H / this.area.h) : 1; }
+  private scale() { const { w, h } = this.size; return this.area ? Math.min(w / this.area.w, h / this.area.h) : 1; }
 
   private centerAt(e: PointerEvent) {
     if (!this.area) return;
@@ -89,9 +84,9 @@ export class Minimap {
   place() {
     const a = this.area;
     if (!a) return;
-    const vp = this.ed.view.viewport, s = this.scale();
+    const vp = this.ed.view.viewport, s = this.scale(), c = this.canvas;
     const w = (vp.w / vp.zoom) * s, hh = (vp.h / vp.zoom) * s, f = this.frame.style;
-    f.left = `${(vp.cx - a.x) * s - w / 2}px`; f.top = `${(vp.cy - a.y) * s - hh / 2}px`;
+    f.left = `${c.offsetLeft + (vp.cx - a.x) * s - w / 2}px`; f.top = `${c.offsetTop + (vp.cy - a.y) * s - hh / 2}px`;
     f.width = `${w}px`; f.height = `${hh}px`;
     f.transform = `rotate(${-vp.rot}rad)`;
   }

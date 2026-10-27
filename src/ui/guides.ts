@@ -160,8 +160,9 @@ export function guidesPanel(app: App): HTMLElement {
       g.grid.mode !== 'off' ? new Slider({ min: 4, max: 512, value: g.grid.size, label: 'Size', format: (v) => Math.round(v) + 'px', onInput: (v) => { g.grid.size = Math.round(v); ed.view.invalidate(null); }, step: 1 }).el : null,
       g.grid.mode !== 'off' ? toggle('Snap shapes and selections to it', () => g.grid.snap, (v) => { g.grid.snap = v; }) : null,
       toggle('Rulers', () => g.grid.rulers, (v) => { g.grid.rulers = v; }),
-      h('div.pref-sub', {}, 'Reference'),
-      h('button.btn.small', { type: 'button', onclick: () => app.reference.open() }, 'Open reference image…'),
+      h('div.pref-sub', {}, 'Overview window'),
+      h('div.row', {}, h('button.btn.small', { type: 'button', onclick: () => app.reference.show('canvas') }, 'Canvas map'),
+        h('button.btn.small', { type: 'button', onclick: () => app.reference.open() }, 'Reference image…')),
     ];
     body.replaceChildren(...rows.filter((r): r is HTMLElement => !!r));
   };

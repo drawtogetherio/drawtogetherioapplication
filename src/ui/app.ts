@@ -155,7 +155,8 @@ export class App {
       if (!guidesPop.hidden) guidesPop.replaceChildren(guidesPanel(this));
     }, '.edit-only');
     dismissOnOutside(guidesPop, [guidesBtn], () => { guidesPop.hidden = true; });
-    this.reference = new ReferencePanel(ed);
+    this.minimap = new Minimap(ed);
+    this.reference = new ReferencePanel(ed, this.minimap);
     stage.append(this.reference.el);
 
     const left = h('div.bar-group', {},
@@ -226,8 +227,6 @@ export class App {
     const historyBtn = this.historyBtn = btn('log', 'History', () => { historyPop.hidden = !historyPop.hidden; historyPanel.open = !historyPop.hidden; if (historyPanel.open) historyPanel.render(); });
     dismissOnOutside(historyPop, [historyBtn], () => { historyPop.hidden = true; historyPanel.open = false; });
     const sidebar = this.sidebar = h('aside.sidebar', {}, this.sliders[0].el, this.sliders[1].el, this.undoBtn, this.redoBtn, historyBtn);
-    this.minimap = new Minimap(ed);
-    stage.append(this.minimap.el);
     this.studio = new Studio(ed, stage);
 
     root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, guidesPop, this.home.el, this.loadEl, this.toastEl);
@@ -270,7 +269,7 @@ export class App {
     applyPressure(p, st.eraser);
     if (this.ed.room) this.ed.room.batchMs = p.remoteEvery * 1000;
     this.ed.view.setLowLatency(p.lowLatency);
-    this.minimap.el.hidden = !p.minimap;
+    this.reference.syncPref();
     const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
     for (const t of TOOLS) {
       const b = this.toolButtons.get(t.id)!;

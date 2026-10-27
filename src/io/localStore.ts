@@ -19,7 +19,7 @@ export interface LocalCanvas {
   thumb: Blob | null;
 }
 
-const DB = 'doodlehive', VERSION = 2;
+const DB = 'doodlehive', VERSION = 3;
 let dbp: Promise<IDBDatabase> | null = null;
 
 function open(): Promise<IDBDatabase> {
@@ -32,6 +32,7 @@ function open(): Promise<IDBDatabase> {
         d.createObjectStore('ops', { keyPath: ['canvas', 'seq'] });
       }
       if (e.oldVersion < 2) d.createObjectStore('assets'); // brush images by id
+      if (e.oldVersion < 3) d.createObjectStore('refs'); // reference image per canvas
     };
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);
@@ -109,9 +110,24 @@ export async function replaceOps(id: string, ops: Op[]) {
 export async function deleteCanvas(id: string) {
   if (native) return native.canvases.delete(id);
   const d = await open();
-  const tx = d.transaction(['ops', 'canvases'], 'readwrite');
+  const tx = d.transaction(['ops', 'canvases', 'refs'], 'readwrite');
   tx.objectStore('ops').delete(IDBKeyRange.bound([id, 0], [id, Infinity]));
   tx.objectStore('canvases').delete(id);
+  tx.objectStore('refs').delete(id);
+  await finished(tx);
+}
+
+/** The reference image a canvas was given on this device, with how it was framed. */
+export interface StoredRef { type: string; bytes: Uint8Array; scale: number; angle: number; cx: number; cy: number }
+
+export async function getRef(key: string): Promise<StoredRef | null> {
+  const d = await open();
+  return (await done(d.transaction('refs').objectStore('refs').get(key))) as StoredRef | undefined ?? null;
+}
+
+export async function putRef(key: string, ref: StoredRef | null) {
+  const d = await open(), tx = d.transaction('refs', 'readwrite');
+  if (ref) tx.objectStore('refs').put(ref, key); else tx.objectStore('refs').delete(key);
   await finished(tx);
 }
 

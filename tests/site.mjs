@@ -90,7 +90,7 @@ await ren.mouse.up();
 await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await ren.waitForSelector('.home:not([hidden]) .project-tile img', { timeout: 8000 })
   .then(() => check(true, 'canvas thumbnail on the home screen'), () => check(false, 'canvas thumbnail on the home screen'));
-check(await ren.locator('.project-tile .tile-name', { hasText: 'Dragon sketch' }).count() === 1, 'recent canvas listed by name');
+check(await ren.locator('.home-sec', { hasText: 'My canvases' }).locator('.tile-name', { hasText: 'Dragon sketch' }).count() === 1 && await ren.locator('.home-sec', { hasText: 'Recent' }).locator('.tile-name', { hasText: 'Dragon sketch' }).count() === 1, 'the canvas is listed under Recent and My canvases');
 
 // ---- Picture cropping ----
 // 400×200 picture: left half red, right half blue. Dragging it all the way right keeps only red.

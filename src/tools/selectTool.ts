@@ -244,18 +244,23 @@ export class SelectTool implements Tool {
       const r = rectFromPoints(pts);
       return pts.length >= 6 && r && r.w * z > 3 && r.h * z > 3 ? { pts } : null;
     }
-    const [x0, y0, x1, y1] = pts;
-    if (pts.length < 4 || Math.abs(x1 - x0) * z < 3 || Math.abs(y1 - y0) * z < 3) return null;
+    if (pts.length < 4) return null;
+    // Work in screen axes, so the box stands upright on screen however the canvas is turned.
+    const rot = this.ed.view.viewport.rot, upright = Math.abs(rot) < 1e-9, c = Math.cos(rot), s = Math.sin(rot);
+    const to = (x: number, y: number) => [x * c - y * s, x * s + y * c], back = (x: number, y: number) => [x * c + y * s, -x * s + y * c];
+    const [x0, y0] = to(pts[0], pts[1]), [x1, y1] = to(pts[2], pts[3]);
+    if (Math.abs(x1 - x0) * z < 3 || Math.abs(y1 - y0) * z < 3) return null;
     const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-    if (mode === 'rect') {
-      const X = Math.round(x), Y = Math.round(y), R = Math.round(x + w), B = Math.round(y + h);
-      return { pts: [X, Y, R, Y, R, B, X, B] };
-    }
     const out: number[] = [];
+    if (mode === 'rect') {
+      const r = upright ? Math.round : (v: number) => v, X = r(x), Y = r(y), R = r(x + w), B = r(y + h);
+      for (const [px, py] of [[X, Y], [R, Y], [R, B], [X, B]]) out.push(...back(px, py));
+      return { pts: out };
+    }
     const n = Math.max(24, Math.min(180, Math.round((w + h) / 6)));
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      out.push(x + w / 2 + Math.cos(a) * w / 2, y + h / 2 + Math.sin(a) * h / 2);
+      out.push(...back(x + w / 2 + Math.cos(a) * w / 2, y + h / 2 + Math.sin(a) * h / 2));
     }
     return { pts: out };
   }

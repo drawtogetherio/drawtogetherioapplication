@@ -176,7 +176,7 @@ if (heavyOps) {
   await pia.reload();
   await pia.waitForSelector('.home:not([hidden]) .project-tile');
   let t = Date.now();
-  await pia.locator('.tile-open', { hasText: 'Heavy canvas' }).click();
+  await pia.locator('.tile-open', { hasText: 'Heavy canvas' }).first().click();
   await pia.waitForFunction(() => window.doodlehive.session.local && window.doodlehive.ed.doc.layers.length > 0, null, { timeout: 300_000 });
   await dh(pia, (dh) => dh.session.local.flush());
   await pia.waitForTimeout(1000);
@@ -200,7 +200,7 @@ if (heavyOps) {
     window.fetch = (url, init) => { if (String(url).includes('/api/rooms/import')) window.__upload = init.body.size; return f(url, init); };
   });
   t = Date.now();
-  await pia.locator('.tile-open', { hasText: 'Heavy canvas' }).click();
+  await pia.locator('.tile-open', { hasText: 'Heavy canvas' }).first().click();
   await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open', null, { timeout: 300_000 });
   const upload = await pia.evaluate(() => window.__upload ?? 0);
   check(upload > 0 && upload < 48 * 1024 * 1024, `it moves to the server as a ${(upload / 1e6).toFixed(1)} MB .hivecanvas (${((Date.now() - t) / 1000).toFixed(0)} s)`);
@@ -216,7 +216,7 @@ if (heavyOps) {
   const sid = await seed(pia, refs.get('ren.jsonl'), 'Moved canvas');
   await pia.reload();
   await pia.waitForSelector('.home:not([hidden]) .project-tile');
-  await pia.locator('.tile-open', { hasText: 'Moved canvas' }).click();
+  await pia.locator('.tile-open', { hasText: 'Moved canvas' }).first().click();
   await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
   const c = await compare(pia, 'ren.jsonl');
   check(c.bad === 0 && !(await pia.evaluate(async (id) => !!(await (await import('/src/io/localStore.ts')).getCanvas(id)), sid)), 'a device canvas moves to the server as a .hivecanvas and looks the same');

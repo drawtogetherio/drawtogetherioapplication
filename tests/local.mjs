@@ -77,12 +77,13 @@ check(await strokes(ren) === 2, 'and opens it');
 await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await ren.waitForSelector('.home:not([hidden]) .project-tile img');
 check(await ren.locator('.resume').isHidden(), 'going home on purpose drops the offer');
-check(await ren.locator('.tile-meta', { hasText: 'On this device' }).count() === 1, 'home shows it as on this device, with a thumbnail');
-check(await ren.locator('.tile-meta .save-mark.cache').count() === 1, 'the tile carries the cache warning too');
+const mine = (pg) => pg.locator('.home-sec', { hasText: 'My canvases' });
+check(await mine(ren).locator('.tile-meta', { hasText: 'On this device' }).count() === 1, 'home shows it as on this device, with a thumbnail');
+check(await mine(ren).locator('.tile-meta .save-mark.cache').count() === 1, 'the tile carries the cache warning too');
 await ren.screenshot({ path: `${out}/01-home-local.png` });
 
 // ---- Properties ----
-await ren.locator('.tile-more').click();
+await ren.locator('.tile-more').first().click();
 await ren.locator('.tile-pop .menu-item', { hasText: 'Properties' }).click();
 await ren.waitForSelector('.modal .props');
 check(await ren.locator('.modal .prop-value', { hasText: 'In this browser’s cache' }).count() === 1, 'properties say the canvas is in the browser cache');
@@ -95,7 +96,7 @@ const fname = await dl;
 check(/\.hivecanvas$/.test(fname), `Save as file downloads a .hivecanvas (${fname})`);
 
 // ---- Share it: a live-only room seeded with the drawing ----
-await ren.locator('.tile-open').click();
+await ren.locator('.tile-open').first().click();
 await ren.waitForFunction(() => window.doodlehive.session.local && window.doodlehive.ed.doc.log.length > 2);
 await ren.locator('.share-btn').click();
 await ren.locator('.share-choice[data-v="open"]').click();
@@ -129,7 +130,7 @@ check(/\?canvas=/.test(bob.url()) && (await strokes(bob)) === 4, 'the member car
 await bob.screenshot({ path: `${out}/03-member-after-close.png` });
 const gone = await ren.evaluate(async (id) => (await fetch('/api/rooms/' + id)).status, info.id);
 check(gone === 404, 'the room is gone from the server');
-await ren.locator('.tile-open').click();
+await ren.locator('.tile-open').first().click();
 await ren.waitForFunction(() => window.doodlehive.session.local && !window.doodlehive.ed.room && window.doodlehive.ed.doc.log.length > 4);
 check(await strokes(ren) === 4 && !(await dh(ren, (dh) => dh.session.local.meta.room)), 'the host’s copy has everyone’s strokes and no room link');
 // A log heavy with undo pixels is squashed to a snapshot once the pen is up (threshold lowered for the test).
@@ -147,7 +148,7 @@ check(await dh(ren, (dh) => dh.ed.doc.log.some((o) => o.t === 'tiles') && !dh.ed
 await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await bob.locator('[aria-label=\"Menu\"]').click(); await bob.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
 await bob.waitForSelector('.home:not([hidden]) .project-tile');
-check(await bob.locator('.tile-name', { hasText: 'Fox study' }).count() === 1, 'the member’s home lists the copy');
+check(await mine(bob).locator('.tile-name', { hasText: 'Fox study' }).count() === 1, 'the member’s home lists the copy');
 
 // ---- Premium: canvases live on the server ----
 const [pia, piaHandle] = await person('Pia');
@@ -171,8 +172,8 @@ check(await projects(pia) === 1, 'listed as a server canvas');
 admin(`premium ${piaHandle} off`);
 await pia.goto(base + '/app');
 await pia.waitForSelector('.home:not([hidden]) .project-tile');
-check(await pia.locator('.tile-meta', { hasText: 'On the server' }).count() === 1, 'a free account sees the old canvas as on the server');
-await pia.locator('.tile-open').click();
+check(await mine(pia).locator('.tile-meta', { hasText: 'On the server' }).count() === 1, 'a free account sees the old canvas as on the server');
+await pia.locator('.tile-open').first().click();
 await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open' && window.doodlehive.session.local);
 await pia.waitForFunction(() => window.doodlehive.ed.room.info.ephemeral);
 check(await projects(pia) === 0 && (await strokes(pia)) === 1, 'opening it moves the drawing to the device');

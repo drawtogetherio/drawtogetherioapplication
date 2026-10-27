@@ -258,6 +258,7 @@ export class Session {
     this.app.home.hide();
     this.setUrl({ canvas: copy.meta.id });
     this.ed.setDoc(doc);
+    this.app.reference.bind(copy.meta.id);
     this.ed.fitView(savedTurn(copy.meta.id));
     this.attachCopy(copy);
     this.remember({ canvas: copy.meta.id, name: copy.meta.name });
@@ -435,6 +436,7 @@ export class Session {
         this.ed.ensureOwnLayer();
         if (!room.spectator) lapse.attach(e.doc, opts.copy?.meta.id ?? this.local?.meta.id ?? roomLapseKey(id), room.info?.name ?? '');
         if (e.first && !watch) this.remember({ room: id, name: room.info?.name ?? '' });
+        if (e.first) this.app.reference.bind(id);
         this.app.refreshRoom();
         this.booted();
         if (e.first && (room.spectator || !room.info?.private)) this.app.toast(`${room.spectator ? 'Watching' : 'Joined'} ${room.info?.name ?? 'room'}`);
@@ -516,6 +518,7 @@ export class Session {
       this.app.roomUI.detach();
     }
     this.ed.onOp = null;
+    this.app.reference.bind(null);
     const ending = this.local && this.local !== keep ? this.local.close() : null;
     this.local = keep;
     return Promise.all([saving, ending]);
