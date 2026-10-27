@@ -32,6 +32,9 @@ export class BrushTool implements Tool {
   /** QuickShape: the stroke snapped to a shape after the pen held still; moving on lets go of it. */
   private quick: { spec: ShapeSpec; buffer: TiledSurface; copies: { spec: ShapeSpec; buffer: TiledSurface }[]; sx: number; sy: number } | null = null;
   private holdTimer = 0;
+  /** Where the pen came to rest (screen px), and its latest sample: the hold lasts while it stays near. */
+  private holdAt: { x: number; y: number } | null = null;
+  private lastSample: PointerInfo | null = null;
   private live!: (buffer: TiledSurface) => NonNullable<Editor['view']['live']>;
 
   constructor(private ed: Editor, private erase: boolean) {}
@@ -61,6 +64,7 @@ export class BrushTool implements Tool {
       clip: this.ed.clipPath(), clipMask: this.ed.clipMask(), mask: this.ed.onMask,
     } as const);
     this.quick = null;
+    this.holdAt = null;
     this.ed.view.live = live(this.buffer);
     this.mirrors = symmetryMaps(this.ed).map((m, i) => {
       const buffer = new TiledSurface();
@@ -152,14 +156,22 @@ export class BrushTool implements Tool {
       if (mr) this.ed.view.invalidate(mr);
     }
     if (this.ed.room && !this.flushTimer) this.flushTimer = window.setTimeout(() => this.flush(), 33);
-    clearTimeout(this.holdTimer);
-    if (!this.erase && this.ed.prefs.quickShape) this.holdTimer = window.setTimeout(() => this.snapShape(p), HOLD_MS);
+    // An Apple Pencil resting on the glass still reports tiny moves and pressure changes: only moving
+    // off the spot where the pen came to rest restarts the wait.
+    this.lastSample = p;
+    const h = this.holdAt;
+    if (!this.erase && this.ed.prefs.quickShape && (!h || Math.hypot(p.sx - h.x, p.sy - h.y) > HOLD_SLOP)) {
+      clearTimeout(this.holdTimer);
+      this.holdAt = { x: p.sx, y: p.sy };
+      this.holdTimer = window.setTimeout(() => this.snapShape(this.lastSample ?? p), HOLD_MS);
+    }
   }
 
   /** Swaps the live stroke for the shape it looks like. */
   private snapShape(p: PointerInfo) {
     if (!this.buffer || this.quick) return;
     const spec = recognizeShape(this.pts, this.params.size, this.ed.color);
+    if (CANVAS_LOG) clog('quickshape', { samples: this.pts.length / 3, shape: spec?.shape ?? null });
     if (!spec) return;
     const buffer = new TiledSurface();
     renderShape(buffer, spec);
@@ -257,5 +269,5 @@ export class BrushTool implements Tool {
 const round = (v: number) => Math.round(v * 100) / 100;
 /** Rope length in screen px at the stabilizer's maximum. */
 const ROPE_MAX = 160;
-/** How long the pen holds still before QuickShape snaps the stroke. */
-const HOLD_MS = 650;
+/** How long the pen holds still before QuickShape snaps the stroke, and how far (screen px) it may drift meanwhile. */
+const HOLD_MS = 650, HOLD_SLOP = 8;
