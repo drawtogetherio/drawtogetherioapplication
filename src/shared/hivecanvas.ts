@@ -152,19 +152,6 @@ export function base64(d: Uint8Array): string {
   return s;
 }
 
-export function unbase64(s: string): Uint8Array {
-  const clean = s.replace(/=+$/, '');
-  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
-  let o = 0, n = 0, bits = 0;
-  for (const ch of clean) {
-    const v = B64.indexOf(ch);
-    if (v < 0) throw new HiveFileError('That file is damaged.');
-    n = (n << 6) | v; bits += 6;
-    if (bits >= 8) { bits -= 8; out[o++] = (n >> bits) & 255; }
-  }
-  return out.subarray(0, o);
-}
-
 export const isPng = (d: Uint8Array) => d.length > 8 && PNG_MAGIC.every((b, i) => d[i] === b);
 export const tileName = (key: string) => key.replace(',', '_') + '.png';
 export const tileKey = (file: string) => { const m = TILE_RE.exec(file); return m ? `${+m[1]},${+m[2]}` : null; };

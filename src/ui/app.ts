@@ -15,7 +15,7 @@ import { icon } from './icons';
 import { LayersPanel } from './layersPanel';
 import { Slider } from './slider';
 import { rectFromPoints, uid } from '../core/geom';
-import { featherPad } from '../engine/selection';
+import { MAX_FEATHER, featherPad } from '../engine/selection';
 import { RoomUI } from './roomUI';
 import { Session } from './session';
 import { MemoryMeter } from './memory';
@@ -937,7 +937,7 @@ export class App {
       return s.el;
     };
     const btn = (label: string, title: string, fn: () => void) => h('button.btn.small', { title, onclick: () => { fn(); this.renderOptions(); } }, label);
-    o.append(num('Feather', sel?.feather ?? st.selectFeather, 0, 64, (v) => { st.selectFeather = v; if (ed.selection) select.feather(v); }));
+    o.append(num('Feather', sel?.feather ?? st.selectFeather, 0, MAX_FEATHER, (v) => { st.selectFeather = v; if (ed.selection) select.feather(v); }));
     if (sel) o.append(
       num('By', st.selectGrow, 1, 64, (v) => { st.selectGrow = v; }),
       btn('Grow', 'Grow the selection', () => select.grow(st.selectGrow)),

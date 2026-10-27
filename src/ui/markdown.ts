@@ -1,12 +1,12 @@
 import './markdown.css';
 import { art, hasArt } from './art';
 import { hasIcon, icon } from './icons';
+import { esc } from '../site/common';
 
 // A small markdown renderer for What's new. Everything an admin types is escaped; only the tags below come out.
 // Extras: [accent]…[/accent] colours text with the theme accent (a whole block when on its own lines),
 // [icon:name] drops in an app icon, [art:name] a flat graphic (a figure when alone on a line).
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const safeHref = (u: string) => (/^(https?:\/\/|mailto:)/i.test(u) || /^\/(?![/\\])/.test(u) ? u : null);
 
 function span(s: string): string {

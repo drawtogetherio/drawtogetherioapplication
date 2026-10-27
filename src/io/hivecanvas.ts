@@ -14,9 +14,6 @@ import { ctx2d } from '../core/geom';
 
 export const HIVE_ACCEPT = `${HIVECANVAS_EXT},${HIVELAPSE_EXT}`;
 
-export const pngBytes = (c: HTMLCanvasElement) => new Promise<Uint8Array>((res, rej) =>
-  c.toBlob((b) => (b ? b.arrayBuffer().then((a) => res(new Uint8Array(a)), rej) : rej(new Error('Encoding failed'))), 'image/png'));
-
 /** Tiles go to the worker in batches to be PNG-encoded, so a big canvas doesn't hold the pen. */
 async function surfaceEntries(dir: string, s: TiledSurface): Promise<ZipEntry[]> {
   const out: ZipEntry[] = [], keys = [...s.tiles.keys()];

@@ -2,7 +2,6 @@ node_modules
 dist
 dist-single
 test-results
-preview
 
 server/.env
 server/data/

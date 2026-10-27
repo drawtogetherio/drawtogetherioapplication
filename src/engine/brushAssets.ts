@@ -17,7 +17,6 @@ export function assetServer(on: boolean) { server = on; onServer.clear(); }
 
 /** The decoded tip or texture, or null when it isn't here (the stroke falls back to a round tip). */
 export const assetImage = (id: string) => images.get(id) ?? null;
-export const assetBytes = (id: string) => bytesOf.get(id) ?? null;
 export const haveAssets = (ids: string[]) => ids.every((id) => images.has(id));
 
 async function sha(bytes: Uint8Array) {

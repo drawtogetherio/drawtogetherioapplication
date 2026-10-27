@@ -28,7 +28,7 @@ const FRIENDS_POLL_MS = 60_000;
 const VIS_LABEL: Record<Visibility, string> = { private: 'Just you', open: 'Open link', friends: 'Friends', unlisted: 'Unlisted' };
 const VIS_ICON: Record<Visibility, string> = { private: 'lock', open: 'link', friends: 'users', unlisted: 'eye' };
 
-export function timeAgo(t: number) {
+function timeAgo(t: number) {
   const s = Math.max(0, (Date.now() - t) / 1000);
   if (s < 60) return 'just now';
   const m = s / 60, hh = m / 60, d = hh / 24;
@@ -70,6 +70,7 @@ export class Home {
   private resume = h('div.resume', { hidden: true });
   private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
+  private friendsJson = '';
   private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 18) });
   private bellBadge = h('span.bell-badge', { hidden: true });
   private noticesPop = h('div.popover.notices-pop', { hidden: true });
@@ -393,7 +394,7 @@ export class Home {
       }
       const ic = n.kind === 'friend' ? 'userPlus' : n.kind === 'friend-accepted' ? 'users' : n.kind === 'invite' ? 'link' : 'sparkle';
       return h(`div.notice-row${n.read ? '' : '.unread'}` as 'div', {}, h('span.notice-icon', { html: icon(ic, 18) }),
-        h('span.notice-text', {}, n.text, h('small', {}, ago(n.at))), ...actions);
+        h('span.notice-text', {}, n.text, h('small', {}, timeAgo(n.at))), ...actions);
     });
     return rows.length ? rows : [h('p.notices-empty', {}, 'Nothing new')];
   }
@@ -405,6 +406,10 @@ export class Home {
   }
 
   private setFriends(f: FriendsList) {
+    // The list is polled every minute; leave the DOM alone when nothing changed.
+    const json = JSON.stringify(f);
+    if (json === this.friendsJson) return;
+    this.friendsJson = json;
     this.friends = f;
     this.renderFriends();
   }
@@ -670,13 +675,3 @@ export class Home {
   }
 }
 
-
-function ago(t: number): string {
-  const m = Math.round((Date.now() - t) / 60_000);
-  if (m < 1) return 'Just now';
-  if (m < 60) return `${m}m ago`;
-  const hrs = Math.round(m / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const d = Math.round(hrs / 24);
-  return d === 1 ? 'Yesterday' : `${d}d ago`;
-}

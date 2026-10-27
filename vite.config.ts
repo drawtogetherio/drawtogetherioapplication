@@ -49,7 +49,7 @@ const serviceWorker: Plugin = {
 // Pages: / landing (index.html), /login (login.html), /app (app.html, the drawing app), /admin (admin.html), 404.html for everything else.
 // Keep page files at the top level: Railway builds in a folder called /app, so an app/ folder of pages
 // makes Vite resolve /app/index.html to the wrong file and silently drop the landing page.
-// `npm run build:single` produces one self-contained HTML file of the app (used for previews).
+// `npm run build:single` produces one self-contained HTML file of the app, for drawing offline.
 export default defineConfig(({ mode, command }) => ({
   base: mode === 'single' ? './' : '/',
   define: { __APP_VERSION__: JSON.stringify(version), __CANVAS_LOG__: JSON.stringify(betaBuild || command === 'serve') },
