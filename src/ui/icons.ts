@@ -60,6 +60,7 @@ const P: Record<string, string> = {
   logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 16l-4-4 4-4M6 12h10"/>',
   userPlus: '<circle cx="9" cy="8" r="4"/><path d="M2 21c.8-4 3.4-6 7-6 1.6 0 3 .4 4.1 1.1"/><path d="M18 12v6M15 15h6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 4-6 8-6s7.2 2 8 6"/>',
+  userWrench: '<circle cx="9" cy="8" r="4"/><path d="M2 21c.8-4 3.4-6 7-6 1.3 0 2.5.3 3.5.8"/><path d="M21.5 13.5a3 3 0 0 1-3.9 3.9L15 20l-2-2 2.6-2.6a3 3 0 0 1 3.9-3.9l-1.7 1.7 1.4 1.4z"/>',
   kick: '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c.6-3.6 3.2-5.5 6.5-5.5 1.4 0 2.6.3 3.7.9"/><path d="M16 15l5 5M21 15l-5 5"/>',
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/>',
   send: '<path d="M4 12l16-8-6 16-3-6z"/><path d="M11 14l9-10"/>',

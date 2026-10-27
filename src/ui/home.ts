@@ -320,10 +320,10 @@ export class Home {
     this.accountPop.append(h('div.panel', {},
       h('div.account', {}, avatarEl(me, 40, true), h('div.account-text', {}, nameLine(me), h('small.muted', {}, '@' + me.handle), me.status ? h('small.status-line', {}, me.status) : null)),
       h('button.menu-item', { html: icon('user', 18) + '<span>Edit profile</span>', onclick: () => { close(); s.editProfile(); } }),
+      h('button.menu-item', { html: icon('userWrench', 18) + '<span>Manage users</span>', onclick: () => { close(); this.peopleDialog('blocked'); } }),
       h('button.menu-item', { html: icon('settings', 18) + '<span>Preferences</span>', onclick: () => { close(); preferencesDialog(this.app); } }),
-      h('button.menu-item', { html: icon('kick', 18) + '<span>Blocked people</span>', onclick: () => { close(); this.peopleDialog('blocked'); } }),
       me.admin ? h('a.menu-item', { href: '/admin', html: icon('shield', 18) + '<span>Admin</span>' }) : null,
-      h('button.menu-item', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
+      h('button.menu-item.danger', { html: icon('logout', 18) + '<span>Log out</span>', onclick: () => { close(); s.logout(); } }),
     ));
   }
 
