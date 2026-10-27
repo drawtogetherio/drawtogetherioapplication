@@ -45,7 +45,7 @@ function saveMark(p: ProjectInfo): HTMLElement {
   return h(`span.save-mark.${kind}` as 'span', { title: t.hint, 'aria-label': t.label, html: icon(t.icon, 13) + (t.short ? `<span>${t.short}</span>` : '') });
 }
 
-const RECENT_MAX = 6;
+const RECENT_MAX = 10;
 
 export class Home {
   readonly el = h('div.home', { hidden: true });
@@ -53,11 +53,11 @@ export class Home {
   private requestsEl = h('div.friend-requests');
   private recent = h('div.project-row');
   private mine = h('div.project-row');
-  private mineSec = h('section.home-sec', { hidden: true }, h('h2', {}, 'My canvases'), this.mine);
+  private mineSec = h('section.home-sec', { hidden: true }, this.secHead('h2', 'My canvases'), this.mine);
   private shared = h('div.project-row');
   private projects: ProjectInfo[] = [];
   private visits: VisitInfo[] = [];
-  private sharedSec = h('section.home-sec', { hidden: true }, h('h2', {}, 'Shared with you'), this.shared);
+  private sharedSec = h('section.home-sec', { hidden: true }, this.secHead('h2', 'Shared with you'), this.shared);
   private start = h('div.start-card');
   private promo = h('div.home-cards');
   private friendCount = h('span.count');
@@ -65,7 +65,8 @@ export class Home {
   private accountPop = h('div.popover.account-pop', { hidden: true });
   private timer = 0;
   private friendsPanel: HTMLElement;
-  private projectsHead = h('h1', {}, 'Recent');
+  private projectsHead = h('h1', {}, h('button.sec-title', { type: 'button' }, 'Recent'));
+  private recentSec = h('section.home-sec', {}, this.secHead(this.projectsHead), this.recent);
   private resume = h('div.resume', { hidden: true });
   private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
@@ -124,7 +125,7 @@ export class Home {
         h('main.projects', {},
           this.start,
           this.resume,
-          h('section.home-sec', {}, this.projectsHead, this.recent),
+          this.recentSec,
           this.mineSec,
           this.sharedSec,
           this.promo,
@@ -137,6 +138,28 @@ export class Home {
 
   get visible() { return !this.el.hidden; }
 
+  /** A section's heading: tapping the title opens the section as a full list; See all does the same. */
+  private secHead(tag: 'h2' | HTMLElement, title?: string): HTMLElement {
+    const heading = typeof tag === 'string' ? h(tag, {}, h('button.sec-title', { type: 'button' }, title!)) : tag;
+    const head = h('div.sec-head', {}, heading, h('button.sec-all.small', { type: 'button' }, 'See all'));
+    head.addEventListener('click', (e) => {
+      if (!(e.target as HTMLElement).closest('button')) return;
+      const sec = head.parentElement!;
+      this.expand(sec.classList.contains('open') ? null : sec);
+    });
+    return head;
+  }
+
+  /** Shows one section alone as a wrapping list, or everything again. */
+  expand(sec: HTMLElement | null) {
+    this.el.classList.toggle('expanded', !!sec);
+    for (const s of this.el.querySelectorAll('.home-sec')) {
+      s.classList.toggle('open', s === sec);
+      s.querySelector('.sec-all')!.textContent = s === sec ? 'Back' : 'See all';
+    }
+    this.el.querySelector('.projects')!.scrollTop = 0;
+  }
+
   show() {
     this.el.hidden = false;
     this.renderAccount();
@@ -148,7 +171,8 @@ export class Home {
     this.renderPromo();
     if (guest) { this.renderGuest(); return; }
     this.renderResume();
-    this.projectsHead.textContent = 'Recent';
+    this.projectsHead.firstElementChild!.textContent = 'Recent';
+    this.expand(null);
     this.loadProjects();
     this.loadVisits();
     this.loadFriends();
@@ -459,7 +483,7 @@ export class Home {
   private renderGuest() {
     const me = this.app.ed.me!;
     clearInterval(this.timer);
-    this.projectsHead.textContent = 'You’re a guest';
+    this.projectsHead.firstElementChild!.textContent = 'You’re a guest';
     this.sharedSec.hidden = this.mineSec.hidden = true;
     clear(this.recent);
     this.recent.append(h('div.guest-card', {},

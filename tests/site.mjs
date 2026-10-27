@@ -91,6 +91,11 @@ await ren.locator('[aria-label=\"Menu\"]').click(); await ren.locator('.menu-pop
 await ren.waitForSelector('.home:not([hidden]) .project-tile img', { timeout: 8000 })
   .then(() => check(true, 'canvas thumbnail on the home screen'), () => check(false, 'canvas thumbnail on the home screen'));
 check(await ren.locator('.home-sec', { hasText: 'My canvases' }).locator('.tile-name', { hasText: 'Dragon sketch' }).count() === 1 && await ren.locator('.home-sec', { hasText: 'Recent' }).locator('.tile-name', { hasText: 'Dragon sketch' }).count() === 1, 'the canvas is listed under Recent and My canvases');
+// Tapping a section title opens it alone as a wrapping list; Back restores the rows.
+await ren.locator('.home-sec .sec-title', { hasText: 'My canvases' }).click();
+check(await ren.locator('.home.expanded').count() === 1 && await ren.locator('.home-sec', { hasText: 'Recent' }).isHidden() && await ren.locator('.home-sec.open', { hasText: 'My canvases' }).isVisible() && (await ren.locator('.home-sec.open .project-row').evaluate((e) => getComputedStyle(e).flexWrap)) === 'wrap', 'the section opens on its own as a wrapping list');
+await ren.locator('.home-sec.open .sec-all', { hasText: 'Back' }).click();
+check(await ren.locator('.home.expanded').count() === 0 && await ren.locator('.home-sec', { hasText: 'Recent' }).isVisible(), 'Back brings the rows back');
 
 // ---- Picture cropping ----
 // 400×200 picture: left half red, right half blue. Dragging it all the way right keeps only red.

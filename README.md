@@ -106,8 +106,10 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   turns the overview preference off (Preferences → Layout turns it on again).
 - Rectangle and oval selections stand upright on screen however the canvas is rotated
   (`SelectTool.buildSelection` works in screen axes).
-- Home: **Recent** shows the last six canvases touched, yours and others'; **My canvases** lists all of
-  yours; **Shared with you** the rooms you visited. Tiles take each canvas's own aspect ratio.
+- Home: **Recent** shows the last ten canvases touched, yours and others'; **My canvases** lists all of
+  yours; **Shared with you** the rooms you visited. Rows scroll sideways; tapping a section's title (or
+  See all) opens it alone as a wrapping list, Back restores the rows. Tiles take each canvas's own aspect
+  ratio.
 - A **loading bar** shows a canvas replaying: on the start screen at first, then as a bar over the app when
   another canvas is opened or a room joined (`Session.progress`, `App.loading`).
 - Preferences → **Gestures** lists every touch and pen gesture, next to Shortcuts.
