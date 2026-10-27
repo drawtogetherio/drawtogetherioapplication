@@ -52,7 +52,7 @@ const isBrushTool = (id: ToolId): id is BrushToolId => id === 'brush' || id === 
 export const SAVE_BADGE = {
   cloud: { icon: 'cloud', short: '', label: 'Saved to your account', hint: 'Saved on the server. It’s on every device you log in from.' },
   device: { icon: 'device', short: '', label: 'Saved on this device', hint: 'Saved in the app on this device.' },
-  cache: { icon: 'warning', short: 'In Cache', label: 'In cache: not permanent', hint: 'This isn’t permanent storage: your browser may clear it. Download the Doodlehive app to keep your drawings safe.' },
+  cache: { icon: 'warning', short: 'In cache', label: 'In cache: not permanent', hint: 'This isn’t permanent storage: your browser may clear it. Download the Doodlehive app to keep your drawings safe.' },
 };
 
 export class App {
@@ -800,7 +800,7 @@ export class App {
 
   async newCanvas() {
     const empty = this.ed.doc.log.length <= 1;
-    if (!empty && !(await confirmDialog('Start a new canvas?', 'The current drawing is discarded.', 'Discard'))) return;
+    if (!empty && !(await confirmDialog('Start a new canvas?', 'You’ll lose what’s on this one.', 'Discard'))) return;
     newCanvasDialog((doc) => this.ed.setDoc(doc));
   }
 

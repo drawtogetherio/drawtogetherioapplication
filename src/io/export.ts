@@ -49,7 +49,7 @@ export async function exportDoc(doc: DrawDoc, o: ExportOptions) {
   }
   const type = o.format === 'png' ? 'image/png' : 'image/jpeg';
   const blob = await encodeImage(ctx2d(out, true).getImageData(0, 0, out.width, out.height), type, o.quality);
-  if (!blob) throw new Error('Encoding failed');
+  if (!blob) throw new Error('Couldn’t make the image. Try a smaller area or size.');
   return saveFile(blob, `${o.name}.${o.format}`);
 }
 

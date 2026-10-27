@@ -27,7 +27,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
     body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? 'Request failed.', (data as { field?: string }).field);
+  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? 'Something went wrong. Try again.', (data as { field?: string }).field);
   return data as T;
 }
 

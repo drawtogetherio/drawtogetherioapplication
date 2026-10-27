@@ -51,7 +51,7 @@ await ren.getByRole('button', { name: 'Create canvas' }).click();
 await ren.waitForFunction(() => window.doodlehive.session.local && !window.doodlehive.ed.room);
 check(/\?canvas=c[a-z0-9]+/.test(ren.url()), 'a device canvas has its own link');
 check(await ren.locator('.share-btn').isVisible(), 'the dock offers Share');
-check((await ren.locator('.save-badge.cache .save-pill').textContent()).trim() === 'In Cache', 'the bar warns the drawing is only in cache');
+check((await ren.locator('.save-badge.cache .save-pill').textContent()).trim() === 'In cache', 'the bar warns the drawing is only in cache');
 await ren.locator('.save-badge').hover();
 check(await ren.locator('.save-badge .hint', { hasText: 'your browser may clear it' }).isVisible(), 'hovering explains and offers the app');
 await ren.screenshot({ path: `${out}/00-cache-hint.png` });

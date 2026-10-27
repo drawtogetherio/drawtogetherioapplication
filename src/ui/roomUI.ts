@@ -320,7 +320,7 @@ export class RoomUI {
       if (!me.guest && !m.guest) {
         const add = h('button.btn', { html: icon('userPlus', 16) + '<span>Add friend</span>', onclick: async () => {
           add.disabled = true;
-          try { const r = await api.addFriend(m.handle); this.ed.toast(r.result === 'accepted' ? 'You’re now friends!' : 'Friend request sent'); add.lastElementChild!.textContent = r.result === 'accepted' ? 'Friends' : 'Requested'; }
+          try { const r = await api.addFriend(m.handle); this.ed.toast(r.result === 'accepted' ? 'You’re friends now' : 'Friend request sent'); add.lastElementChild!.textContent = r.result === 'accepted' ? 'Friends' : 'Requested'; }
           catch (e) { add.disabled = false; this.ed.toast((e as Error).message); }
         } });
         // Already friends, or asked: the button says so instead.

@@ -143,7 +143,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     toggle('Low-latency canvas', () => p.lowLatency, (v) => { p.lowLatency = v; }),
     h('small.muted', {}, 'Low latency puts the line on screen a frame sooner. Turn it off if the canvas tears or flickers.'),
     row('Canvas memory', memoryText()),
-    h('small.muted', {}, 'Pixels and undo history held in memory. Undo history is kept shorter as it climbs; past the limit, Safari may drop the page.'),
+    h('small.muted', {}, 'What your canvas and its undo history take up. Undo gets shorter as this fills, and past the limit Safari may reload the page.'),
   ];
   const memoryText = () => {
     const el = h('span.muted', {}, describe(app.memory.reading));

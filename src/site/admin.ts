@@ -30,7 +30,7 @@ type Section = (typeof SECTIONS)[number];
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new ApiError(r.status, (data as { error?: string }).error ?? 'Request failed.');
+  if (!r.ok) throw new ApiError(r.status, (data as { error?: string }).error ?? 'Something went wrong. Try again.');
   return data as T;
 }
 const fmt = new Intl.NumberFormat();

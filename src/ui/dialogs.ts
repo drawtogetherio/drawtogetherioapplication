@@ -143,7 +143,7 @@ export function exportDialog(ed: Editor) {
       close();
     } catch (ex) {
       const e = ex as { message?: string; code?: string };
-      err.textContent = e.code === 'declined' ? 'Export cancelled.' : e.message || 'Export failed. Please try again.';
+      err.textContent = e.code === 'declined' ? 'Export cancelled.' : e.message || 'Export didn’t work. Try again.';
       go.removeAttribute('disabled');
     }
   });

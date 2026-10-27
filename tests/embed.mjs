@@ -20,8 +20,8 @@ check(r.ok, 'the owner uploads a thumbnail');
 
 r = await fetch(`${base}/app?room=${room.id}&by=${ren.me.handle}`, bot);
 let html = await r.text();
-check(r.status === 200 && meta(html, 'og:title') === `${ren.me.displayName} has invited you to draw!`, 'the invite link embeds with the sharer’s name in the title');
-check(meta(html, 'og:description') === `${ren.me.displayName} has invited you to draw on DoodleHive! No account needed just click to join!`, 'and the description');
+check(r.status === 200 && meta(html, 'og:title') === `${ren.me.displayName} invited you to draw`, 'the invite link embeds with the sharer’s name in the title');
+check(meta(html, 'og:description') === 'Open the link to draw together on Doodlehive. No account needed.', 'and the description');
 check(meta(html, 'og:image') === `${base}/og/${room.id}?v=1` && meta(html, 'twitter:card') === 'summary_large_image', 'with the canvas image, versioned so chat apps refetch it');
 r = await fetch(meta(html, 'og:image'), bot);
 check(r.ok && r.headers.get('content-type') === 'image/png' && Buffer.from(await r.arrayBuffer()).equals(png), 'the image route serves the thumbnail without a login');
@@ -30,7 +30,7 @@ check(meta(html, 'og:title').startsWith(sam.me.displayName), 'a member who share
 html = await (await fetch(`${base}/app?room=${room.id}&by=nobody-${suffix}`, bot)).text();
 check(meta(html, 'og:title').startsWith(ren.me.displayName), 'an unknown handle falls back to the owner');
 html = await (await fetch(`${base}/app?room=${room.id}&watch=abcdefghijklmnop`, bot)).text();
-check(meta(html, 'og:title') === `${ren.me.displayName} has invited you to watch them draw!`, 'watch links say so');
+check(meta(html, 'og:title') === `${ren.me.displayName} invited you to watch them draw`, 'watch links say so');
 
 const secret = await (await post('/api/rooms', { name: 'Secret', settings: { infinite: true }, share: { visibility: 'private' } }, { Cookie: ren.cookie })).json();
 await fetch(`${base}/api/rooms/${secret.id}/thumb`, { method: 'PUT', headers: { Cookie: ren.cookie, Origin: base }, body: png });

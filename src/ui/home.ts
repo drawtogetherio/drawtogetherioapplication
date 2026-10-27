@@ -21,7 +21,6 @@ import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
 import { LAST_KEY, LastOpen } from './session';
 
-// Fallback to the live event stream.
 const BANNER_KEY = 'doodlehive.support';
 const RESUME_MS = 7 * 24 * 3600_000;
 const FRIENDS_POLL_MS = 60_000;
@@ -94,7 +93,7 @@ export class Home {
       if (!addIn.value.trim()) return;
       try {
         const r = await api.addFriend(addIn.value);
-        this.app.toast(r.result === 'accepted' ? 'You’re now friends!' : 'Friend request sent');
+        this.app.toast(r.result === 'accepted' ? 'You’re friends now' : 'Friend request sent');
         addIn.value = '';
         this.setFriends(r);
       } catch (ex) { addErr.textContent = (ex as ApiError).message; }
@@ -121,7 +120,7 @@ export class Home {
           this.meCard,
           h('div.panel-head', {}, h('span.panel-title', {}, 'Friends ', this.friendCount)),
           h('div.friends-scroll', {}, addForm, addErr, this.requestsEl, this.friendsEl),
-          h('button.friends-foot', { type: 'button', html: icon('userPlus', 17) + '<span>Manage outgoing requests</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
+          h('button.friends-foot', { type: 'button', html: icon('userPlus', 17) + '<span>Requests you sent</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
         ),
         h('main.projects', {},
           this.start,
@@ -200,7 +199,7 @@ export class Home {
     r.replaceChildren(
       h('span.muted', { html: icon('undo', 18) }),
       h('span.grow', {}, h('b', {}, name || 'Untitled'), h('small', {}, ` · open ${timeAgo(at)}`)),
-      h('button.btn.small.primary', { type: 'button', onclick: () => { r.hidden = true; if (canvas) s.openLocal(canvas); else if (room) s.joinRoom(room); } }, 'Pick up where you left off'),
+      h('button.btn.small.primary', { type: 'button', onclick: () => { r.hidden = true; if (canvas) s.openLocal(canvas); else if (room) s.joinRoom(room); } }, 'Keep drawing'),
       h('button.icon-btn', { type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss', html: icon('x', 16), onclick: forget }),
     );
   }
@@ -218,7 +217,7 @@ export class Home {
     if (b.hidden || b.childElementCount) return;
     try { sessionStorage.setItem(BANNER_KEY, '1'); } catch { /* storage blocked */ }
     b.append(
-      h('a.support-link', { href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Support Doodlehive on Patreon and unlock special features'),
+      h('a.support-link', { href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Doodlehive is made by a few students. Patreon is what keeps the servers on.'),
       h('button.icon-btn', { type: 'button', title: 'Close', 'aria-label': 'Close', html: icon('x', 16), onclick: () => {
         b.hidden = true;
         this.app.ed.prefs.supportBanner = false;
@@ -233,7 +232,7 @@ export class Home {
     clear(this.promo);
     const card = (href: string, platform: string, title: string, text: string) =>
       h('a.promo-card', { href, target: '_blank', rel: 'noopener noreferrer' }, socialLogo(platform, 40), h('span.promo-text', {}, h('strong', {}, title), h('small', {}, text)));
-    if (srv?.patreon) this.promo.append(card(srv.patreon, 'patreon', 'Support on Patreon', 'Unlock special features'));
+    if (srv?.patreon) this.promo.append(card(srv.patreon, 'patreon', 'Support on Patreon', 'Extra themes, GIF pictures and more'));
     if (srv?.discordInvite) this.promo.append(card(srv.discordInvite, 'discord', 'Join the Discord', 'Chat with other artists'));
   }
 
@@ -504,7 +503,7 @@ export class Home {
     items.sort((a, b) => b.at - a.at);
     clear(this.recent);
     for (const it of items.slice(0, RECENT_MAX)) this.recent.append(it.el());
-    if (!items.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet.'));
+    if (!items.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet. Start one with Draw alone.'));
   }
 
   /** Server canvases and the ones kept in this browser, newest first. */
