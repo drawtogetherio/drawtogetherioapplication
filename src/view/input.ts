@@ -60,7 +60,8 @@ export class InputController {
     this.off = () => { for (const f of offs) f(); };
   }
 
-  private info(e: PointerEvent, r: DOMRect = this.el.getBoundingClientRect()): PointerInfo {
+  /** `force`: the pen pressure to use instead of the event's, for coalesced samples that carry a stale one. */
+  private info(e: PointerEvent, r: DOMRect = this.el.getBoundingClientRect(), force?: number): PointerInfo {
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
     const d = this.ed.view.viewport.toDoc(sx, sy);
     const type = (e.pointerType === 'pen' || e.pointerType === 'touch' ? e.pointerType : 'mouse') as PointerInfo['type'];
@@ -76,7 +77,7 @@ export class InputController {
     }
     if (type === 'pen') {
       // Some drivers report 0 pressure on the first sample.
-      p = e.pressure > 0 ? e.pressure : this.lastPressure;
+      p = force ?? (e.pressure > 0 ? e.pressure : this.lastPressure);
       this.lastPressure = p;
       p = pressureMap(this.ed.prefs, p);
     }
@@ -127,12 +128,12 @@ export class InputController {
   }
 
   /** True once the tool has started; a pending pen down waits for a sample that carries pressure. */
-  private started(e: PointerEvent) {
+  private started(e: PointerEvent, force?: number) {
     const d = this.pendingDown;
     if (!d) return true;
-    if (e.pressure === 0 && e.type !== 'pointerup') return false;
+    if ((force ?? e.pressure) === 0 && e.type !== 'pointerup') return false;
     this.pendingDown = null;
-    this.activeTool.down({ ...this.info(d), pressure: this.info(e).pressure });
+    this.activeTool.down({ ...this.info(d), pressure: this.info(e, undefined, force).pressure });
     return true;
   }
 
@@ -204,9 +205,18 @@ export class InputController {
       return;
     }
     if (e.pointerId === this.toolPointer) {
-      const events = e.getCoalescedEvents?.() ?? [];
+      const coalesced = e.getCoalescedEvents?.() ?? [];
+      const events = coalesced.length ? coalesced : [e];
       const r = this.el.getBoundingClientRect(); // once per event, not per coalesced sample
-      for (const ce of events.length ? events : [e]) if (this.started(ce)) this.activeTool.move(this.info(ce, r));
+      // iPad Safari hands over 240 Hz positions but gives every coalesced sample the same pressure, so
+      // width and flow jump once per frame: dashes at light pressure, bands at heavy. When the batch's
+      // pressures are all alike, they are ramped from the last event's pressure to this one's instead.
+      const from = this.lastPressure, n = events.length;
+      const ramp = e.pointerType === 'pen' && !this.pendingDown && n > 1 && e.pressure > 0 && events.every((ce) => ce.pressure === events[0].pressure);
+      events.forEach((ce, i) => {
+        const force = ramp ? from + (e.pressure - from) * ((i + 1) / n) : undefined;
+        if (this.started(ce, force)) this.activeTool.move(this.info(ce, r, force));
+      });
       const p = this.info(e, r), at = this.activeTool.pen?.() ?? p;
       if (this.activeTool.predict && !this.pendingDown) {
         const ahead = e.getPredictedEvents?.() ?? [];
