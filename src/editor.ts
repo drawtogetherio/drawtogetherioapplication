@@ -14,6 +14,7 @@ import type { ApplyOptions } from './core/document';
 import type { HistoryEntry } from './core/history';
 import type { TiledSurface } from './core/tiles';
 import { Prefs, cleanPrefs } from './shared/prefs';
+import { CANVAS_LOG, clog } from './debug/canvasLog';
 
 export type ToolId = 'brush' | 'eraser' | 'smudge' | 'fill' | 'select' | 'shape' | 'eyedropper';
 export const TOOLS: { id: ToolId; label: string }[] = [
@@ -243,6 +244,7 @@ export class Editor {
   /** `opts` for the first op, or one per op. */
   run(ops: Op[], label = 'Edit', opts: ApplyOptions | ApplyOptions[] = {}) {
     if (this.readOnly) return;
+    const t0 = CANVAS_LOG ? performance.now() : 0;
     const inverse: Op[] = [];
     const entry: HistoryEntry = { label, undo: inverse, redo: [], cost: 0 };
     ops.forEach((op, i) => {
@@ -254,6 +256,7 @@ export class Editor {
     });
     entry.cost = opsCost(inverse);
     if (inverse.length) this.doc.history.record(entry);
+    if (CANVAS_LOG) clog('commit', { label, ops: ops.map((o) => o.t), cost: entry.cost, ms: Math.round((performance.now() - t0) * 100) / 100 });
   }
 
   apply(op: Op, opts: ApplyOptions = {}) { this.run([op], op.t, opts); }
@@ -311,6 +314,7 @@ export class Editor {
 
   undo() {
     if (this.readOnly) return;
+    if (CANVAS_LOG) clog('undo');
     if (this.currentTool.busy?.()) { this.currentTool.cancel(); this.view.invalidate(null); return; }
     const e = this.doc.history.takeUndo();
     if (!e) return;
@@ -322,6 +326,7 @@ export class Editor {
 
   redo() {
     if (this.readOnly) return;
+    if (CANVAS_LOG) clog('redo');
     this.commitPending();
     const e = this.doc.history.takeRedo();
     if (!e) return;

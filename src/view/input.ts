@@ -1,3 +1,4 @@
+import { CANVAS_LOG, clog, pointerData, samples } from '../debug/canvasLog';
 import { pressureMap } from '../shared/prefs';
 import type { Editor } from '../editor';
 import { PointerInfo, Tool } from '../tools/tool';
@@ -92,6 +93,7 @@ export class InputController {
   private activeTool!: Tool;
 
   private down(e: PointerEvent) {
+    if (CANVAS_LOG) clog('down', { ...pointerData(e), tool: this.ed.toolId, toolPointer: this.toolPointer, touches: this.touches.size });
     if (e.button === 2) return; // the quick menu's; capturing would keep its release from reaching the menu
     try { this.el.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
     if (e.pointerType === 'touch') return this.touchDown(e);
@@ -139,6 +141,7 @@ export class InputController {
 
   private abortTool() {
     if (this.toolPointer === null) return;
+    if (CANVAS_LOG) clog('abort', { tool: this.ed.toolId });
     this.pendingDown = null;
     this.activeTool.cancel();
     this.toolPointer = null;
@@ -167,6 +170,7 @@ export class InputController {
   }
 
   private startGesture() {
+    if (CANVAS_LOG) clog('gesture', { touches: this.touches.size });
     const ids = [...this.touches.keys()].slice(0, 2);
     this.gesture = {
       m0: this.ed.view.viewport.matrix(),
@@ -205,6 +209,7 @@ export class InputController {
       return;
     }
     if (e.pointerId === this.toolPointer) {
+      const t0 = CANVAS_LOG ? performance.now() : 0;
       const coalesced = e.getCoalescedEvents?.() ?? [];
       const events = coalesced.length ? coalesced : [e];
       const r = this.el.getBoundingClientRect(); // once per event, not per coalesced sample
@@ -223,6 +228,10 @@ export class InputController {
         this.activeTool.predict(ahead.map((pe) => this.info(pe, r)));
       }
       this.ed.sendCursor(at.x, at.y, true);
+      if (CANVAS_LOG) {
+        const ahead = e.getPredictedEvents?.() ?? [];
+        clog('move', { e: pointerData(e), n: coalesced.length, c: samples(e, coalesced), pr: samples(e, ahead), ramp, pending: !!this.pendingDown, ms: Math.round((performance.now() - t0) * 100) / 100 });
+      }
       return;
     }
     const t = this.touches.get(e.pointerId);
@@ -294,6 +303,7 @@ export class InputController {
   }
 
   private up(e: PointerEvent) {
+    if (CANVAS_LOG) clog(e.type === 'pointercancel' ? 'cancel' : 'up', { ...pointerData(e), tool: e.pointerId === this.toolPointer, touches: this.touches.size });
     if (this.viewDrag && e.pointerId === this.viewDrag.id) { this.viewDrag = null; return; }
     if (this.pan && e.pointerId === this.pan.id) { this.pan = null; return; }
     if (e.pointerId === this.toolPointer) {

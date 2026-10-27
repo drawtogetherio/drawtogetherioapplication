@@ -9,6 +9,7 @@ import { ShapeTool } from '../tools/shapeTool';
 import { InputController } from '../view/input';
 import { ColorPicker } from './colorPicker';
 import { confirmDialog, exportDialog, modal, newCanvasDialog, textDialog } from './dialogs';
+import { CANVAS_LOG, exportCanvasLog, startCanvasLog } from '../debug/canvasLog';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
 import { LayersPanel } from './layersPanel';
@@ -114,6 +115,7 @@ export class App {
       select: this.select, shape: this.shape, eyedropper: new EyedropperTool(ed),
     };
     this.input = new InputController(ed, ed.view.canvas);
+    if (CANVAS_LOG) startCanvasLog(ed);
     ed.view.onCanvas = (c) => this.input.bind(c);
     this.input.onGesture = () => this.toggleUI();
     this.quickMenu = new QuickMenu(this);
@@ -784,6 +786,7 @@ export class App {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
     if (!ed.readOnly) d.append(item('download', 'Export PNG / PSD / .hivecanvas…', () => this.export()));
+    if (CANVAS_LOG) d.append(item('download', 'Export canvas log (beta)', () => void exportCanvasLog(ed).catch((e) => this.toast((e as Error).message))));
     d.append(item('fit', `Focus mode${keyOf(ed.prefs, 'focus') ? ` (${keyOf(ed.prefs, 'focus').toUpperCase()})` : ''}`, () => this.toggleFocus()),
       item('search', 'Commands… (Ctrl+K)', () => this.commandPalette()),
       item('settings', 'Preferences…', () => this.preferences()), h('div.menu-sep'));
