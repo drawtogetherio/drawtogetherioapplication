@@ -31,12 +31,34 @@ const r = await page.evaluate(async () => {
   line(0.03, (i) => (i % 7 === 0 ? 0.5 : 0.03)); await wait(50);
   const spiky = maxAlpha(); ed.undo(); await wait(50);
   line(0.03, () => 0.03); await wait(50);
-  return { heavy, light, tap, spiky, plain: maxAlpha() };
+  const plain = maxAlpha(); ed.undo(); await wait(50);
+  // iPad Safari: four coalesced samples per event, all with the event's pressure. The width must taper, not step.
+  const widths = () => { const b = ed.layer.surface.contentBounds(), c = document.createElement('canvas'); c.width = b.w; c.height = b.h;
+    const x = c.getContext('2d'); x.translate(-b.x, -b.y); ed.layer.surface.drawTo(x, b);
+    const d = x.getImageData(0, 0, b.w, b.h).data, w = [];
+    for (let i = 0; i < b.w; i++) { let n = 0; for (let j = 0; j < b.h; j++) if (d[(j * b.w + i) * 4 + 3] > 128) n++; w.push(n); }
+    return w; };
+  ed.settings.brush.size = 60; ed.settings.brush.smoothing = 0; ed.settings.brush.pressureSize = 1; ed.settings.brush.minSize = 0.05;
+  const batch = (x, pressure) => {
+    const e = new PointerEvent('pointermove', { pointerId: 9, pointerType: 'pen', clientX: x, clientY: 400, pressure, buttons: 1, bubbles: true });
+    const samples = [3, 2, 1, 0].map((k) => new PointerEvent('pointermove', { pointerId: 9, pointerType: 'pen', clientX: x - k * 6, clientY: 400, pressure, buttons: 1 }));
+    Object.defineProperty(e, 'getCoalescedEvents', { value: () => samples });
+    c.dispatchEvent(e);
+  };
+  fire('pointerdown', 300, 400, 0.1);
+  for (let i = 1; i <= 6; i++) batch(300 + i * 24, 0.1 + i * 0.15);
+  fire('pointerup', 300 + 6 * 24, 400, 0); await wait(50);
+  // How far the width strays from a straight taper over the middle of the stroke: a staircase strays by half a step.
+  const w = widths().slice(30, -40); ed.undo();
+  let jump = 0; for (let i = 0; i < w.length; i++) jump = Math.max(jump, Math.abs(w[i] - (w[0] + ((w[w.length - 1] - w[0]) * i) / (w.length - 1))));
+  return { heavy, light, tap, spiky, plain, jump: Math.round(jump * 10) / 10, w: w.join(' ') };
 });
 await browser.close();
 const ok = r.heavy > 50 && r.light < r.heavy / 3 && r.tap > 0;
 console.log((ok ? 'ok   ' : 'FAIL ') + `pressureless first samples start thin (heavy ${r.heavy}, light ${r.light}, tap ${r.tap})`);
 const calm = r.spiky < r.plain + 40;
 console.log((calm ? 'ok   ' : 'FAIL ') + `pressure spikes are filtered out (spiky ${r.spiky}, plain ${r.plain})`);
-if (!ok || !calm) process.exit(1);
+const taper = r.jump <= 2;
+console.log((taper ? 'ok   ' : 'FAIL ') + `coalesced samples with one shared pressure still taper (off a straight taper by ${r.jump}px)`);
+if (!ok || !calm || !taper) process.exit(1);
 console.log('all passed');

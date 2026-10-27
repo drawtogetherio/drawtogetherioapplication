@@ -308,7 +308,7 @@ const hsvToRgb = ([h, s, v]: RGB): RGB => {
  * A brush with colour dynamics or wet mixing also keeps each dab's colour in a tint surface.
  */
 export class StrokeRenderer extends DabPath {
-  private readonly cov = new TiledSurface();
+  private readonly cov = new TiledSurface(true);
   private readonly tint: TiledSurface | null;
   private readonly rgb: RGB;
   private col: RGB;
@@ -338,7 +338,7 @@ export class StrokeRenderer extends DabPath {
     this.soft = brush.hardness < 0.98;
     this.rnd = seeded(hashSeed(opts.seed ?? ''));
     this.under = opts.under;
-    this.tint = brush.wet || brush.hueJitter || brush.satJitter || brush.brightJitter ? new TiledSurface() : null;
+    this.tint = brush.wet || brush.hueJitter || brush.satJitter || brush.brightJitter ? new TiledSurface(true) : null;
     this.moving = !!brush.grainMove;
     if (brush.grain) {
       const scale = Math.max(0.25, Math.min(8, brush.grainScale ?? 1)), tex = brush.texture ? assetImage(brush.texture) : null;

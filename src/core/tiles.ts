@@ -17,6 +17,9 @@ export class TiledSurface {
   /** Tile-local bounds of everything drawn through `draw` or `mark`: a stroke buffer's footprint per tile. */
   readonly drawn = new Map<string, Rect>();
 
+  /** `readback`: tiles read back every frame (a stroke's coverage) are kept on the CPU, where Safari reads them without a GPU stall. */
+  constructor(private readonly readback = false) {}
+
   static key(tx: number, ty: number) { return tx + ',' + ty; }
   static parse(k: string): [number, number] {
     const i = k.indexOf(','), at = k.indexOf('@');
@@ -57,7 +60,11 @@ export class TiledSurface {
     const k = TiledSurface.key(tx, ty);
     this.painted.delete(k);
     let t = this.tiles.get(k);
-    if (!t) { t = makeCanvas(TILE, TILE); this.tiles.set(k, t); }
+    if (!t) {
+      t = makeCanvas(TILE, TILE);
+      if (this.readback) ctx2d(t, true); // the first getContext decides
+      this.tiles.set(k, t);
+    }
     return t;
   }
 
