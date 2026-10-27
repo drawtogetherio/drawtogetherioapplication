@@ -106,6 +106,8 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   turns the overview preference off (Preferences → Layout turns it on again).
 - Rectangle and oval selections stand upright on screen however the canvas is rotated
   (`SelectTool.buildSelection` works in screen axes).
+- A room's **Properties** (⋯ on its tile) say who can join under the current sharing, who was invited,
+  and who has opened it (`visitors` on `GET /api/rooms/:id`, hosts only).
 - Home: **Recent** shows the last ten canvases touched, yours and others'; **My canvases** lists all of
   yours; **Shared with you** the rooms you visited. Rows scroll sideways; tapping a section's title (or
   See all) opens it alone as a wrapping list, Back restores the rows. Tiles take each canvas's own aspect

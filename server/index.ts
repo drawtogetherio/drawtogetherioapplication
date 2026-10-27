@@ -659,7 +659,7 @@ async function route(req: Req, res: Res) {
     const r = getRoom(mm[1]);
     if (!r || !r.visibleTo(u)) return json(res, 404, { error: 'Unable to find room' });
     const owner = getUser(r.info.ownerId);
-    return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length, joinable: r.canJoin(u), invited: r.isHost(u.id) ? r.invitedProfiles() : undefined });
+    return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length, joinable: r.canJoin(u), invited: r.isHost(u.id) ? r.invitedProfiles() : undefined, visitors: r.isHost(u.id) ? r.visitorProfiles() : undefined });
   }
 
   if (p === '/admin' || p.startsWith('/admin/')) {

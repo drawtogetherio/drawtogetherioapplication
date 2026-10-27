@@ -246,6 +246,20 @@ await sharedTile.locator('.tile-open').click();
 await bob.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
 check(true, 'a shared tile rejoins the room');
 
+// ---- Properties tell the owner who can join and who has opened it ----
+await ren.evaluate(() => window.doodlehive.session.leaveRoom());
+await ren.waitForSelector('.home:not([hidden])');
+const studioTile = ren.locator('.home-sec', { hasText: 'My canvases' }).locator('.project-tile', { hasText: 'Open studio' });
+await studioTile.waitFor();
+await studioTile.hover();
+await studioTile.locator('.tile-more').click();
+await ren.locator('.tile-pop .menu-item', { hasText: 'Properties' }).click();
+await ren.waitForSelector('.modal .props');
+const whoRow = await ren.locator('.modal .prop-row', { hasText: 'Who can join' }).locator('.prop-value').textContent();
+check(/Anyone with the link/.test(whoRow), `properties say who can join (${whoRow})`);
+check((await ren.locator('.modal .prop-row', { hasText: 'Opened by' }).locator('[title^="Bob"]').count()) === 1, 'and list Bob under Opened by');
+await ren.screenshot({ path: `${out}/11-properties.png` });
+
 console.log(errors.length ? 'Errors:\n' + errors.join('\n') : 'No page errors');
 await browser.close();
 process.exit(failed || errors.length ? 1 : 0);

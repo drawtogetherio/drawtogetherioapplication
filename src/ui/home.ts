@@ -1,6 +1,7 @@
 import { STATUS_MAX, cleanStatus } from '../shared/profile';
 import { ApiError, Friend, FriendsList, api } from '../net/api';
 import type { ProjectInfo, Visibility, VisitInfo } from '../shared/protocol';
+import type { PublicProfile } from '../shared/profile';
 import type { Notice } from '../shared/notices';
 import { MODE_CHOICES, presenceLabel } from './presence';
 import { shareDialog } from './share';
@@ -651,10 +652,15 @@ export class Home {
           row('People', 'Just you'));
         if (!isNativeApp) actions.push(h('button.btn', { type: 'button', html: icon('download', 16) + '<span>Save as file</span>', onclick: () => { close(); s.exportLocal(p.id); } }));
       } else {
-        const info = await api.room(p.id), invited = info.invited ?? [];
+        const info = await api.room(p.id), invited = info.invited ?? [], visitors = info.visitors ?? [];
+        const sh = info.share, who = sh.visibility === 'private' ? 'Only you and people you invite' : sh.visibility === 'friends' ? 'Your friends' : sh.visibility === 'unlisted' ? 'Anyone with the link (hidden from lists)'
+          : `Anyone with the link${sh.requireLogin ? ' who is logged in' : ''}${sh.approveJoins ? ', once you let them in' : ''}`;
+        const people = (list: PublicProfile[]) => list.length ? h('span.avatar-row', {}, ...list.map((u) => Object.assign(avatarEl(u, 28), { title: u.displayName }))) : h('span.muted', {}, 'No one yet');
         body.append(row('Size', size(info.settings)),
           row('Stored', h('span', { html: icon('cloud', 16) }), 'Safe on the server'),
-          row('Invited', invited.length ? h('span.avatar-row', {}, ...invited.map((u) => Object.assign(avatarEl(u, 28), { title: u.displayName }))) : h('span.muted', {}, 'No one yet')));
+          row('Who can join', who),
+          row('Invited', people(invited)),
+          row('Opened by', people(visitors)));
         actions.push(h('button.btn', { type: 'button', html: icon('device', 16) + '<span>Move to this device</span>', onclick: async () => {
           close();
           if (await confirmDialog('Move to this device?', 'It leaves the server when you close it. A copy stays on this device.', 'Move')) s.joinRoom(p.id, null, { takeLocal: true });

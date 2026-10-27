@@ -211,6 +211,11 @@ export class Room {
     db.prepare('UPDATE rooms SET invited = ? WHERE id = ?').run(JSON.stringify(this.invited), this.info.id);
   }
   invitedProfiles(): PublicProfile[] { return this.invited.map(getUser).filter((u): u is UserRow => !!u).map(publicProfile); }
+  /** Everyone who has opened the room (not the owner), newest first; for hosts. */
+  visitorProfiles(): PublicProfile[] {
+    const rows = db.prepare('SELECT user_id FROM room_visits WHERE room_id = ? ORDER BY at DESC LIMIT 50').all(this.info.id) as { user_id: string }[];
+    return rows.map((r) => getUser(r.user_id)).filter((u): u is UserRow => !!u).map(publicProfile);
+  }
 
   /** Closes someone's connections; `block` also keeps them out for a while. */
   expel(userId: string, block = false) {
