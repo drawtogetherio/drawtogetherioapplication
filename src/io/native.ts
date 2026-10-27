@@ -27,7 +27,8 @@ export interface NativeBridge {
   };
 }
 
-const w = window as unknown as { doodlehiveNative?: NativeBridge; Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Filesystem?: object } } };
+// Fills and effects run this module in a worker too (it rides along with the brush engine), where there is no window.
+const w = (typeof window === 'undefined' ? {} : window) as unknown as { doodlehiveNative?: NativeBridge; Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Filesystem?: object } } };
 const cap = w.Capacitor?.isNativePlatform?.() && w.Capacitor.Plugins?.Filesystem;
 export const native: NativeBridge | null = w.doodlehiveNative ?? (cap ? capacitorBridge(cap as Parameters<typeof capacitorBridge>[0]) : null);
 /** Inside the desktop or iPad app, where device storage is permanent. */

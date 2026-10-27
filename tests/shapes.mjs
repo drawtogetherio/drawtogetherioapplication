@@ -178,6 +178,14 @@ await m.move(...at(c[0] + 100, c[1] + 120), { steps: 6 }); await m.up(); await p
 o = await last();
 check(o.t === 'stroke', 'moving on after the snap keeps the freehand stroke');
 await page.keyboard.press('Control+z');
+// An Apple Pencil held still keeps reporting tiny moves: the hold must still count.
+await m.move(...at(c[0] - 150, c[1] + 100)); await m.down();
+await m.move(...at(c[0] + 150, c[1] + 100), { steps: 10 });
+for (let i = 0; i < 12; i++) { await m.move(...at(c[0] + 150 + (i % 2), c[1] + 100 + (i % 3) * 0.5)); await page.waitForTimeout(80); }
+await m.up(); await page.waitForTimeout(150);
+o = await last();
+check(o.t === 'shape' && o.shape === 'line', `a jittery hold still snaps (${o.t} ${o.shape ?? ''})`);
+await page.keyboard.press('Control+z');
 // Off switch.
 await ed((e) => { e.prefs.quickShape = false; });
 await drag([[c[0] - 200, c[1]], [c[0] + 200, c[1]]], 900);
