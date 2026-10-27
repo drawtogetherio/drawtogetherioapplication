@@ -212,8 +212,9 @@ await alice.waitForTimeout(100);
 const ch2 = await alice.locator('.chat').boundingBox();
 check(await alice.locator('body.studio').count() === 1 && Math.abs(ch2.x - ch1.x) < 3 && Math.abs(ch2.y - ch1.y) < 3, 'the studio layout keeps the chat where it was put');
 await alice.locator('.chat [aria-label="Back to the corner"]').click();
-const ch3 = await alice.locator('.chat').boundingBox();
-check(Math.abs(ch3.x - ch0.x) < 3 && Math.abs(ch3.y - ch0.y) < 3, 'back to the corner');
+const ch3 = await alice.locator('.chat').boundingBox(), stage = await alice.locator('.stage-wrap').boundingBox();
+// In Studio the corner is the canvas's, clear of the docked panels.
+check(Math.abs(ch3.x - stage.x - 12) < 3 && Math.abs(ch3.y + ch3.height - (stage.y + stage.height - 12)) < 3, 'back to the corner of the canvas');
 await alice.evaluate(() => { const a = window.doodlehive; a.ed.prefs.layout = 'classic'; a.applyPrefs(); });
 await alice.locator('.chat [aria-label="Close chat"]').click();
 check(await alice.locator('.chat-form').isHidden(), 'the bar’s X closes the chat');
