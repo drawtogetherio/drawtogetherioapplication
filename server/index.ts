@@ -184,7 +184,7 @@ async function route(req: Req, res: Res) {
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
     const site = getSite();
-    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), discordInvite: config.discordInvite || undefined, notice: site.notice.on ? site.notice : null });
+    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), discordInvite: config.discordInvite || undefined, notice: site.notice.on ? site.notice : null, ads: config.ads.frameUrl || config.ads.placeholder ? config.ads : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });

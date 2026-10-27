@@ -79,6 +79,12 @@ export const config = {
   },
   downloads: { mac: env.DOWNLOAD_MAC_URL || null, windows: env.DOWNLOAD_WINDOWS_URL || null },
   patreon: env.PATREON_URL || 'https://www.patreon.com/doodlehive',
+  /**
+   * The home screen ad: a page of yours that holds the ad network's snippet, shown in a sandboxed frame
+   * so the network's scripts never run on our origin. AD_PLACEHOLDER=1 shows an empty box instead, to
+   * check the layout. Neither set: no ad slot at all. See DEPLOY.md.
+   */
+  ads: { frameUrl: /^https:\/\//.test(val(env.AD_FRAME_URL)) ? val(env.AD_FRAME_URL) : null, placeholder: env.AD_PLACEHOLDER === '1' },
   /** A Discord invite shown on the home screen; none hides the card. */
   discordInvite: env.DISCORD_INVITE_URL || '',
   /** OAuth client for linking Patreon accounts; PATREON_CAMPAIGN_ID limits which memberships count. PATREON_API is for tests. */

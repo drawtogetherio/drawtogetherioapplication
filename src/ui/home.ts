@@ -59,6 +59,7 @@ export class Home {
   private visits: VisitInfo[] = [];
   private sharedSec = h('section.home-sec', { hidden: true }, this.secHead('h2', 'Shared with you'), this.shared);
   private start = h('div.start-card');
+  private ad = h('aside.ad-slot', { hidden: true, 'aria-label': 'Ad' });
   private promo = h('div.home-cards');
   private friendCount = h('span.count');
   private outgoingCount = h('span.count-pill', { hidden: true });
@@ -129,6 +130,7 @@ export class Home {
           this.recentSec,
           this.mineSec,
           this.sharedSec,
+          this.ad,
           this.promo,
         ),
       ),
@@ -170,6 +172,7 @@ export class Home {
     this.renderBanner();
     this.start.hidden = guest;
     this.renderPromo();
+    this.renderAd();
     if (guest) { this.renderGuest(); return; }
     this.renderResume();
     this.projectsHead.firstElementChild!.textContent = 'Recent';
@@ -235,6 +238,21 @@ export class Home {
       h('a.promo-card', { href, target: '_blank', rel: 'noopener noreferrer' }, socialLogo(platform, 40), h('span.promo-text', {}, h('strong', {}, title), h('small', {}, text)));
     if (srv?.patreon) this.promo.append(card(srv.patreon, 'patreon', 'Support on Patreon', 'Extra themes, GIF pictures and more'));
     if (srv?.discordInvite) this.promo.append(card(srv.discordInvite, 'discord', 'Join the Discord', 'Chat with other artists'));
+  }
+
+  /** One banner for free accounts in the browser. Supporters, guests and the desktop and iPad apps never get it. */
+  private renderAd() {
+    const srv = this.app.session.server, me = this.app.ed.me, ads = srv?.ads;
+    this.ad.hidden = !ads || !me || me.premium || me.guest || isNativeApp;
+    if (this.ad.hidden || this.ad.childElementCount) return;
+    this.ad.append(
+      h('div.ad-head', {}, h('span', {}, 'Ad'),
+        srv?.patreon ? h('a', { href: srv.patreon, target: '_blank', rel: 'noopener noreferrer' }, 'Supporters don’t see ads') : null),
+      ads!.frameUrl
+        // Sandboxed so the network's scripts can't reach the app or its cookies; clicks still open a tab.
+        ? h('iframe.ad-frame', { src: ads!.frameUrl, title: 'Ad', loading: 'lazy', referrerpolicy: 'origin', sandbox: 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox' })
+        : h('div.ad-frame.ad-placeholder', {}, 'Ad space, 728 × 90'),
+    );
   }
 
   // ---- Account ----

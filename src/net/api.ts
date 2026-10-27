@@ -31,7 +31,7 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
   return data as T;
 }
 
-export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; discordInvite?: string; notice?: SiteNotice | null }
+export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; discordInvite?: string; notice?: SiteNotice | null; ads?: { frameUrl: string | null; placeholder: boolean } | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 
