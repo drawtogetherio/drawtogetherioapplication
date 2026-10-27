@@ -80,6 +80,7 @@ await page.evaluate(() => { const p = window.doodlehive.ed.prefs; p.customBrushe
 
 // ---- Canvas ----
 await group('Canvas');
+check(await page.locator('.pref-page .switch-row', { hasText: 'QuickShape' }).locator('input').isChecked(), 'Canvas has the QuickShape switch, on by default');
 await page.locator('.switch-row', { hasText: 'Brush outline' }).locator('input').click();
 await page.locator('.switch-row', { hasText: 'Draw with a finger' }).locator('input').click();
 check(await page.evaluate(() => window.doodlehive.ed.prefs.fingerDraws === false), 'finger drawing lives in canvas preferences');

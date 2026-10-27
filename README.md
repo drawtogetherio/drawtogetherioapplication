@@ -111,6 +111,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - A **loading bar** shows a canvas replaying: on the start screen at first, then as a bar over the app when
   another canvas is opened or a room joined (`Session.progress`, `App.loading`).
 - Preferences → **Gestures** lists every touch and pen gesture, next to Shortcuts.
+- A **quick menu button** sits between the size and opacity sliders (classic sidebar and studio brush
+  panel) for pens without a barrel button; the vertical sliders read their value underneath (px, %).
+  QuickShape's switch moved from the options bar to Preferences → Canvas.
 
 **Performance (v0.32)**
 - Fills, effects, PNG/JPG encoding, thumbnails and `.hivecanvas` zips run in a Web Worker

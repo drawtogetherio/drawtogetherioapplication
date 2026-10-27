@@ -22,6 +22,23 @@ const m = page.mouse;
 const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
 const menu = page.locator('.quick-menu');
 
+// ---- The sidebar button opens it over itself; the sliders read their values ----
+const qb = page.locator('.sidebar .quick-btn');
+check(await qb.count() === 1 && (await page.locator('.sidebar > *').evaluateAll((els) => els.map((e) => e.className.split(' ')[0]))).slice(0, 3).join() === 'slider,icon-btn,slider', 'a quick menu button sits between the size and opacity sliders');
+await qb.click();
+const qbb = await qb.boundingBox(), qm = await menu.boundingBox();
+check(await menu.isVisible() && Math.abs(qm.x + qm.width / 2 - (qbb.x + qbb.width / 2)) < 80 && Math.abs(qm.y + qm.height / 2 - (qbb.y + qbb.height / 2)) < 80, 'the button opens the quick menu next to itself');
+await page.keyboard.press('Escape');
+check(await menu.isHidden(), 'Escape closes it');
+const reads = await page.locator('.sidebar .slider .slider-value').allTextContents();
+check(/^\d+(\.\d)?px$/.test(reads[0]) && /^\d+%$/.test(reads[1]) && await page.locator('.sidebar .slider .slider-value').first().isVisible(), `the sliders read size in px and opacity in % (${reads.join(', ')})`);
+await ed((e) => { e.prefs.layout = 'studio'; window.doodlehive.applyPrefs(); });
+check(await page.locator('.sp-sliders .quick-btn').count() === 1, 'the studio brush panel has the button too');
+await page.locator('.sp-sliders .quick-btn').click();
+check(await menu.isVisible(), 'and it opens the quick menu there');
+await page.keyboard.press('Escape');
+await ed((e) => { e.prefs.layout = 'classic'; window.doodlehive.applyPrefs(); });
+
 // ---- Right click opens, drag-release runs ----
 await m.move(cx, cy);
 await m.down({ button: 'right' });

@@ -72,6 +72,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     toggle('Name bubbles', () => p.showBubbles, (v) => { p.showBubbles = v; }),
     toggle('Chime when mentioned', () => p.chime, (v) => { p.chime = v; }),
     toggle('Draw with a finger', () => p.fingerDraws, (v) => { p.fingerDraws = v; }),
+    toggle('QuickShape: hold still to snap a stroke to a shape', () => p.quickShape, (v) => { p.quickShape = v; }),
   ];
 
   const pressure = () => {

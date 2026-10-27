@@ -144,7 +144,7 @@ await page.keyboard.press('Control+z');
 
 // ---- QuickShape ----
 await page.keyboard.press('b');
-check(await page.locator('.optionsbar .check', { hasText: 'QuickShape' }).isVisible(), 'brush options offer QuickShape');
+check(await page.locator('.optionsbar .check', { hasText: 'QuickShape' }).count() === 0, 'QuickShape is no longer on the options bar (it lives in Preferences → Canvas)');
 n = await ops();
 await drag([[c[0] - 200, c[1] + 10], [c[0] - 100, c[1] - 6], [c[0], c[1] + 8], [c[0] + 100, c[1] - 4], [c[0] + 200, c[1]]], 900);
 o = await last();

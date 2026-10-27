@@ -212,7 +212,7 @@ export class App {
     const sliders = (vertical: boolean) => [
       new Slider({
         min: 1, max: 500, value: ed.sizeParams.size, vertical, curve: 2.4, label: 'Size', ...peek,
-        format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + '', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); this.showSliderPreview(); },
+        format: (v) => (v < 10 ? v.toFixed(1) : Math.round(v)) + 'px', onInput: (v) => { ed.sizeParams.size = v; ed.emit('brush'); this.showSliderPreview(); },
       }),
       new Slider({
         min: 0.01, max: 1, value: ed.sizeParams.opacity, vertical, label: 'Opacity', ...peek,
@@ -220,13 +220,15 @@ export class App {
       }),
     ];
     this.sliders = [...sliders(true), ...sliders(false)];
-    this.studioSliders = h('div.sp-sliders', {}, this.sliders[2].el, this.sliders[3].el);
+    // Opens the quick menu over the button, for pens without a barrel button.
+    const quickBtn = (cls = '') => { const b: HTMLButtonElement = btn('target', 'Quick menu (Q)', () => { const r = b.getBoundingClientRect(); this.quickMenu.open(r.left + r.width / 2, r.top + r.height / 2); }, '.quick-btn' + cls); return b; };
+    this.studioSliders = h('div.sp-sliders', {}, this.sliders[2].el, h('div.sp-quick', {}, quickBtn('.small'), this.sliders[3].el));
     this.undoBtn = btn('undo', 'Undo (Ctrl+Z, two-finger tap)', () => ed.undo());
     this.redoBtn = btn('redo', 'Redo (Ctrl+Shift+Z, three-finger tap)', () => ed.redo());
     const historyPanel = new HistoryPanel(ed), historyPop = h('div.popover.history-pop', { hidden: true }, historyPanel.el);
     const historyBtn = this.historyBtn = btn('log', 'History', () => { historyPop.hidden = !historyPop.hidden; historyPanel.open = !historyPop.hidden; if (historyPanel.open) historyPanel.render(); });
     dismissOnOutside(historyPop, [historyBtn], () => { historyPop.hidden = true; historyPanel.open = false; });
-    const sidebar = this.sidebar = h('aside.sidebar', {}, this.sliders[0].el, this.sliders[1].el, this.undoBtn, this.redoBtn, historyBtn);
+    const sidebar = this.sidebar = h('aside.sidebar', {}, this.sliders[0].el, quickBtn(), this.sliders[1].el, this.undoBtn, this.redoBtn, historyBtn);
     this.studio = new Studio(ed, stage);
 
     root.append(topbar, this.options, stage, sidebar, this.studio.el, this.sliderPreview, this.roomUI.chatEl, this.dock, menuPop, effectsPop, this.invitePop, layersPop, colorPop, this.membersPop, this.toolPop, historyPop, guidesPop, this.home.el, this.loadEl, this.toastEl);
@@ -673,7 +675,6 @@ export class App {
       if (!smudge) {
         o.append(toggle('Stabilizer', pf.stabilizerOn, (v) => { pf.stabilizerOn = v; pref(); this.renderOptions(); }));
         if (pf.stabilizerOn) o.append(range('', pf.stabilizer, 0, 1, (v) => { pf.stabilizer = v; pref(); }));
-        if (tool === 'brush') o.append(toggle('QuickShape', pf.quickShape, (v) => { pf.quickShape = v; pref(); }));
       }
       o.append(label('Pressure:'));
       if (smudge) o.append(
