@@ -17,7 +17,7 @@ export function brushEditor(app: App, brush: CustomBrush, onDone: () => void) {
   const refresh = () => {
     code.value = brushCode(name.value.trim() || brush.name, params);
     cancelAnimationFrame(raf);
-    raf = requestAnimationFrame(() => preview.replaceChildren(brushPreview(params, 320, 80, '#f2f2f6')));
+    raf = requestAnimationFrame(() => preview.replaceChildren(brushPreview(params, 320, 80)));
   };
   const name = h('input', { type: 'text', value: brush.name, maxlength: 30, 'aria-label': 'Brush name', oninput: refresh });
   const cat = h('select', { 'aria-label': 'Category' });

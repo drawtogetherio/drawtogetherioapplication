@@ -70,7 +70,7 @@ export class Home {
   private resume = h('div.resume', { hidden: true });
   private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
-  private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 20) });
+  private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 18) });
   private bellBadge = h('span.bell-badge', { hidden: true });
   private noticesPop = h('div.popover.notices-pop', { hidden: true });
   private notices: Notice[] = [];
@@ -120,7 +120,7 @@ export class Home {
           this.meCard,
           h('div.panel-head', {}, h('span.panel-title', {}, 'Friends ', this.friendCount)),
           h('div.friends-scroll', {}, addForm, addErr, this.requestsEl, this.friendsEl),
-          h('button.friends-foot', { type: 'button', html: icon('userPlus', 17) + '<span>Requests you sent</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
+          h('button.friends-foot', { type: 'button', html: icon('userPlus', 18) + '<span>Requests you sent</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
         ),
         h('main.projects', {},
           this.start,

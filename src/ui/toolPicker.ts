@@ -24,7 +24,10 @@ export const SHAPE_KINDS: [ShapeKind, string, string][] = [
 const previewCache = new Map<string, HTMLCanvasElement>();
 
 /** A squiggle drawn with the real brush engine, light at the ends and full pressure in the middle. */
-export function brushPreview(params: BrushParams, w = 220, hh = 52, color = '#f2f2f6'): HTMLCanvasElement {
+/** Preview strokes are drawn in the text colour so they read on either mode. */
+const previewInk = () => (document.documentElement.dataset.mode === 'light' ? '#2a292a' : '#f2f2f6');
+
+export function brushPreview(params: BrushParams, w = 220, hh = 52, color = previewInk()): HTMLCanvasElement {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const key = JSON.stringify(params) + w + 'x' + hh + color + dpr;
   const cached = previewCache.get(key);

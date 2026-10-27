@@ -109,8 +109,8 @@ export function effectsBar(ed: Editor, initial: EffectId = 'blur', target?: Laye
   const bar = h('div.effect-bar', { role: 'dialog', 'aria-label': target ? 'Adjustment layer' : 'Layer effects' },
     h('div.effect-row', {},
       h('span.opt-title', {}, target ? 'Adjust' : 'Effect'), select, amount.el, angle.el,
-      h('button.icon-btn', { type: 'button', title: 'Apply', 'aria-label': 'Apply', html: icon('check', 20), onclick: () => { close(); apply(); } }),
-      h('button.icon-btn', { type: 'button', title: 'Cancel', 'aria-label': 'Cancel', html: icon('x', 20), onclick: () => close() })),
+      h('button.icon-btn', { type: 'button', title: 'Apply', 'aria-label': 'Apply', html: icon('check', 18), onclick: () => { close(); apply(); } }),
+      h('button.icon-btn', { type: 'button', title: 'Cancel', 'aria-label': 'Cancel', html: icon('x', 18), onclick: () => close() })),
     controls,
     h('div.effect-note', {}, target ? 'Changes everything below this layer; paint its mask to limit where.' : (sel ? 'Only the selection changes. ' : '') + 'Bakes into the layer; undo works until it leaves the history.'));
 

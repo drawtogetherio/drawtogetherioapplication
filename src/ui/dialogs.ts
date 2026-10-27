@@ -11,7 +11,7 @@ export function modal(title: string, body: HTMLElement, actions: HTMLElement[], 
   const close = () => { overlay.remove(); onClose?.(); };
   const overlay = h('div.modal-overlay', {},
     h('div.modal', { role: 'dialog', 'aria-label': title },
-      h('div.modal-head', {}, h('h2', {}, title), closable ? h('button.icon-btn', { title: 'Close', html: icon('x', 18), onclick: close }) : null),
+      h('div.modal-head', {}, h('h2', {}, title), closable ? h('button.icon-btn', { title: 'Close', 'aria-label': 'Close', html: icon('x', 18), onclick: close }) : null),
       body,
       h('div.modal-actions', {}, ...actions),
     ),
@@ -153,7 +153,7 @@ export function exportDialog(ed: Editor) {
 export function confirmDialog(title: string, message: string, okLabel: string): Promise<boolean> {
   return new Promise((resolve) => {
     let result = false;
-    const ok = h('button.btn.primary', {}, okLabel);
+    const ok = h(/^(Delete|Remove|Discard|Block)\b/.test(okLabel) ? 'button.btn.destructive' : 'button.btn.primary', {}, okLabel);
     const cancel = h('button.btn', {}, 'Cancel');
     const close = modal(title, h('div.modal-body', {}, h('p', {}, message)), [cancel, ok], () => resolve(result));
     ok.addEventListener('click', () => { result = true; close(); });
