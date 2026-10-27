@@ -51,7 +51,25 @@ const r = await page.evaluate(async () => {
   // How far the width strays from a straight taper over the middle of the stroke: a staircase strays by half a step.
   const w = widths().slice(30, -40); ed.undo();
   let jump = 0; for (let i = 0; i < w.length; i++) jump = Math.max(jump, Math.abs(w[i] - (w[0] + ((w[w.length - 1] - w[0]) * i) / (w.length - 1))));
-  return { heavy, light, tap, spiky, plain, jump: Math.round(jump * 10) / 10, w: w.join(' ') };
+  // iPad Safari also sends each move twice: the copy must change nothing.
+  const sum = () => { const b = ed.layer.surface.contentBounds(), c = document.createElement('canvas'); c.width = b.w; c.height = b.h;
+    const x = c.getContext('2d'); x.translate(-b.x, -b.y); ed.layer.surface.drawTo(x, b);
+    const d = x.getImageData(0, 0, b.w, b.h).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i]; return n; };
+  Object.assign(ed.settings.brush, { size: 20, flow: 0.3, shape: 'square', smoothing: 0.45 });
+  const twice = async (copies) => {
+    fire('pointerdown', 300, 400, 0.5);
+    for (let i = 1; i <= 8; i++) {
+      const x = 300 + i * 24;
+      const e = new PointerEvent('pointermove', { pointerId: 9, pointerType: 'pen', clientX: x, clientY: 400 + i * 3, pressure: 0.5, buttons: 1, bubbles: true });
+      const samples = [3, 2, 1, 0].map((k) => new PointerEvent('pointermove', { pointerId: 9, pointerType: 'pen', clientX: x - k * 6, clientY: 400 + i * 3, pressure: 0.5, buttons: 1 }));
+      Object.defineProperty(e, 'getCoalescedEvents', { value: () => samples });
+      for (let k = 0; k < copies; k++) c.dispatchEvent(e);
+    }
+    fire('pointerup', 300 + 8 * 24, 424, 0); await wait(50);
+    const n = sum(); ed.undo(); await wait(50); return n;
+  };
+  const once = await twice(1), dup = await twice(2);
+  return { heavy, light, tap, spiky, plain, jump: Math.round(jump * 10) / 10, w: w.join(' '), once, dup };
 });
 await browser.close();
 const ok = r.heavy > 50 && r.light < r.heavy / 3 && r.tap > 0;
@@ -60,5 +78,7 @@ const calm = r.spiky < r.plain + 40;
 console.log((calm ? 'ok   ' : 'FAIL ') + `pressure spikes are filtered out (spiky ${r.spiky}, plain ${r.plain})`);
 const taper = r.jump <= 2;
 console.log((taper ? 'ok   ' : 'FAIL ') + `coalesced samples with one shared pressure still taper (off a straight taper by ${r.jump}px)`);
-if (!ok || !calm || !taper) process.exit(1);
+const dedup = r.once > 0 && r.once === r.dup;
+console.log((dedup ? 'ok   ' : 'FAIL ') + `a move delivered twice draws once (once ${r.once}, twice ${r.dup})`);
+if (!ok || !calm || !taper || !dedup) process.exit(1);
 console.log('all passed');

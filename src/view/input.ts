@@ -19,6 +19,8 @@ export class InputController {
   private toolStart = 0;
   private toolType: PointerInfo['type'] = 'mouse';
   private lastPressure = 0.5;
+  /** The last tool move handled, to spot the copies iPad Safari sends. */
+  private lastMove: PointerEvent | null = null;
   private pendingDown: PointerEvent | null = null;
   private touches = new Map<number, Touch>();
   private gesture: { m0: DOMMatrix; ids: number[]; pts: { x: number; y: number }[] } | null = null;
@@ -209,6 +211,14 @@ export class InputController {
       return;
     }
     if (e.pointerId === this.toolPointer) {
+      // iPad Safari delivers each Apple Pencil move twice. Replaying the copy walks the stroke back over
+      // its last four samples: double the dabs, overdraw, and smoothing pulled behind the pen.
+      const lm = this.lastMove;
+      if (lm && lm.pointerId === e.pointerId && lm.timeStamp === e.timeStamp && lm.clientX === e.clientX && lm.clientY === e.clientY && lm.pressure === e.pressure) {
+        if (CANVAS_LOG) clog('move.dup', { ts: Math.round(e.timeStamp * 100) / 100 });
+        return;
+      }
+      this.lastMove = e;
       const t0 = CANVAS_LOG ? performance.now() : 0;
       const coalesced = e.getCoalescedEvents?.() ?? [];
       const events = coalesced.length ? coalesced : [e];
