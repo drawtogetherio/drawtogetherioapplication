@@ -92,6 +92,7 @@ export const api = {
   blocks: () => call<PublicProfile[]>('GET', '/api/blocks'),
   block: (id: string) => call<PublicProfile[]>('POST', '/api/blocks', { user: id }),
   unblock: (id: string) => call<PublicProfile[]>('DELETE', '/api/blocks/' + id),
+  whatsNew: () => call<{ md: string; at: number }>('GET', '/api/whatsnew'),
   notices: () => call<{ unread: number; notices: Notice[] }>('GET', '/api/notices'),
   readNotices: () => call<{ ok: true }>('POST', '/api/notices/read'),
   clearNotices: () => call<{ ok: true }>('DELETE', '/api/notices'),

@@ -1,0 +1,23 @@
+/* What's new text (see markdown.ts). Shared by the app and the admin preview. */
+.md { line-height: 1.55; font-size: 14px; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md h1, .md h2, .md h3 { margin: 16px 0 6px; line-height: 1.25; letter-spacing: -0.01em; }
+.md h1 { font-size: 21px; }
+.md h2 { font-size: 17px; }
+.md h3 { font-size: 15px; }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md blockquote { margin: 10px 0; padding: 8px 14px; border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0; background: var(--accent-soft); }
+.md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; padding: 1px 6px; border-radius: 6px; background: var(--card); border: 1px solid var(--line); }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.md a { color: var(--accent); font-weight: 600; }
+.md .md-accent { color: var(--accent); }
+.md div.md-accent { margin: 10px 0; padding: 10px 14px; border-radius: 12px; background: var(--accent-soft); }
+.md div.md-accent > :first-child { margin-top: 0; }
+.md div.md-accent > :last-child { margin-bottom: 0; }
+.md .md-icon, .md .md-art { font-style: normal; }
+.md .md-icon svg, .md .md-art svg { width: 1.25em; height: 1.25em; vertical-align: -0.27em; }
+.md .md-art svg { width: 1.6em; height: 1.6em; vertical-align: -0.45em; }
+.md .md-figure { margin: 12px 0; text-align: center; }
+.md .md-figure svg { width: 96px; height: 96px; }

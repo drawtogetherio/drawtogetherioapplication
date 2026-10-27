@@ -6,7 +6,7 @@ import zlib from 'node:zlib';
 import { WebSocketServer } from 'ws';
 import { config } from './config.ts';
 import {
-  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getAsset, getSite, getUser, handleTaken, hasAsset, isAdmin, isPremium, keepGuest, myProfile, publicProfile, putAsset, sessionUser, userByHandle, UserRow,
+  SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getAsset, getSite, getUser, getWhatsNew, handleTaken, hasAsset, isAdmin, isPremium, keepGuest, myProfile, publicProfile, putAsset, sessionUser, userByHandle, UserRow,
 } from './db.ts';
 import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare, visited, visitsOf } from './rooms.ts';
 import { validOp } from './validate.ts';
@@ -491,6 +491,7 @@ async function route(req: Req, res: Res) {
   }
   mm = /^\/api\/blocks\/([\w-]+)$/.exec(p);
   if (mm && m === 'DELETE') { const u = requireUser(req); unblockUser(u.id, mm[1]); return json(res, 200, listBlocked(u.id)); }
+  if (p === '/api/whatsnew' && m === 'GET') return json(res, 200, getWhatsNew());
   if (p === '/api/notices' && m === 'GET') {
     const u = requireUser(req);
     premiumWarning(u);

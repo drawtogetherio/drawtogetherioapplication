@@ -368,6 +368,12 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   it), and a home screen message with background and text colours, previewed as you type. Settings are
   one JSON row in the `site` table (`src/shared/site.ts` cleans them); `/api/config` carries the
   message while it is on, and the home screen shows it above the Patreon banner.
+- What's new: markdown shown under Preferences → About, previewed as you type (`src/ui/markdown.ts`:
+  headings, lists, quotes, bold/italic/strike, code, links, rules; `[accent]…[/accent]` colours text
+  with the reader's accent, `[icon:name]` drops in an app icon, `[art:name]` a flat graphic from
+  `src/ui/art.ts`, a big one when alone on a line). Text is escaped; only those tags come out. Stored
+  as the `whatsnew` row of the `site` table; `GET /api/whatsnew` is public, `PUT /api/admin/whatsnew`
+  admin-only (20,000 characters).
 - IP bans: a banned address gets a plain 403 everywhere, sockets included. Every action is in the Log.
 - Addresses: each signed-in person's current address is kept in memory only (never stored) so an
   admin can ban it; only admins see it. The ban list itself is stored.

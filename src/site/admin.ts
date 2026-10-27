@@ -4,6 +4,9 @@ import { BADGES, type Badge, type PublicProfile } from '../shared/profile';
 import { NOTICE_MAX, type SiteSettings } from '../shared/site';
 import { initTheme } from '../ui/theme';
 import { brandHtml } from './brand';
+import { ART_NAMES, art } from '../ui/art';
+import { icon } from '../ui/icons';
+import { renderMarkdown } from '../ui/markdown';
 import { esc } from './common';
 
 // Admin dashboard (/admin). The server only answers these routes for admins.
@@ -21,7 +24,7 @@ interface Stats {
 interface IpBan { ip: string; reason: string; createdAt: number }
 interface LogRow { action: string; target: string; at: number; admin: string | null }
 
-const SECTIONS = ['Overview', 'Site', 'Users', 'IP bans', 'Log'] as const;
+const SECTIONS = ['Overview', 'Site', 'What’s new', 'Users', 'IP bans', 'Log'] as const;
 type Section = (typeof SECTIONS)[number];
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -206,6 +209,49 @@ async function sitePage() {
   });
 }
 
+// ---- What's new: markdown shown under Preferences → About ----
+const NEWS_ICONS = ['brush', 'smudge', 'eraser', 'fill', 'select', 'lasso', 'wand', 'shape', 'eyedropper', 'gradient', 'layers', 'grid', 'undo', 'redo', 'pencil', 'camera', 'download', 'folder', 'link', 'chat', 'users', 'bell', 'settings', 'cloud', 'lock', 'eye', 'star', 'sparkle', 'info', 'warning', 'check', 'device', 'home', 'search', 'target', 'rotate', 'fit'];
+const NEWS_TOOLS: [string, string, string][] = [['Heading', '## ', ''], ['Bold', '**', '**'], ['Italic', '*', '*'], ['Link', '[', '](https://)'], ['List', '- ', ''], ['Quote', '> ', ''], ['Accent', '[accent]', '[/accent]'], ['Rule', '\n---\n', '']];
+
+async function newsPage() {
+  const news = await call<{ md: string; at: number }>('GET', '/api/admin/whatsnew');
+  if (stale('What’s new')) return;
+  page.innerHTML = `
+    <h2>What’s new</h2>
+    <p class="fine">Shown under Preferences → About. Markdown, plus <code>[accent]…[/accent]</code> for the reader’s accent colour, <code>[icon:name]</code> for an app icon and <code>[art:name]</code> for a graphic (on its own line it becomes a big one).</p>
+    <div class="news-edit">
+      <div>
+        <div class="news-tools">${NEWS_TOOLS.map(([t]) => `<button type="button" class="btn small" data-tool="${t}">${t}</button>`).join('')}</div>
+        <textarea id="news-md" spellcheck="true" placeholder="## Fresh paint&#10;- [icon:brush] New brushes&#10;[accent]Thanks for drawing with us.[/accent]">${esc(news.md)}</textarea>
+        <h3>Graphics</h3>
+        <div class="news-gallery">${ART_NAMES.map((n) => `<button type="button" title="[art:${n}]" data-ins="[art:${n}]">${art(n, 36)}</button>`).join('')}</div>
+        <h3>Icons</h3>
+        <div class="news-gallery icons">${NEWS_ICONS.map((n) => `<button type="button" title="[icon:${n}]" data-ins="[icon:${n}]">${icon(n, 20)}</button>`).join('')}</div>
+        <div class="site-row"><button class="btn small primary" id="news-save" type="button">Save</button><span class="fine" id="news-at">${news.at ? 'Updated ' + when(news.at) : 'Nothing published yet'}</span></div>
+      </div>
+      <div><h3>Preview</h3><div class="news-preview md"></div></div>
+    </div>`;
+  const ta = page.querySelector<HTMLTextAreaElement>('#news-md')!, preview = page.querySelector<HTMLElement>('.news-preview')!;
+  const render = () => { preview.innerHTML = renderMarkdown(ta.value) || '<span class="fine">Nothing yet.</span>'; };
+  const insert = (before: string, after: string) => {
+    const a = ta.selectionStart, b = ta.selectionEnd, v = ta.value;
+    ta.setRangeText(before + v.slice(a, b) + after, a, b, 'end');
+    if (a === b) ta.setSelectionRange(a + before.length, a + before.length);
+    ta.focus(); render();
+  };
+  for (const b of page.querySelectorAll<HTMLElement>('[data-tool]')) b.addEventListener('click', () => { const t = NEWS_TOOLS.find((x) => x[0] === b.dataset.tool)!; insert(t[1], t[2]); });
+  for (const b of page.querySelectorAll<HTMLElement>('[data-ins]')) b.addEventListener('click', () => insert(b.dataset.ins!, ''));
+  ta.addEventListener('input', render);
+  render();
+  page.querySelector('#news-save')!.addEventListener('click', async () => {
+    try {
+      const r = await call<{ at: number }>('PUT', '/api/admin/whatsnew', { md: ta.value });
+      page.querySelector('#news-at')!.textContent = 'Updated ' + when(r.at);
+      say('Saved');
+    } catch (ex) { failing(ex); }
+  });
+}
+
 // ---- IP bans ----
 async function ipBans() {
   const list = await call<IpBan[]>('GET', '/api/admin/ip-bans');
@@ -232,7 +278,7 @@ async function logPage() {
     ${rows.map((r) => `<tr><td>${when(r.at)}</td><td>@${esc(r.admin ?? '?')}</td><td>${esc(r.action)}</td><td>${esc(r.target)}</td></tr>`).join('')}</table>` : '<p class="fine">Nothing yet.</p>';
 }
 
-const PAGES: Record<Section, () => Promise<void>> = { Overview: overview, Site: sitePage, Users: usersPage, 'IP bans': ipBans, Log: logPage };
+const PAGES: Record<Section, () => Promise<void>> = { Overview: overview, Site: sitePage, 'What’s new': newsPage, Users: usersPage, 'IP bans': ipBans, Log: logPage };
 
 function show(s: Section) {
   clearTimeout(timer);

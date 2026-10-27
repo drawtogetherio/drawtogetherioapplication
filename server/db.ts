@@ -129,6 +129,18 @@ export function setSite(patch: unknown): SiteSettings {
   db.prepare(`INSERT INTO site (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify(next));
   return next;
 }
+export const WHATS_NEW_MAX = 20000;
+/** The What's new text an admin writes, shown under Preferences → About. */
+export function getWhatsNew(): { md: string; at: number } {
+  const row = db.prepare(`SELECT value FROM site WHERE key = 'whatsnew'`).get() as { value: string } | undefined;
+  const v = (row ? safeJson(row.value) : {}) as Record<string, unknown>;
+  return { md: typeof v.md === 'string' ? v.md : '', at: typeof v.at === 'number' ? v.at : 0 };
+}
+export function setWhatsNew(md: string) {
+  const next = { md: md.replace(/\r\n?/g, '\n').slice(0, WHATS_NEW_MAX), at: Date.now() };
+  db.prepare(`INSERT INTO site (key, value) VALUES ('whatsnew', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(JSON.stringify(next));
+  return next;
+}
 db.exec(`UPDATE rooms SET visibility = 'private' WHERE private = 1 AND visibility <> 'private'`);
 db.exec(`
   -- One row per pair, with user_a < user_b. Pending until the other person accepts.

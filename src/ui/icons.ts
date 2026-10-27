@@ -84,6 +84,8 @@ const P: Record<string, string> = {
   selAll: '<rect x="4" y="4" width="16" height="16" rx="1" stroke-dasharray="3 2"/>',
 };
 
+export const ICON_NAMES = Object.keys(P);
+export const hasIcon = (n: string) => n in P;
 export function icon(name: keyof typeof P | string, size = 22): string {
   return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] ?? ''}</svg>`;
 }

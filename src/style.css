@@ -1003,6 +1003,8 @@ body.spectating .stage { cursor: grab; }
 .about-brand { display: flex; align-items: center; gap: 12px; padding: 4px 2px 10px; color: var(--text); }
 .about-brand .logo-mark { width: 44px; height: 47px; }
 .about-brand .brand-word { height: 26px; }
+.pref-page h3.sub { margin-top: 14px; }
+.whats-new-at { display: block; margin-top: 10px; }
 .about-link { color: var(--text); font-weight: 600; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .pref-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px; font-size: 14px; }
 .pref-keys { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }

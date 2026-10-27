@@ -1,5 +1,5 @@
 import net from 'node:net';
-import { db, getSite, getUser, isAdmin, publicProfile, setSite, USER_COLS, UserRow } from './db.ts';
+import { db, getSite, getUser, getWhatsNew, isAdmin, publicProfile, setSite, setWhatsNew, USER_COLS, UserRow, WHATS_NEW_MAX } from './db.ts';
 import { HttpError, Req, Res, json, jsonBody } from './http.ts';
 import { deleteRoom, disconnectUser, liveRooms } from './rooms.ts';
 import { closeStreams } from './live.ts';
@@ -156,6 +156,14 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
     const site = setSite(b);
     log(me, `site: early badge ${site.earlyBadge ? 'on' : 'off'}, notice ${site.notice.on ? 'on' : 'off'}`);
     return json(res, 200, site);
+  }
+  if (p === '/api/admin/whatsnew' && m === 'GET') return json(res, 200, getWhatsNew());
+  if (p === '/api/admin/whatsnew' && m === 'PUT') {
+    const b = await jsonBody(req, WHATS_NEW_MAX + 4096);
+    if (typeof b.md !== 'string') throw new HttpError(400, 'Send the text as md.');
+    if (b.md.length > WHATS_NEW_MAX) throw new HttpError(400, `Keep it under ${WHATS_NEW_MAX} characters.`);
+    log(me, 'whats new updated');
+    return json(res, 200, setWhatsNew(b.md));
   }
   if (p === '/api/admin/sync' && m === 'GET') return json(res, 200, { on: !!(config.sync.from && config.sync.secret), from: config.sync.from, last: lastSync(), hours: config.sync.hours });
   if (p === '/api/admin/sync' && m === 'POST') {

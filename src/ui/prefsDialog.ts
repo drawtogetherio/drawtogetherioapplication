@@ -9,6 +9,8 @@ import { native } from '../io/native';
 import { LOGO_SVG, WORDMARK_SVG } from '../site/brand';
 import { describe } from './memory';
 import { penTestPad } from './penTest';
+import { api } from '../net/api';
+import { renderMarkdown } from './markdown';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
 const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'Gestures', 'About'] as const;
@@ -156,6 +158,13 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     ];
     if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
     rows.push(row('Logo design', h('a.about-link', { href: 'https://www.fiverr.com/logocraftz', target: '_blank', rel: 'noopener noreferrer' }, 'Logocraftz')));
+    const news = h('div.md.whats-new', {}, h('span.muted', {}, 'Loading…'));
+    api.whatsNew().then(({ md, at }) => {
+      if (!md.trim()) { news.replaceChildren(h('span.muted', {}, 'Nothing yet.')); return; }
+      news.innerHTML = renderMarkdown(md);
+      news.append(h('small.muted.whats-new-at', {}, 'Updated ' + new Date(at).toLocaleDateString([], { dateStyle: 'medium' })));
+    }).catch(() => news.replaceChildren(h('span.muted', {}, 'Connect to see what changed.')));
+    rows.push(h('h3.sub', {}, 'What’s new'), news);
     return rows;
   };
 
