@@ -1,4 +1,5 @@
 import { uid } from '../core/geom';
+import { CANVAS_LOG, clog, resetStrokeStats, strokeStats } from '../debug/canvasLog';
 import type { Op } from '../core/model';
 import { strokeFits } from '../shared/brush';
 import { brushAssets } from '../shared/brushAssets';
@@ -67,8 +68,17 @@ export class BrushTool implements Tool {
       return { m, buffer, renderer: new StrokeRenderer(buffer, params, this.erase ? '#000000' : this.ed.color, { seed: id, under }), id, sent: 0 };
     });
     this.ed.view.extraLive = this.mirrors.map((c) => live(c.buffer));
+    if (CANVAS_LOG) {
+      resetStrokeStats();
+      this.startedAt = performance.now();
+      const vp = this.ed.view.viewport;
+      clog('stroke.start', { id: this.id, erase: this.erase, brush: params, preset: this.erase ? this.ed.settings.eraserPreset : this.ed.settings.brushPreset,
+        color: this.ed.color, layer: layer.props.id, layerTiles: layer.surface.tiles.size, mask: this.ed.onMask, zoom: vp.zoom, rot: vp.rot, mirrors: this.mirrors.length,
+        stabilizer: this.ed.prefs.stabilizerOn ? this.ed.prefs.stabilizer : 0, quickShape: this.ed.prefs.quickShape, room: !!this.ed.room, x: p.x, y: p.y, p: p.pressure });
+    }
     this.add(p);
   }
+  private startedAt = 0;
 
   move(p: PointerInfo) {
     if (!this.buffer) return;
@@ -132,7 +142,9 @@ export class BrushTool implements Tool {
     this.pts.push(x, y, pr);
     const tx = this.params.tilt ? Math.round(p.tiltX) : 0, ty = this.params.tilt ? Math.round(p.tiltY) : 0;
     if (this.params.tilt) this.tilt.push(tx, ty);
+    const t0 = CANVAS_LOG ? performance.now() : 0;
     const r = this.renderer!.add(x, y, pr, tx, ty);
+    if (CANVAS_LOG) { const d = performance.now() - t0; strokeStats.adds++; strokeStats.addMs += d; strokeStats.addMax = Math.max(strokeStats.addMax, d); }
     if (r) this.ed.view.invalidate(r);
     for (const c of this.mirrors) {
       const [mx, my] = mapPts(c.m, [x, y, pr]);
@@ -182,6 +194,7 @@ export class BrushTool implements Tool {
     this.ahead = [];
     const r = this.renderer!.end();
     if (r) this.ed.view.invalidate(r);
+    const tEnd = CANVAS_LOG ? performance.now() : 0;
     for (const c of this.mirrors) { const mr = c.renderer.end(); if (mr) this.ed.view.invalidate(mr); }
     this.flush();
     const buffer = this.buffer, mirrors = this.mirrors;
@@ -197,6 +210,11 @@ export class BrushTool implements Tool {
       color: this.erase ? '#000000' : this.ed.color, pts, clip: this.ed.selection ?? undefined, mask: this.ed.onMask, tilt,
     });
     const run = () => this.ed.run([op(this.id, this.pts), ...mirrors.map((c) => op(c.id, mapPts(c.m, this.pts)))], 'stroke', [{ buffer }, ...mirrors.map((c) => ({ buffer: c.buffer }))]);
+    if (CANVAS_LOG) {
+      const s = strokeStats, f = (v: number) => Math.round(v * 100) / 100;
+      clog('stroke.end', { id: this.id, samples: this.pts.length / 3, length: f(this.len), ms: f(tEnd - this.startedAt), bufferTiles: buffer.tiles.size,
+        adds: s.adds, addMs: f(s.addMs), addMax: f(s.addMax), dabs: s.dabs, syncs: s.syncs, syncMs: f(s.syncMs), syncMax: f(s.syncMax), syncMPx: f(s.syncPx / 1e6) });
+    }
     // A room only takes a stroke once its brush images are on the server.
     const ids = brushAssets(brush);
     if (ids.length && this.ed.room) void uploadAssets(ids).then(run); else run();
@@ -219,6 +237,7 @@ export class BrushTool implements Tool {
 
   cancel() {
     if (!this.buffer) return;
+    if (CANVAS_LOG) clog('stroke.cancel', { id: this.id, samples: this.pts.length / 3 });
     clearTimeout(this.holdTimer);
     this.quick = null;
     clearTimeout(this.flushTimer);

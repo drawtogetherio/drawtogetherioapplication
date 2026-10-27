@@ -3,6 +3,7 @@ import { Rect, ctx2d, lerp, makeCanvas, rectUnion } from '../core/geom';
 import { TILE, TiledSurface } from '../core/tiles';
 import { isAssetId } from '../shared/brushAssets';
 import { assetImage } from './brushAssets';
+import { CANVAS_LOG, strokeStats } from '../debug/canvasLog';
 
 export interface BrushPreset { id: string; name: string; params: BrushParams }
 export interface BrushCategory { name: string; brushes: BrushPreset[] }
@@ -353,6 +354,7 @@ export class StrokeRenderer extends DabPath {
   }
 
   protected dab(x: number, y: number, p: number): Rect | null {
+    if (CANVAS_LOG) strokeStats.dabs++;
     const b = this.brush, rnd = this.rnd;
     let d = this.diameter(p), a = Math.min(1, this.strength(p));
     const pose: Pose = { angle: ((b.angle ?? 0) * Math.PI) / 180, stretch: 1, lean: 0 };
@@ -545,6 +547,7 @@ export class StrokeRenderer extends DabPath {
     const d = this.dirty;
     this.dirty = null;
     if (!d) return;
+    const t0 = CANVAS_LOG ? performance.now() : 0;
     const [cr, cg, cb] = this.rgb;
     const x0 = Math.floor(d.x), y0 = Math.floor(d.y), x1 = Math.ceil(d.x + d.w), y1 = Math.ceil(d.y + d.h);
     for (let ty = Math.floor(y0 / TILE); ty * TILE < y1; ty++) for (let tx = Math.floor(x0 / TILE); tx * TILE < x1; tx++) {
@@ -564,7 +567,9 @@ export class StrokeRenderer extends DabPath {
       }
       ctx2d(this.target.ensure(tx, ty)).putImageData(img, lx, ly);
       this.target.mark(TiledSurface.key(tx, ty), { x: lx, y: ly, w, h });
+      if (CANVAS_LOG) strokeStats.syncPx += w * h;
     }
+    if (CANVAS_LOG) { const dt = performance.now() - t0; strokeStats.syncs++; strokeStats.syncMs += dt; strokeStats.syncMax = Math.max(strokeStats.syncMax, dt); }
   }
 }
 

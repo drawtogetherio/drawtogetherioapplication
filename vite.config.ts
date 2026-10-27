@@ -8,6 +8,10 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 
 const api = 'http://localhost:' + (process.env.PORT || 8787);
 
+/** Built for the beta site: same test as the server's (server/config.ts). Canvas logs exist only there. */
+const env = process.env;
+const betaBuild = env.BETA ? env.BETA === '1' : (env.RAILWAY_ENVIRONMENT_NAME ?? '').toLowerCase() === 'beta' || /^https?:\/\/beta\./i.test(env.PUBLIC_URL ?? '');
+
 /** In development, /app and /login (no trailing slash) should serve their pages, like the server does. */
 const prettyUrls: Plugin = {
   name: 'pretty-urls',
@@ -46,9 +50,9 @@ const serviceWorker: Plugin = {
 // Keep page files at the top level: Railway builds in a folder called /app, so an app/ folder of pages
 // makes Vite resolve /app/index.html to the wrong file and silently drop the landing page.
 // `npm run build:single` produces one self-contained HTML file of the app (used for previews).
-export default defineConfig(({ mode }) => ({
+export default defineConfig(({ mode, command }) => ({
   base: mode === 'single' ? './' : '/',
-  define: { __APP_VERSION__: JSON.stringify(version) },
+  define: { __APP_VERSION__: JSON.stringify(version), __CANVAS_LOG__: JSON.stringify(betaBuild || command === 'serve') },
   plugins: mode === 'single' ? [viteSingleFile()] : [prettyUrls, serviceWorker],
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',

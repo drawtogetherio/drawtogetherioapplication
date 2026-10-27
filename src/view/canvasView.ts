@@ -3,6 +3,7 @@ import { DrawDoc } from '../core/document';
 import { TILE } from '../core/tiles';
 import { LiveLayer, composite } from '../engine/compositor';
 import { Viewport } from './viewport';
+import { CANVAS_LOG, clog } from '../debug/canvasLog';
 
 const MAX_COMPOSITE_PIXELS = 14_000_000;
 /** A recomposite of the whole view (a zoom step on a big canvas with many layers) spreads over frames past this. */
@@ -68,6 +69,7 @@ export class CanvasView {
 
   setLowLatency(on: boolean) {
     if (on === this.lowLatency) return;
+    if (CANVAS_LOG) clog('lowLatency', on);
     this.lowLatency = on;
     const old = this.canvas;
     this.canvas = this.makeStage();
@@ -117,8 +119,19 @@ export class CanvasView {
 
   requestRender() {
     if (this.frame) return;
-    this.frame = requestAnimationFrame(() => { this.prepare?.(); this.frame = 0; this.render(); });
+    this.frame = requestAnimationFrame((at) => {
+      const t0 = CANVAS_LOG ? performance.now() : 0;
+      this.prepare?.(); this.frame = 0;
+      const t1 = CANVAS_LOG ? performance.now() : 0, dirty = this.dirty.length, all = this.dirtyAll, area = CANVAS_LOG ? this.dirty.reduce((n, d) => n + d.w * d.h, 0) : 0;
+      this.render();
+      if (CANVAS_LOG) {
+        const f = (v: number) => Math.round(v * 100) / 100, now = performance.now();
+        clog('frame', { ms: f(now - t1), prep: f(t1 - t0), gap: f(at - this.lastFrame), late: f(t0 - at), dirty, all, area: Math.round(area), live: !!this.live });
+        this.lastFrame = at;
+      }
+    });
   }
+  private lastFrame = 0;
 
   /** The part of the document on screen. */
   visible(): Rect { const vp = this.viewport; return transformRect(vp.matrix().inverse(), { x: 0, y: 0, w: vp.w, h: vp.h }); }
