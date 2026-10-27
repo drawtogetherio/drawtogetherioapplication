@@ -153,7 +153,7 @@ export function exportDialog(ed: Editor) {
 export function confirmDialog(title: string, message: string, okLabel: string): Promise<boolean> {
   return new Promise((resolve) => {
     let result = false;
-    const ok = h(/^(Delete|Remove|Discard|Block)\b/.test(okLabel) ? 'button.btn.destructive' : 'button.btn.primary', {}, okLabel);
+    const ok = h(/^(Delete|Remove|Discard|Block)\b/.test(okLabel) ? 'button.btn.primary.destructive' : 'button.btn.primary', {}, okLabel);
     const cancel = h('button.btn', {}, 'Cancel');
     const close = modal(title, h('div.modal-body', {}, h('p', {}, message)), [cancel, ok], () => resolve(result));
     ok.addEventListener('click', () => { result = true; close(); });
