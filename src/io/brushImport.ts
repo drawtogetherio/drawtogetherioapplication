@@ -1,6 +1,6 @@
 // Brushes from other apps: Photoshop .abr, Procreate .brush and .brushset. Tips and grains become assets.
 import type { BrushParams } from '../core/model';
-import { ctx2d, makeCanvas } from '../core/geom';
+import { clamp, ctx2d, makeCanvas } from '../core/geom';
 import { importAssetImage } from '../engine/brushAssets';
 import { MAX_BRUSH_SIZE, cleanBrush } from '../shared/brush';
 import { ImportedBrush, RawTip, parseAbr } from '../shared/abr';
@@ -11,7 +11,6 @@ import { inflate } from './hivecanvas';
 export interface ImportedParams { name: string; params: BrushParams }
 
 const base: BrushParams = { size: 20, opacity: 1, flow: 1, hardness: 1, spacing: 0.1, pressureSize: 0.6, pressureFlow: 0, minSize: 0.1, smoothing: 0.3 };
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const MAX_IMPORT = 60;
 
 /** Everything in the file Doodlehive can turn into a brush; an empty list when it holds none. */

@@ -5,6 +5,7 @@ import { renderRegion } from '../engine/compositor';
 import {
   HIVE_VERSION, HiveSettings, LapseFrameInfo, LapseManifest, ZipEntry, jsonBytes, readLapse, tileName, zipParts,
 } from '../shared/hivecanvas';
+import { done, finished } from './idb';
 
 // Timelapses, recorded on this device and never sent anywhere. Every few seconds the recorder
 // composites the 256 px tiles that changed and keeps them losslessly as PNGs, so a frame is only as
@@ -42,8 +43,6 @@ function open(): Promise<IDBDatabase> {
     r.onerror = () => rej(r.error);
   }));
 }
-const done = <T>(req: IDBRequest<T>) => new Promise<T>((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
-const finished = (tx: IDBTransaction) => new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
 const range = (key: string) => IDBKeyRange.bound([key, 0], [key, Infinity]);
 
 export const roomLapseKey = (roomId: string) => 'room:' + roomId;

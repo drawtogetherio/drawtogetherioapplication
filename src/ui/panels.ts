@@ -16,6 +16,13 @@ export class Studio {
   constructor(private ed: Editor, private stage: HTMLElement) {
     for (const s of SIDES) this.docks[s] = h(`div.dock.dock-${s}` as 'div');
     this.el = h('div.studio', { hidden: true }, this.docks.top, this.docks.left, this.docks.right, this.docks.bottom, this.hint);
+    // Chat, the room bar and the overview sit in the canvas's corners, not on top of docked panels.
+    new ResizeObserver(() => {
+      const r = this.stage.getBoundingClientRect(), s = document.body.style;
+      s.setProperty('--stage-l', `${Math.round(r.left)}px`);
+      s.setProperty('--stage-r', `${Math.round(window.innerWidth - r.right)}px`);
+      s.setProperty('--stage-b', `${Math.round(window.innerHeight - r.bottom)}px`);
+    }).observe(stage);
   }
 
   private get state() { return this.ed.prefs.panels; }

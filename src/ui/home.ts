@@ -21,7 +21,6 @@ import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
 import { LAST_KEY, LastOpen } from './session';
 
-// Fallback to the live event stream.
 const BANNER_KEY = 'doodlehive.support';
 const RESUME_MS = 7 * 24 * 3600_000;
 const FRIENDS_POLL_MS = 60_000;
@@ -29,7 +28,7 @@ const FRIENDS_POLL_MS = 60_000;
 const VIS_LABEL: Record<Visibility, string> = { private: 'Just you', open: 'Open link', friends: 'Friends', unlisted: 'Unlisted' };
 const VIS_ICON: Record<Visibility, string> = { private: 'lock', open: 'link', friends: 'users', unlisted: 'eye' };
 
-export function timeAgo(t: number) {
+function timeAgo(t: number) {
   const s = Math.max(0, (Date.now() - t) / 1000);
   if (s < 60) return 'just now';
   const m = s / 60, hh = m / 60, d = hh / 24;
@@ -60,6 +59,7 @@ export class Home {
   private visits: VisitInfo[] = [];
   private sharedSec = h('section.home-sec', { hidden: true }, this.secHead('h2', 'Shared with you'), this.shared);
   private start = h('div.start-card');
+  private ad = h('aside.ad-slot', { hidden: true, 'aria-label': 'Ad' });
   private promo = h('div.home-cards');
   private friendCount = h('span.count');
   private outgoingCount = h('span.count-pill', { hidden: true });
@@ -71,7 +71,8 @@ export class Home {
   private resume = h('div.resume', { hidden: true });
   private meCard = h('div.me-card');
   private friends: FriendsList = { friends: [], incoming: [], outgoing: [] };
-  private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 20) });
+  private friendsJson = '';
+  private bellBtn = h('button.bell-btn', { type: 'button', title: 'Notifications', 'aria-label': 'Notifications', html: icon('bell', 18) });
   private bellBadge = h('span.bell-badge', { hidden: true });
   private noticesPop = h('div.popover.notices-pop', { hidden: true });
   private notices: Notice[] = [];
@@ -94,7 +95,7 @@ export class Home {
       if (!addIn.value.trim()) return;
       try {
         const r = await api.addFriend(addIn.value);
-        this.app.toast(r.result === 'accepted' ? 'You’re now friends!' : 'Friend request sent');
+        this.app.toast(r.result === 'accepted' ? 'You’re friends now' : 'Friend request sent');
         addIn.value = '';
         this.setFriends(r);
       } catch (ex) { addErr.textContent = (ex as ApiError).message; }
@@ -121,7 +122,7 @@ export class Home {
           this.meCard,
           h('div.panel-head', {}, h('span.panel-title', {}, 'Friends ', this.friendCount)),
           h('div.friends-scroll', {}, addForm, addErr, this.requestsEl, this.friendsEl),
-          h('button.friends-foot', { type: 'button', html: icon('userPlus', 17) + '<span>Manage outgoing requests</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
+          h('button.friends-foot', { type: 'button', html: icon('userPlus', 18) + '<span>Requests you sent</span>', onclick: () => this.peopleDialog('outgoing') }, this.outgoingCount),
         ),
         h('main.projects', {},
           this.start,
@@ -129,6 +130,7 @@ export class Home {
           this.recentSec,
           this.mineSec,
           this.sharedSec,
+          this.ad,
           this.promo,
         ),
       ),
@@ -170,6 +172,7 @@ export class Home {
     this.renderBanner();
     this.start.hidden = guest;
     this.renderPromo();
+    this.renderAd();
     if (guest) { this.renderGuest(); return; }
     this.renderResume();
     this.projectsHead.firstElementChild!.textContent = 'Recent';
@@ -200,7 +203,7 @@ export class Home {
     r.replaceChildren(
       h('span.muted', { html: icon('undo', 18) }),
       h('span.grow', {}, h('b', {}, name || 'Untitled'), h('small', {}, ` · open ${timeAgo(at)}`)),
-      h('button.btn.small.primary', { type: 'button', onclick: () => { r.hidden = true; if (canvas) s.openLocal(canvas); else if (room) s.joinRoom(room); } }, 'Pick up where you left off'),
+      h('button.btn.small.primary', { type: 'button', onclick: () => { r.hidden = true; if (canvas) s.openLocal(canvas); else if (room) s.joinRoom(room); } }, 'Keep drawing'),
       h('button.icon-btn', { type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss', html: icon('x', 16), onclick: forget }),
     );
   }
@@ -218,7 +221,7 @@ export class Home {
     if (b.hidden || b.childElementCount) return;
     try { sessionStorage.setItem(BANNER_KEY, '1'); } catch { /* storage blocked */ }
     b.append(
-      h('a.support-link', { href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Support Doodlehive on Patreon and unlock special features'),
+      h('a.support-link', { href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Doodlehive is made by a few students. Patreon is what keeps the servers on.'),
       h('button.icon-btn', { type: 'button', title: 'Close', 'aria-label': 'Close', html: icon('x', 16), onclick: () => {
         b.hidden = true;
         this.app.ed.prefs.supportBanner = false;
@@ -233,8 +236,23 @@ export class Home {
     clear(this.promo);
     const card = (href: string, platform: string, title: string, text: string) =>
       h('a.promo-card', { href, target: '_blank', rel: 'noopener noreferrer' }, socialLogo(platform, 40), h('span.promo-text', {}, h('strong', {}, title), h('small', {}, text)));
-    if (srv?.patreon) this.promo.append(card(srv.patreon, 'patreon', 'Support on Patreon', 'Unlock special features'));
+    if (srv?.patreon) this.promo.append(card(srv.patreon, 'patreon', 'Support on Patreon', 'Extra themes, GIF pictures and more'));
     if (srv?.discordInvite) this.promo.append(card(srv.discordInvite, 'discord', 'Join the Discord', 'Chat with other artists'));
+  }
+
+  /** One banner for free accounts in the browser. Supporters, guests and the desktop and iPad apps never get it. */
+  private renderAd() {
+    const srv = this.app.session.server, me = this.app.ed.me, ads = srv?.ads;
+    this.ad.hidden = !ads || !me || me.premium || me.guest || isNativeApp;
+    if (this.ad.hidden || this.ad.childElementCount) return;
+    this.ad.append(
+      h('div.ad-head', {}, h('span', {}, 'Ad'),
+        srv?.patreon ? h('a', { href: srv.patreon, target: '_blank', rel: 'noopener noreferrer' }, 'Supporters don’t see ads') : null),
+      ads!.frameUrl
+        // Sandboxed so the network's scripts can't reach the app or its cookies; clicks still open a tab.
+        ? h('iframe.ad-frame', { src: ads!.frameUrl, title: 'Ad', loading: 'lazy', referrerpolicy: 'origin', sandbox: 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox' })
+        : h('div.ad-frame.ad-placeholder', {}, 'Ad space, 728 × 90'),
+    );
   }
 
   // ---- Account ----
@@ -394,7 +412,7 @@ export class Home {
       }
       const ic = n.kind === 'friend' ? 'userPlus' : n.kind === 'friend-accepted' ? 'users' : n.kind === 'invite' ? 'link' : 'sparkle';
       return h(`div.notice-row${n.read ? '' : '.unread'}` as 'div', {}, h('span.notice-icon', { html: icon(ic, 18) }),
-        h('span.notice-text', {}, n.text, h('small', {}, ago(n.at))), ...actions);
+        h('span.notice-text', {}, n.text, h('small', {}, timeAgo(n.at))), ...actions);
     });
     return rows.length ? rows : [h('p.notices-empty', {}, 'Nothing new')];
   }
@@ -406,6 +424,10 @@ export class Home {
   }
 
   private setFriends(f: FriendsList) {
+    // The list is polled every minute; leave the DOM alone when nothing changed.
+    const json = JSON.stringify(f);
+    if (json === this.friendsJson) return;
+    this.friendsJson = json;
     this.friends = f;
     this.renderFriends();
   }
@@ -504,7 +526,7 @@ export class Home {
     items.sort((a, b) => b.at - a.at);
     clear(this.recent);
     for (const it of items.slice(0, RECENT_MAX)) this.recent.append(it.el());
-    if (!items.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet.'));
+    if (!items.length) this.recent.append(h('p.projects-empty', {}, 'No canvases yet. Start one with Draw alone.'));
   }
 
   /** Server canvases and the ones kept in this browser, newest first. */
@@ -671,13 +693,3 @@ export class Home {
   }
 }
 
-
-function ago(t: number): string {
-  const m = Math.round((Date.now() - t) / 60_000);
-  if (m < 1) return 'Just now';
-  if (m < 60) return `${m}m ago`;
-  const hrs = Math.round(m / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const d = Math.round(hrs / 24);
-  return d === 1 ? 'Yesterday' : `${d}d ago`;
-}

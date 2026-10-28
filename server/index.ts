@@ -67,7 +67,7 @@ function limit(key: string, n: number, windowMs: number) {
 
 function requireUser(req: Req): UserRow {
   const u = sessionUser(cookies(req)[COOKIE]);
-  if (!u) throw new HttpError(401, 'Please log in.');
+  if (!u) throw new HttpError(401, 'Log in first.');
   if (u.banned) throw new HttpError(403, 'This account is banned.');
   touch(u.id);
   keepGuest(u);
@@ -184,7 +184,7 @@ async function route(req: Req, res: Res) {
   // ---- Auth ----
   if (p === '/api/config' && m === 'GET') {
     const site = getSite();
-    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), discordInvite: config.discordInvite || undefined, notice: site.notice.on ? site.notice : null });
+    return json(res, 200, { beta: config.beta, discord: !!config.discord, devLogin: config.devLogin, linkPlatforms: LINK_PLATFORMS.map((x) => x.id), downloads: config.downloads, patreon: config.patreon, patreonLink: patreonEnabled(), discordInvite: config.discordInvite || undefined, notice: site.notice.on ? site.notice : null, ads: config.ads.frameUrl || config.ads.placeholder ? config.ads : null });
   }
   if (p === '/auth/discord' && m === 'GET') {
     if (!config.discord) return json(res, 503, { error: 'Discord login isn’t set up on this server yet.' });
@@ -335,7 +335,7 @@ async function route(req: Req, res: Res) {
       sets.push('favorite_color = ?'); vals.push(c);
     }
     if (b.links !== undefined) {
-      if (typeof b.links !== 'object' || !b.links) throw new HttpError(400, 'Invalid links.', 'links');
+      if (typeof b.links !== 'object' || !b.links) throw new HttpError(400, 'Those links don’t look right.', 'links');
       const links: Record<string, string> = {};
       for (const [k, v] of Object.entries(b.links as Record<string, unknown>)) {
         const n = normalizeLink(k, String(v ?? ''));
@@ -370,7 +370,7 @@ async function route(req: Req, res: Res) {
       sets.push('presence_mode = ?'); vals.push(pm);
     }
     if (b.prefs !== undefined) {
-      if (!b.prefs || typeof b.prefs !== 'object') throw new HttpError(400, 'Invalid preferences.', 'prefs');
+      if (!b.prefs || typeof b.prefs !== 'object') throw new HttpError(400, 'Couldn’t save those preferences.', 'prefs');
       sets.push('prefs = ?'); vals.push(JSON.stringify(cleanPrefs(b.prefs)));
     }
     if (b.pinned !== undefined) {
@@ -531,7 +531,7 @@ async function route(req: Req, res: Res) {
     const s = (b.settings ?? {}) as Record<string, unknown>;
     const infinite = !!s.infinite;
     const width = Math.round(Number(s.width)), height = Math.round(Number(s.height));
-    if (!infinite && !(width >= 16 && height >= 16 && width <= 16384 && height <= 16384 && width * height <= 100e6)) throw new HttpError(400, 'Invalid canvas size.');
+    if (!infinite && !(width >= 16 && height >= 16 && width <= 16384 && height <= 16384 && width * height <= 100e6)) throw new HttpError(400, 'That canvas size isn’t supported.');
     const bg = s.background === null ? null : normalizeColor(String(s.background ?? '#ffffff'));
     const name = sanitizeDisplayName(String(b.name ?? '')).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
     const share = cleanShare(b.share ?? (b.private ? { visibility: 'private' } : undefined));
@@ -658,7 +658,7 @@ async function route(req: Req, res: Res) {
   if (mm && m === 'GET') {
     const u = requireUser(req);
     const r = getRoom(mm[1]);
-    if (!r || !r.visibleTo(u)) return json(res, 404, { error: 'Unable to find room' });
+    if (!r || !r.visibleTo(u)) return json(res, 404, { error: 'Couldn’t find that room' });
     const owner = getUser(r.info.ownerId);
     return json(res, 200, { ...r.info, owner: owner ? publicProfile(owner) : null, online: r.members().length, joinable: r.canJoin(u), invited: r.isHost(u.id) ? r.invitedProfiles() : undefined, visitors: r.isHost(u.id) ? r.visitorProfiles() : undefined });
   }
@@ -704,16 +704,16 @@ function loadFile(file: string): Cached | null {
 
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
-/** The app page with Open Graph tags, so a pasted invite link embeds as "<name> has invited you to draw!" with the canvas. */
+/** The app page with Open Graph tags, so a pasted invite link embeds as "<name> invited you to draw" with the canvas. */
 function serveInvite(req: Req, res: Res, room: Room, by: string | null, watch: boolean, m: string) {
   const c = loadFile(path.join(config.staticDir, 'app.html'));
   if (!c) return serveStatic(req, res, '/app', m);
   const name = (by ? userByHandle(by) : undefined)?.display_name ?? getUser(room.info.ownerId)?.display_name ?? 'A friend';
   const v = (db.prepare('SELECT thumb_version FROM rooms WHERE id = ?').get(room.info.id) as { thumb_version: number } | undefined)?.thumb_version ?? 0;
   const tags = {
-    'og:type': 'website', 'og:site_name': 'DoodleHive', 'og:url': `${config.publicUrl}/app?room=${room.info.id}`,
-    'og:title': `${name} has invited you to ${watch ? 'watch them draw' : 'draw'}!`,
-    'og:description': `${name} has invited you to ${watch ? 'watch them draw' : 'draw'} on DoodleHive! No account needed just click to join!`,
+    'og:type': 'website', 'og:site_name': 'Doodlehive', 'og:url': `${config.publicUrl}/app?room=${room.info.id}`,
+    'og:title': `${name} invited you to ${watch ? 'watch them draw' : 'draw'}`,
+    'og:description': `Open the link to ${watch ? 'watch' : 'draw together'} on Doodlehive. No account needed.`,
     'og:image': `${config.publicUrl}/og/${room.info.id}?v=${v}`, 'twitter:card': 'summary_large_image',
   };
   const head = Object.entries(tags).map(([k, val]) => `<meta property="${k}" content="${escapeHtml(val)}" />`).join('\n  ');
@@ -733,7 +733,7 @@ function serveStatic(req: Req, res: Res, p: string, m: string) {
   if (!c) {
     console.error(`Missing page ${page} in ${dir}. Was "npm run build" run?`);
     res.writeHead(503, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end('Doodlehive is updating. Please try again in a minute.');
+    return res.end('Doodlehive is updating. Try again in a minute.');
   }
   const served = target && c === fileCache.get(target) ? target : page;
   const status = served === '404.html' ? 404 : 200;

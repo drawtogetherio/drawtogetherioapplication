@@ -1,6 +1,7 @@
 import type { Op } from '../core/model';
 import type { ShareSettings } from '../shared/protocol';
 import { NativeCanvas, native } from './native';
+import { done, finished } from './idb';
 
 // Canvases kept on this device: free accounts draw here; shared rooms leave a copy here too.
 // In the browser that is IndexedDB; the desktop app keeps files instead (see desktop/).
@@ -39,8 +40,6 @@ function open(): Promise<IDBDatabase> {
   }));
 }
 
-const done = <T>(req: IDBRequest<T>) => new Promise<T>((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
-const finished = (tx: IDBTransaction) => new Promise<void>((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
 
 export const newLocalId = () => 'c' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 

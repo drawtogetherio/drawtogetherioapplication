@@ -27,11 +27,11 @@ async function call<T>(method: string, url: string, body?: unknown, raw?: Blob):
     body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? 'Request failed.', (data as { field?: string }).field);
+  if (!res.ok) throw new ApiError(res.status, (data as { error?: string }).error ?? 'Something went wrong. Try again.', (data as { field?: string }).field);
   return data as T;
 }
 
-export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; discordInvite?: string; notice?: SiteNotice | null }
+export interface ServerConfig { beta?: boolean; discord: boolean; devLogin: boolean; downloads?: { mac: string | null; windows: string | null }; patreon?: string; patreonLink?: boolean; discordInvite?: string; notice?: SiteNotice | null; ads?: { frameUrl: string | null; placeholder: boolean } | null }
 
 export interface Friend extends PublicProfile { online: boolean; presence: Presence; room: { id: string; name: string } | null }
 

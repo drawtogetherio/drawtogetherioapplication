@@ -125,7 +125,7 @@ export async function timelapseDialog(file?: LapseSource) {
     if (!src) return;
     busy(true); err.textContent = '';
     try { await saveFile(await hiveLapseBlob(src), name + HIVELAPSE_EXT); }
-    catch (e) { err.textContent = (e as Error).message || 'Saving failed.'; }
+    catch (e) { err.textContent = (e as Error).message || 'Couldn’t save it. Try again.'; }
     busy(false);
   });
   saveVideo.addEventListener('click', async () => {

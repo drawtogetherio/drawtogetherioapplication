@@ -40,6 +40,8 @@ log ever says `WARNING: no volume attached`, the volume is missing.
 | `PATREON_CLIENT_ID` | optional: from the Patreon client (step 6). Turns on Link Patreon in Edit profile |
 | `PATREON_CLIENT_SECRET` | optional: from the same client (keep it only here) |
 | `PATREON_CAMPAIGN_ID` | optional: only memberships to this campaign count as premium (without it, any active membership does) |
+| `AD_FRAME_URL` | optional: the page that holds your ad network's banner, shown on the home screen to free accounts (see below) |
+| `AD_PLACEHOLDER` | optional: `1` shows an empty "Ad space" box where the banner goes, to check the layout on beta |
 | `ADMIN_HANDLES` | your @handle (without the @; several separated by commas). Those accounts get the admin dashboard at `/admin` on their next login |
 | `EPHEMERAL_GRACE_MS` | optional: how long a free host's live-only room waits for them to come back before it closes (default 120000, 2 minutes) |
 
@@ -117,6 +119,34 @@ live data can't remove live pictures.
 On the first start with R2 set up, the server moves the pictures already in the database to R2 in the
 background (the deploy log says `Moved N pictures to R2.`). Old picture links keep working by
 redirecting to R2.
+
+## Home screen ad (optional)
+
+There's room for one banner (728 × 90, 100 px tall on phones) at the bottom of the home screen. It only
+shows to free accounts in the browser: premium supporters, guests, and the desktop and iPad apps never see
+it. With neither variable set there's no ad slot at all.
+
+The ad doesn't run on doodlehive.net itself. It lives on a small page of yours that the home screen shows
+in a sandboxed frame, so the network's scripts can't touch accounts, cookies or canvases.
+
+1. Pick a network and get approved. Google AdSense is the usual one; Carbon Ads is a quieter option aimed
+   at designers, if they take the site. Add `ads.doodlehive.net` (or wherever the page will live) as a site.
+2. Make the ad page: a plain HTML file with the network's snippet for one 728 × 90 responsive unit and a
+   transparent background, for example:
+
+   ```html
+   <!doctype html>
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <style>html, body { margin: 0; background: transparent; }</style>
+   <!-- paste the network's ad unit code here -->
+   ```
+
+3. Host it on its own subdomain over HTTPS. Cloudflare Pages is free: make a project with that one file
+   and add the custom domain `ads.doodlehive.net`. The network's `ads.txt` goes next to it if they ask.
+4. In Railway, set `AD_FRAME_URL=https://ads.doodlehive.net/`. Only `https://` addresses are accepted.
+   The server adds that origin to the page's `frame-src`, so no other change is needed.
+
+To see where the banner sits before you have a network, set `AD_PLACEHOLDER=1` on beta.
 
 ## Beta site (beta.doodlehive.net)
 

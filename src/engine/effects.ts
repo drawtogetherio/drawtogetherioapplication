@@ -1,6 +1,6 @@
 import { type Adjustment, type EffectId, type Op, isAdjustment } from '../core/model';
 import { curveAt } from '../shared/curve';
-import { hexToRgb } from './brush';
+import { hexToRgb, seeded } from './brush';
 
 // Layer effects, baked into pixels once. Everything here is plain arithmetic in a fixed order, so
 // every device gets the same bytes and the op replays exactly. `amount` is 0..1.
@@ -131,10 +131,6 @@ function hash(s: string) {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
-}
-
-function seeded(seed: number) {
-  return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
 /** Pixels as premultiplied floats, blurred and shifted without dark fringes. */

@@ -15,7 +15,6 @@ export function applyTheme(id: string | null | undefined) {
   s.setProperty('--accent', current.accent);
   s.setProperty('--accent-hover', current.accentHover);
   s.setProperty('--accent-soft', rgba(current.accent, 0.18));
-  s.setProperty('--accent-tint', current.accentTint);
   s.setProperty('--on-accent', current.onAccent);
   document.documentElement.dataset.theme = current.id;
   try { localStorage.setItem(KEY, current.id); } catch { /* storage may be blocked */ }

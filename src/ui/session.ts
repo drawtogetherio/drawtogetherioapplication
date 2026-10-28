@@ -108,7 +108,7 @@ export class Session {
     this.nativeFiles();
     if (patreon) {
       this.ed.toast(patreon === 'linked' ? (this.me?.patreon?.active ? 'Patreon linked. Premium is on.' : 'Patreon linked. No active membership yet.')
-        : patreon === 'taken' ? 'That Patreon account is linked to another Doodlehive account.' : 'Patreon link failed. Try again.');
+        : patreon === 'taken' ? 'That Patreon account is linked to another Doodlehive account.' : 'Couldn’t link Patreon. Try again.');
       this.setUrl({ room: room?.id, watch: room?.watch, canvas: canvas ?? undefined });
     }
   }
@@ -200,7 +200,7 @@ export class Session {
       preview.hidden = true;
       err.textContent = '';
       const m = /(?:room=)?([a-z0-9]{4,16})\s*$/i.exec(input.value.trim());
-      if (!m) { if (input.value.trim()) err.textContent = 'Unable to find room'; return; }
+      if (!m) { if (input.value.trim()) err.textContent = 'Couldn’t find that room'; return; }
       try {
         const info = await api.room(m[1].toLowerCase());
         if (n !== seq) return;
@@ -211,7 +211,7 @@ export class Session {
           h('button.btn.join-go', { type: 'button', onclick: () => { close(); this.joinRoom(info.id); } }, 'Join'),
         );
         preview.hidden = false;
-      } catch { if (n === seq) err.textContent = 'Unable to find room'; }
+      } catch { if (n === seq) err.textContent = 'Couldn’t find that room'; }
     };
     form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); lookup(); });
     input.addEventListener('input', () => { clearTimeout(timer); timer = window.setTimeout(lookup, 350); });
@@ -426,7 +426,7 @@ export class Session {
       if (e.kind === 'status' && room.status === 'waiting' && !waitClose) {
         this.booted();
         const cancel = h('button.btn', { type: 'button', onclick: () => { stopWaiting(); this.leaveRoom(); } }, 'Cancel');
-        waitClose = modal('Waiting to join', h('div.modal-body', {}, h('p.muted', {}, 'The host will let you in shortly.')), [cancel], undefined, false);
+        waitClose = modal('Waiting to join', h('div.modal-body', {}, h('p.muted', {}, 'The host needs to let you in.')), [cancel], undefined, false);
       } else if (e.kind !== 'status' || room.status !== 'waiting') {
         if (room.status !== 'waiting') stopWaiting();
       }
