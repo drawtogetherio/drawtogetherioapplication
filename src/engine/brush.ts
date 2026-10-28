@@ -304,12 +304,17 @@ const hsvToRgb = ([h, s, v]: RGB): RGB => {
  * Paint is laid down as coverage (grey levels) in a scratch surface, where round dabs combine by
  * maximum ('lighten'), so a pixel holds the brush's coverage however many dabs land on it: no
  * build-up pattern, no banding at light pressure. Hairlines are a ribbon of quads added once per
- * pixel instead, since discs that small are all anti-aliasing. Square dabs still stamp over each other.
+ * pixel instead, since discs that small are all anti-aliasing. The ribbon is built in its own surface and
+ * joins the coverage by maximum too, so where a stroke's width wavers across the hairline threshold (a
+ * light imported brush with a tiny minimum size) the ribbon's ends don't add onto the discs beside them
+ * as dark specks. Square dabs still stamp over each other.
  * `sync` turns the coverage into coloured pixels in the stroke buffer; it runs after each input event.
  * A brush with colour dynamics or wet mixing also keeps each dab's colour in a tint surface.
  */
 export class StrokeRenderer extends DabPath {
   private readonly cov = new TiledSurface(true);
+  /** The hairline ribbon, added up piece by piece before it joins `cov`. */
+  private readonly rib = new TiledSurface(true);
   private readonly tint: TiledSurface | null;
   private readonly rgb: RGB;
   private col: RGB;
@@ -516,6 +521,7 @@ export class StrokeRenderer extends DabPath {
   /** Draws `shape` into the coverage with `op`; with grain, the shape is cut by the paper first (`at` places a moving texture on the dab). */
   private paint(box: Rect, op: GlobalCompositeOperation, shape: (c: CanvasRenderingContext2D) => void, level: number, at?: (c: CanvasRenderingContext2D) => void): Rect | null {
     if (level <= 0.002) return null;
+    const into = op === 'lighter' ? this.rib : this.cov;
     if (this.paper) {
       const sc = this.scratchFor(box), c = ctx2d(sc), S = sc.width, ox = Math.floor(box.x), oy = Math.floor(box.y);
       c.save();
@@ -528,11 +534,29 @@ export class StrokeRenderer extends DabPath {
       c.globalCompositeOperation = 'destination-in';
       shape(c); // keeps only the shape: 'multiply' painted the paper over the whole square
       c.restore();
-      this.cov.draw(box, (ctx) => { ctx.globalCompositeOperation = op; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
-    } else this.cov.draw(box, (ctx) => { ctx.globalCompositeOperation = op; shape(ctx); });
+      into.draw(box, (ctx) => { ctx.globalCompositeOperation = op; ctx.drawImage(sc, 0, 0, S, S, ox, oy, S, S); });
+    } else into.draw(box, (ctx) => { ctx.globalCompositeOperation = op; shape(ctx); });
+    if (into === this.rib) this.mergeRibbon(box);
     // The tint keeps the newest colour: a plain fill, the shape sees which canvas it is on.
     if (this.tint) this.tint.draw(box, (ctx) => { this.tintCanvas = ctx.canvas; shape(ctx); this.tintCanvas = null; });
     return this.touched(box);
+  }
+
+  /** Brings the ribbon under `box` into the coverage, keeping whichever is darker. */
+  private mergeRibbon(box: Rect) {
+    for (const k of this.cov.keysIn(box)) {
+      const [tx, ty] = TiledSurface.parse(k), src = this.rib.get(tx, ty);
+      if (!src) continue;
+      const x0 = Math.max(0, Math.floor(box.x - tx * TILE)), y0 = Math.max(0, Math.floor(box.y - ty * TILE));
+      const x1 = Math.min(TILE, Math.ceil(box.x + box.w - tx * TILE)), y1 = Math.min(TILE, Math.ceil(box.y + box.h - ty * TILE));
+      if (x1 <= x0 || y1 <= y0) continue;
+      const c = ctx2d(this.cov.ensure(tx, ty));
+      c.save();
+      c.globalCompositeOperation = 'lighten';
+      c.drawImage(src, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
+      c.restore();
+      this.cov.mark(k, { x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    }
   }
 
   private touched(box: Rect): Rect {

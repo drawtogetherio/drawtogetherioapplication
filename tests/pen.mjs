@@ -69,7 +69,17 @@ const r = await page.evaluate(async () => {
     const n = sum(); ed.undo(); await wait(50); return n;
   };
   const once = await twice(1), dup = await twice(2);
-  return { heavy, light, tap, spiky, plain, jump: Math.round(jump * 10) / 10, w: w.join(' '), once, dup };
+  // A light round stroke whose width wavers around the hairline threshold (an imported brush with a tiny
+  // minimum size) must not leave dark specks where it switches between discs and ribbon.
+  Object.assign(ed.settings.brush, { size: 20.9, flow: 1, shape: undefined, hardness: 1, spacing: 0.01, pressureSize: 1, pressureFlow: 1, minSize: 0.001, smoothing: 0 });
+  const waver = async (ps) => {
+    fire('pointerdown', 300, 400, ps(0));
+    for (let i = 1; i <= 60; i++) fire('pointermove', 300 + i * 4, 400, ps(i));
+    fire('pointerup', 540, 400, 0); await wait(50);
+    const m = maxAlpha(); ed.undo(); await wait(50); return m;
+  };
+  const steady = await waver(() => 0.13), wavering = await waver((i) => (i % 8 < 4 ? 0.13 : 0.11));
+  return { heavy, light, tap, spiky, plain, jump: Math.round(jump * 10) / 10, w: w.join(' '), once, dup, steady, wavering };
 });
 await browser.close();
 const ok = r.heavy > 50 && r.light < r.heavy / 3 && r.tap > 0;
@@ -80,5 +90,7 @@ const taper = r.jump <= 2;
 console.log((taper ? 'ok   ' : 'FAIL ') + `coalesced samples with one shared pressure still taper (off a straight taper by ${r.jump}px)`);
 const dedup = r.once > 0 && r.once === r.dup;
 console.log((dedup ? 'ok   ' : 'FAIL ') + `a move delivered twice draws once (once ${r.once}, twice ${r.dup})`);
-if (!ok || !calm || !taper || !dedup) process.exit(1);
+const specks = r.wavering <= r.steady + 12;
+console.log((specks ? 'ok   ' : 'FAIL ') + `a width wavering at the hairline leaves no specks (darkest ${r.wavering}, steady ${r.steady})`);
+if (!ok || !calm || !taper || !dedup || !specks) process.exit(1);
 console.log('all passed');
