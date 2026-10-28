@@ -583,7 +583,10 @@ export function saveShare(id: string, s: ShareSettings) {
   db.prepare('UPDATE rooms SET visibility = ?, share = ?, private = ? WHERE id = ?').run(visibility, JSON.stringify(flags), visibility === 'private' ? 1 : 0, id);
 }
 
-/** `ops` seed the room with a canvas brought from a device; they become the owner's layers. */
+/**
+ * `ops` seed the room with a canvas brought from a device. If it came from an earlier room, that room's
+ * members keep their layers and main folders (`uf_` + their id) so they can carry on; the rest is the owner's.
+ */
 export function createRoom(owner: UserRow, name: string, settings: DocSettings, share: ShareSettings, ephemeral: boolean, ops: Op[] = []): RoomInfo {
   const id = randomId(8);
   const info: RoomInfo = { id, name, ownerId: owner.id, settings: { ...settings, id: 'doc_' + id }, private: share.visibility === 'private', share, ephemeral };
@@ -593,10 +596,15 @@ export function createRoom(owner: UserRow, name: string, settings: DocSettings, 
     db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, watch_key, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, name, owner.id, JSON.stringify(info.settings), now, now, randomId(16), ephemeral ? 1 : 0);
     const ins = db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)');
+    const keep = (id?: string) => (id && getUser(id) ? id : owner.id);
     ops.forEach((op, i) => {
       op.author = owner.id;
-      if (op.t === 'layer.add') op.layer.owner = owner.id;
-      if (op.t === 'folder.add') { op.folder.owner = owner.id; delete op.folder.user; }
+      if (op.t === 'layer.add') op.layer.owner = keep(op.layer.owner);
+      if (op.t === 'folder.add') {
+        const member = op.folder.id.startsWith('uf_') && getUser(op.folder.id.slice(3)) ? op.folder.id.slice(3) : null;
+        op.folder.owner = member ?? keep(op.folder.owner);
+        if (member) op.folder.user = true; else delete op.folder.user;
+      }
       ins.run(id, i + 1, JSON.stringify(op));
     });
     db.exec('COMMIT');
