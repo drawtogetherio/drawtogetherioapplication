@@ -49,6 +49,8 @@ html, body {
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   overscroll-behavior: none;
 }
+/* Paints anything iOS shows behind the status bar in the top bar's colour, so it blends instead of showing a band. */
+html { background: var(--panel); }
 #app { position: fixed; inset: 0; }
 button { font: inherit; color: inherit; }
 input, select { font: inherit; }
