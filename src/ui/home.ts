@@ -102,8 +102,9 @@ export class Home {
     });
 
     // Popovers anchor to the header, so the banner above can come and go. In the frameless app the
-    // header is the window's top strip, so the banner goes under it, clear of the resize border.
-    const under = !!native?.frameless;
+    // header is the window's top strip, so the banner goes under it, clear of the resize border. A
+    // home-screen app on iPad draws under the status bar, so it goes under there too or iOS blurs it.
+    const under = !!native?.frameless || matchMedia('(display-mode: standalone)').matches;
     if (!under) this.el.append(this.notice, this.banner);
     const s = () => this.app.session;
     const startBtn = (ic: string, text: string, fn: () => void) => h('button.start-btn', { type: 'button', html: icon(ic, 22) + `<span>${text}</span>`, onclick: fn });
