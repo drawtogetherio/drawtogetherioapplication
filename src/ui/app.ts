@@ -275,11 +275,11 @@ export class App {
     const key = (a: KeyAction) => { const k = keyOf(p, a); return k ? ` (${k.toUpperCase()})` : ''; };
     for (const t of TOOLS) {
       const b = this.toolButtons.get(t.id)!;
-      b.title = t.label + key(t.id);
-      b.setAttribute('aria-label', b.title);
+      b.dataset.tip = t.label + key(t.id);
+      b.setAttribute('aria-label', b.dataset.tip);
     }
-    this.layersBtn.title = 'Layers' + key('layers');
-    this.layersBtn.setAttribute('aria-label', this.layersBtn.title);
+    this.layersBtn.dataset.tip = 'Layers' + key('layers');
+    this.layersBtn.setAttribute('aria-label', this.layersBtn.dataset.tip);
     this.applyLayout();
     this.ed.view.requestRender();
   }

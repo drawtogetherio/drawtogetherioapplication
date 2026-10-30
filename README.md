@@ -69,6 +69,9 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   registry (`src/ui/commands.ts`).
 - **Accessibility**: icon-only controls are named by their tooltips, keyboard focus shows a ring, F6 moves
   focus between bars, reduced motion is honoured, and a left-handed preference mirrors the layout.
+- **Tooltips**: one bubble for the page (`src/ui/tooltip.ts`) instead of the browser's title one, so a
+  hovering Apple Pencil and keyboard focus get it too. `h()` turns `title` into `data-tip`; shortcuts in
+  brackets show as a key. Fingers never get one; pressing, scrolling or Escape hides it.
 
 **Brush engine (v0.34)**
 - **Dynamics** (`src/engine/brush.ts`): tip angle (fixed or following the stroke), scatter, size/flow/angle
@@ -526,6 +529,7 @@ node tests/reference.mjs http://localhost:4180/app.html # reference layer for fi
 node tests/layers.mjs http://localhost:4180/app.html    # search, tags, multi-select, merge visible, flatten
 node tests/quickmenu.mjs http://localhost:4180/app.html # quick menu and command palette
 node tests/a11y.mjs http://localhost:4180/app.html      # names, focus ring, F6, reduced motion, left-handed layout
+node tests/tooltip.mjs http://localhost:4180/app.html   # tooltips for mouse, pen hover, keyboard focus; not touch
 node tests/dynamics.mjs http://localhost:4180/app.html  # seeded replay, scatter, colour jitter, wet mix, tilt, follow angle, editor sections
 node tests/tips.mjs http://localhost:4180/app.html      # tip, dual and texture images, missing-asset fallback, IndexedDB persistence
 node tests/import.mjs http://localhost:4180/app.html    # Photoshop .abr (v2 and v6) and Procreate .brushset import

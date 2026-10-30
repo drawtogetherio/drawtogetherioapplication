@@ -20,7 +20,7 @@ await page.getByText('Create canvas').click();
 
 /** Buttons in `root` with no accessible name. */
 const unnamed = (root) => page.evaluate((sel) => [...document.querySelectorAll(`${sel} button`)]
-  .filter((b) => b.offsetParent !== null && !(b.getAttribute('aria-label') || b.textContent.trim() || b.title))
+  .filter((b) => b.offsetParent !== null && !(b.getAttribute('aria-label') || b.textContent.trim() || b.dataset.tip))
   .map((b) => b.className), root);
 
 // ---- Names on every visible control, in each bar and popover ----
@@ -32,16 +32,16 @@ for (const [key, pop, label] of [['l', '.layers-pop', 'layers'], ['m', '.options
   check(bad.length === 0, `every ${label} control has a name${bad.length ? ': ' + bad.join(', ') : ''}`);
 }
 await page.keyboard.press('Escape');
-await page.locator('.topbar button[title^="Guides"]').click();
+await page.locator('.topbar button[data-tip^="Guides"]').click();
 check((await unnamed('.guides-pop')).length === 0, 'every guides control has a name');
 await page.keyboard.press('Escape');
-await page.locator('.topbar button[title="Effects"]').click();
+await page.locator('.topbar button[data-tip="Effects"]').click();
 check((await unnamed('.effects-pop')).length === 0, 'every effects item has a name');
 await page.keyboard.press('Escape');
-await page.locator('.topbar button[title="Menu"]').click();
+await page.locator('.topbar button[data-tip="Menu"]').click();
 check((await unnamed('.menu-pop')).length === 0, 'every menu item has a name');
 await page.keyboard.press('Escape');
-const dialogsBtn = page.locator('.sidebar button[title="History"]');
+const dialogsBtn = page.locator('.sidebar button[data-tip="History"]');
 await dialogsBtn.click();
 check((await unnamed('.history-pop')).length === 0, 'every history control has a name');
 await page.keyboard.press('Escape');
@@ -51,7 +51,7 @@ await page.keyboard.press('l');
 await page.locator('.layers-pop .layer-row').first().click({ modifiers: ['Control'] });
 const tags = page.locator('.layers-pop .tag-dot');
 check((await tags.count()) === 7, 'tag dots shown for the selection');
-check((await tags.nth(1).textContent()) === 'R' && (await tags.nth(1).getAttribute('title')) === 'Tag: Red', 'tag dots carry a letter and a colour name');
+check((await tags.nth(1).textContent()) === 'R' && (await tags.nth(1).getAttribute('data-tip')) === 'Tag: Red', 'tag dots carry a letter and a colour name');
 await page.keyboard.press('Escape');
 
 // ---- Keyboard: Tab reaches the tool bar; focus is visible ----
@@ -110,7 +110,7 @@ await page.keyboard.press('l');
 check((await page.locator('.layers-pop').boundingBox()).x < 640, 'the layers popover opens by the tools');
 await page.keyboard.press('Escape');
 await page.screenshot({ path: `${out}/left-handed.png` });
-await page.locator('.topbar button[title="Menu"]').click();
+await page.locator('.topbar button[data-tip="Menu"]').click();
 await page.locator('.menu-item', { hasText: 'Preferences' }).click();
 await page.getByText('Layout', { exact: true }).first().click();
 const lh = page.locator('.switch-row', { hasText: 'Left-handed' }).locator('input');

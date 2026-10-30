@@ -1,10 +1,12 @@
 import './site.css';
 import { api } from '../net/api';
 import { initTheme } from '../ui/theme';
+import { initTooltips } from '../ui/tooltip';
 import { APPLE_SVG, GLOBE_SVG, WINDOWS_SVG, brandHtml } from './brand';
 import { esc } from './common';
 
 initTheme();
+initTooltips();
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform) || /Mac OS/.test(navigator.userAgent);
 
@@ -12,7 +14,7 @@ function downloadButton(os: 'mac' | 'windows', url: string | null | undefined) {
   const label = `<span class="long">Download for </span>${os === 'mac' ? 'Mac' : 'Windows'}`;
   const icon = os === 'mac' ? APPLE_SVG : WINDOWS_SVG;
   if (url) return `<a class="btn" href="${esc(url)}">${icon}<span>${label}</span></a>`;
-  return `<span class="btn" aria-disabled="true" title="Coming soon">${icon}<span>${label}</span><span class="soon">soon</span></span>`;
+  return `<span class="btn" aria-disabled="true" data-tip="Coming soon">${icon}<span>${label}</span><span class="soon">soon</span></span>`;
 }
 
 function render(downloads: { mac: string | null; windows: string | null } | undefined) {

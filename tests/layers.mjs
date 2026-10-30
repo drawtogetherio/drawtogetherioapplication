@@ -58,13 +58,13 @@ await page.locator('.multi-bar .tag-dot').nth(1).click();
 await page.waitForTimeout(100);
 check(await ed((e) => e.doc.layers.filter((l) => l.props.color === '#e53935').length === 3), 'tagging applies to every picked layer');
 // Hide all three, show again.
-await page.locator('.multi-bar button[title="Show or hide selected"]').click();
+await page.locator('.multi-bar button[data-tip="Show or hide selected"]').click();
 await page.waitForTimeout(100);
 check(await ed((e) => e.doc.layers.filter((l) => !l.props.visible).length === 3), 'visibility applies to all picked');
-await page.locator('.multi-bar button[title="Show or hide selected"]').click();
+await page.locator('.multi-bar button[data-tip="Show or hide selected"]').click();
 await page.waitForTimeout(100);
 // Duplicate all three.
-await page.locator('.multi-bar button[title="Duplicate selected"]').click();
+await page.locator('.multi-bar button[data-tip="Duplicate selected"]').click();
 await page.waitForTimeout(200);
 check((await names()).join() === 'Layer 1,Sky,Sky copy,Lines,Lines copy,Notes,Notes copy', `duplicates land above each original (${await names()})`);
 await page.keyboard.press('Control+z');
@@ -73,7 +73,7 @@ check((await names()).length === 4, 'one undo removes all the copies');
 // Merge selected.
 await rowByName('Notes').click();
 await rowByName('Sky').click({ modifiers: ['Shift'] });
-await page.locator('.multi-bar button[title="Merge selected"]').click();
+await page.locator('.multi-bar button[data-tip="Merge selected"]').click();
 await page.waitForTimeout(300);
 check((await names()).join() === 'Layer 1,Sky', `merge selected leaves the bottom one (${await names()})`);
 const merged = await ed((e) => { const l = e.doc.layers[1]; const r = l.surface.contentBounds(); return r && r.w; });
@@ -84,13 +84,13 @@ check((await names()).length === 4, 'one undo restores the three');
 
 // ---- Merge visible / flatten ----
 await ed((e) => e.apply({ t: 'layer.props', id: 'hide1', layer: e.doc.layers.find((l) => l.props.name === 'Lines').props.id, props: { visible: false } }));
-await page.locator('.layers-panel button[title="More"]').click();
+await page.locator('.layers-panel button[data-tip="More"]').click();
 await page.locator('.adjust-pick .menu-item', { hasText: 'Merge visible' }).click();
 await page.waitForTimeout(300);
 check((await names()).join() === 'Layer 1,Lines', `merge visible keeps the hidden layer apart (${await names()})`);
 await page.keyboard.press('Control+z');
 await page.waitForTimeout(300);
-await page.locator('.layers-panel button[title="More"]').click();
+await page.locator('.layers-panel button[data-tip="More"]').click();
 await page.locator('.adjust-pick .menu-item', { hasText: 'Flatten' }).click();
 await page.waitForTimeout(300);
 check((await names()).join() === 'Layer 1', `flatten drops hidden layers and merges the rest (${await names()})`);
@@ -101,7 +101,7 @@ await page.keyboard.press('Control+z'); await page.waitForTimeout(200);
 check((await names()).length === 4, 'undo brings the stack back');
 await rowByName('Sky').click();
 await rowByName('Notes').click({ modifiers: ['Control'] });
-await page.locator('.multi-bar button[title="Delete selected"]').click();
+await page.locator('.multi-bar button[data-tip="Delete selected"]').click();
 await page.waitForTimeout(200);
 check((await names()).join() === 'Layer 1,Lines', 'delete removes every picked layer');
 

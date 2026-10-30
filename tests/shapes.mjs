@@ -35,10 +35,10 @@ await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 10; e.settings.
 await page.keyboard.press('u');
 
 // ---- Picker lists the new shapes ----
-await page.locator('.toolbar button[title^="Shapes"], .topbar button[title^="Shapes"]').first().click();
+await page.locator('.toolbar button[data-tip^="Shapes"], .topbar button[data-tip^="Shapes"]').first().click();
 await page.waitForTimeout(100);
 const names = await page.locator('.tool-pop button, .popover.tool-pop button').allInnerTexts().catch(() => []);
-const titles = await page.evaluate(() => [...document.querySelectorAll('.tool-pop button, .popover.tool-pop button, .popover:not([hidden]) button')].map((b) => b.title || b.textContent.trim()));
+const titles = await page.evaluate(() => [...document.querySelectorAll('.tool-pop button, .popover.tool-pop button, .popover:not([hidden]) button')].map((b) => b.dataset.tip || b.textContent.trim()));
 for (const t of ['Arrow', 'Polygon', 'Star', 'Speech bubble', 'Polyline', 'Curve', 'Arc']) check(titles.some((x) => x.startsWith(t)), `picker offers ${t}`);
 await page.keyboard.press('Escape');
 

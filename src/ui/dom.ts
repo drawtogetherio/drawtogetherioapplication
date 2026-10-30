@@ -11,11 +11,12 @@ export function h<K extends keyof HTMLElementTagNameMap>(sel: K | `${K}.${string
     if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v as EventListener);
     else if (k === 'html') el.innerHTML = String(v);
     else if (k === 'class') el.className += ' ' + v;
+    else if (k === 'title') el.dataset.tip = String(v); // shown by tooltip.ts, not the browser
     else el.setAttribute(k, v === true ? '' : String(v));
   }
   for (const c of children) if (c !== null && c !== undefined && c !== false) el.append(c);
   // An icon-only control is named by its tooltip.
-  if (attrs.title && attrs.html && !attrs['aria-label']) el.setAttribute('aria-label', String(attrs.title));
+  if (attrs.title && !attrs['aria-label'] && (attrs.html || !el.textContent?.trim())) el.setAttribute('aria-label', String(attrs.title));
   return el;
 }
 

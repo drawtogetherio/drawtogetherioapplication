@@ -94,7 +94,7 @@ const meter = await page.evaluate(async () => {
   app.ed.apply({ t: 'layer.props', id: 'mm' + Date.now(), layer: app.ed.activeLayer, props: { opacity: 0.98 } });
   await new Promise((r) => setTimeout(r, 600));
   const toast = document.body.textContent.includes('near this device’s limit');
-  return { before, after: app.ed.doc.history.maxCost, level: app.memory.el.dataset.level, toast, text: app.memory.el.title };
+  return { before, after: app.ed.doc.history.maxCost, level: app.memory.el.dataset.level, toast, text: app.memory.el.dataset.tip };
 });
 check(meter.before === 700 && meter.after === 100 && meter.level === '2' && meter.toast, `near the budget: undo history capped and a warning shown (${meter.text})`);
 

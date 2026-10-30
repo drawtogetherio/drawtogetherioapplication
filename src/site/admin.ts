@@ -3,6 +3,7 @@ import { ApiError, api } from '../net/api';
 import { BADGES, type Badge, type PublicProfile } from '../shared/profile';
 import { NOTICE_MAX, type SiteSettings } from '../shared/site';
 import { initTheme } from '../ui/theme';
+import { initTooltips } from '../ui/tooltip';
 import { brandHtml } from './brand';
 import { ART_NAMES, art } from '../ui/art';
 import { icon } from '../ui/icons';
@@ -12,6 +13,7 @@ import { esc } from './common';
 // Admin dashboard (/admin). The server only answers these routes for admins.
 
 initTheme();
+initTooltips();
 
 interface AdminUser extends PublicProfile {
   provider: string; admin: boolean; banned: boolean; createdAt: number; hasPremium: boolean; online: boolean; ip: string | null; rooms: number;
@@ -224,9 +226,9 @@ async function newsPage() {
         <div class="news-tools">${NEWS_TOOLS.map(([t]) => `<button type="button" class="btn small" data-tool="${t}">${t}</button>`).join('')}</div>
         <textarea id="news-md" spellcheck="true" placeholder="## Fresh paint&#10;- [icon:brush] New brushes&#10;[accent]Thanks for drawing with us.[/accent]">${esc(news.md)}</textarea>
         <h3>Graphics</h3>
-        <div class="news-gallery">${ART_NAMES.map((n) => `<button type="button" title="[art:${n}]" data-ins="[art:${n}]">${art(n, 36)}</button>`).join('')}</div>
+        <div class="news-gallery">${ART_NAMES.map((n) => `<button type="button" data-tip="[art:${n}]" data-ins="[art:${n}]">${art(n, 36)}</button>`).join('')}</div>
         <h3>Icons</h3>
-        <div class="news-gallery icons">${NEWS_ICONS.map((n) => `<button type="button" title="[icon:${n}]" data-ins="[icon:${n}]">${icon(n, 20)}</button>`).join('')}</div>
+        <div class="news-gallery icons">${NEWS_ICONS.map((n) => `<button type="button" data-tip="[icon:${n}]" data-ins="[icon:${n}]">${icon(n, 20)}</button>`).join('')}</div>
         <div class="site-row"><button class="btn small primary" id="news-save" type="button">Save</button><span class="fine" id="news-at">${news.at ? 'Updated ' + when(news.at) : 'Nothing published yet'}</span></div>
       </div>
       <div><h3>Preview</h3><div class="news-preview md"></div></div>

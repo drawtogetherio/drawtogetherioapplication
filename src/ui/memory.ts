@@ -62,7 +62,7 @@ export class MemoryMeter {
   private show() {
     const r = this.reading;
     this.el.dataset.level = String(r.level);
-    this.el.title = `Canvas memory: ${describe(r)} · ${r.tiles} tiles`;
+    this.el.dataset.tip = `Canvas memory: ${describe(r)} · ${r.tiles} tiles`;
     this.el.querySelector('.mem-text')!.textContent = fmtBytes(r.used);
     (this.el.querySelector('.mem-fill') as HTMLElement).style.width = `${Math.min(100, (r.used / r.budget) * 100).toFixed(1)}%`;
   }

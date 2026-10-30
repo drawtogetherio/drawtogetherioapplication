@@ -39,7 +39,7 @@ check((await ed((e) => e.activeLayer)) !== lineArt, 'a second layer is active');
 // Mark layer 1 as the reference from the layers panel.
 await page.keyboard.press('l');
 await page.locator('.layers-panel .layer-row').last().click();
-await page.locator('.layers-panel button[title^="Reference"]').click();
+await page.locator('.layers-panel button[data-tip^="Reference"]').click();
 check((await ed((e) => e.referenceLayer)) === lineArt, 'the reference button marks the layer');
 check(await page.locator('.layers-panel .layer-row', { hasText: 'Reference' }).count() === 1, 'its row says Reference');
 await page.locator('.layers-panel .layer-row').first().click();

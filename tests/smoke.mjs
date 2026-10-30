@@ -53,7 +53,7 @@ await page.mouse.move(cx + 40, cy - 40); await page.mouse.down(); await page.mou
 
 // Fill inside the ellipse with red on a new layer below
 await page.locator('.color-btn').click();
-await page.locator('.cp-swatch[title="#e53935"]').first().click();
+await page.locator('.cp-swatch[data-tip="#e53935"]').first().click();
 await page.keyboard.press('Escape');
 await page.mouse.click(10, 300); // dismiss popover
 await page.keyboard.press('g');
@@ -70,16 +70,16 @@ await page.keyboard.press('Control+d');
 
 // New layer with multiply blend
 await page.keyboard.press('b');
-await page.getByTitle('Layers (L)').click();
-await page.locator('.head-actions [title="New layer"]').click();
+await page.locator('[data-tip="Layers (L)"]').click();
+await page.locator('.head-actions [data-tip="New layer"]').click();
 await page.locator('.blend-select').selectOption('multiply');
 await page.mouse.click(10, 300);
 await page.locator('.color-btn').click();
-await page.locator('.cp-swatch[title="#1e88e5"]').first().click();
+await page.locator('.cp-swatch[data-tip="#1e88e5"]').first().click();
 await page.mouse.click(10, 300);
 const st = await page.evaluate(() => { const a = window.doodlehive; a.ed.settings.brush.size = 60; return a.ed.doc.layers.length; });
 await page.mouse.move(cx - 260, cy); await page.mouse.down(); await page.mouse.move(cx + 260, cy, { steps: 20 }); await page.mouse.up();
-await page.getByTitle('Layers (L)').click();
+await page.locator('[data-tip="Layers (L)"]').click();
 await page.screenshot({ path: `${out}/04-layers.png` });
 await page.mouse.click(10, 300);
 
@@ -95,7 +95,7 @@ await page.keyboard.press('h');
 // Exports
 const sizes = {};
 for (const f of ['PNG', 'JPG', 'PSD (layers)']) {
-  await page.getByTitle('Export (Ctrl+Shift+E)').click();
+  await page.locator('[data-tip="Export (Ctrl+Shift+E)"]').click();
   await page.locator('.segmented button', { hasText: f }).click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.modal .btn.primary').click()]);
   const p = `${out}/export-${dl.suggestedFilename()}`;

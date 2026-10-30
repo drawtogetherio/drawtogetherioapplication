@@ -256,7 +256,7 @@ export class LayersPanel {
       this.clipBtn.classList.toggle('on', !!l.props.clip);
       this.refBtn.classList.toggle('on', ed.referenceLayer === l.props.id);
       this.maskBtn.classList.toggle('on', !!l.mask);
-      this.maskBtn.title = this.maskBtn.ariaLabel = l.mask ? 'Delete mask' : 'Add mask';
+      this.maskBtn.dataset.tip = this.maskBtn.ariaLabel = l.mask ? 'Delete mask' : 'Add mask';
       this.applyMaskBtn.hidden = !l.mask;
       this.maskHint.hidden = !ed.onMask;
     }

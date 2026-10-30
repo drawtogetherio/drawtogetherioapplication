@@ -135,7 +135,7 @@ check((await ed((e) => e.toolId)) === 'eraser', 'arrows and Enter pick a command
 check((await ed((e) => e.doc.log.length)) === 2, 'typing in the palette triggered no single-key shortcuts');
 
 // Menu item
-await page.locator('.topbar button[title="Menu"]').click();
+await page.locator('.topbar button[data-tip="Menu"]').click();
 await page.locator('.menu-item', { hasText: 'Commands' }).click();
 check(await cmdk.isVisible(), 'the menu has a Commands item');
 await page.keyboard.press('Escape');

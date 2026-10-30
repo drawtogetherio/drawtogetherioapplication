@@ -32,7 +32,7 @@ const size = await ed((e) => [e.doc.settings.width, e.doc.settings.height]);
 const log = () => ed((e) => e.doc.log.map((o) => o.t));
 
 // ---- Guides popover ----
-await page.locator('.topbar button[title^="Guides"]').click();
+await page.locator('.topbar button[data-tip^="Guides"]').click();
 const pop = page.locator('.guides-pop');
 check(await pop.isVisible(), 'the Guides button opens its popover');
 for (const t of ['Symmetry', 'Grid', 'Rulers', 'Reference image…']) check(await pop.getByText(t, { exact: false }).first().isVisible(), `popover shows ${t}`);
@@ -161,19 +161,19 @@ check(/^#ff0000$/i.test(picked), `eyedropper picks from the reference image (${p
 await m.click(rb.x + rb.width * 0.8, rb.y + rb.height / 2);
 check(/^#00ff00$/i.test(await ed((e) => e.color)), 'and the other half is green');
 // Rotate: a quarter turn puts the red half on top and the green below.
-await page.locator('.ref-head button[title="Rotate"]').click();
+await page.locator('.ref-head button[data-tip="Rotate"]').click();
 await m.click(rb.x + rb.width / 2, rb.y + rb.height * 0.3);
 const top = await ed((e) => e.color);
 await m.click(rb.x + rb.width / 2, rb.y + rb.height * 0.7);
 check(/^#ff0000$/i.test(top) && /^#00ff00$/i.test(await ed((e) => e.color)), `rotating turns the image a quarter (${top} over ${await ed((e) => e.color)})`);
-await page.locator('.ref-head button[title="Rotate"]').click(); await page.locator('.ref-head button[title="Rotate"]').click(); await page.locator('.ref-head button[title="Rotate"]').click();
+await page.locator('.ref-head button[data-tip="Rotate"]').click(); await page.locator('.ref-head button[data-tip="Rotate"]').click(); await page.locator('.ref-head button[data-tip="Rotate"]').click();
 // Zoom: the image covers fewer pixels after zooming out, more after zooming in.
 const painted = () => page.evaluate(() => { const c = document.querySelector('.ref-canvas'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] !== 0x33 || d[i + 1] !== 0x33 || d[i + 2] !== 0x33) n++; return n; });
-await page.locator('.ref-head button[title="Fit"]').click();
+await page.locator('.ref-head button[data-tip="Fit"]').click();
 const fitPx = await painted();
-await page.locator('.ref-head button[title="Zoom out"]').click();
+await page.locator('.ref-head button[data-tip="Zoom out"]').click();
 const outPx = await painted();
-await page.locator('.ref-head button[title="Zoom in"]').click();
+await page.locator('.ref-head button[data-tip="Zoom in"]').click();
 const inPx = await painted();
 check(outPx < fitPx * 0.8 && inPx > outPx * 1.3, `zoom out and in (${fitPx} → ${outPx} → ${inPx} px)`);
 // Pinch: two pointers closing in zoom out.
@@ -211,7 +211,7 @@ await page.locator('.ref-tab', { hasText: 'Canvas' }).click();
 check(await page.locator('.minimap').isVisible() && await page.locator('.ref-canvas').isHidden(), 'the Canvas tab shows the map');
 await page.locator('.ref-tab', { hasText: 'Image' }).click();
 await page.screenshot({ path: `${out}/04-reference.png` });
-await page.locator('.ref-head button[title="Close"]').click();
+await page.locator('.ref-head button[data-tip="Close"]').click();
 check(await ref.isHidden(), 'Close hides the panel');
 
 // Focus mode hides the panel.
@@ -224,8 +224,8 @@ await page.keyboard.press('F');
 // ---- Layer stack no longer carries the effects button ----
 await page.keyboard.press('l');
 await page.waitForTimeout(100);
-check((await page.locator('.layers-pop button[title="Layer effects"], .panel button[title="Layer effects"]').count()) === 0, 'layer stack has no Layer effects button');
-check((await page.locator('.topbar button[title^="Effects"]').count()) === 1, 'the Effects button stays in the top bar');
+check((await page.locator('.layers-pop button[data-tip="Layer effects"], .panel button[data-tip="Layer effects"]').count()) === 0, 'layer stack has no Layer effects button');
+check((await page.locator('.topbar button[data-tip^="Effects"]').count()) === 1, 'the Effects button stays in the top bar');
 
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 await browser.close();

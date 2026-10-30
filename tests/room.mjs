@@ -225,7 +225,7 @@ await bob.waitForSelector('.modal .profile-card');
 check(await bob.locator('.modal .btn', { hasText: 'Block' }).count() === 1, 'the picture opens the profile card with Block');
 await bob.locator('.modal .btn', { hasText: 'Add friend' }).click();
 await bob.waitForSelector('.toast:has-text("Friend request sent")', { timeout: 4000 }).then(() => check(true, 'Add friend sends a request'), () => check(false, 'Add friend sends a request'));
-await bob.locator('.modal [title="Close"]').click();
+await bob.locator('.modal [data-tip="Close"]').click();
 await alice.waitForSelector('[aria-label="Menu"] .red-dot:not([hidden])', { timeout: 5000 }).then(() => check(true, 'Alice’s menu button shows a red dot'), () => check(false, 'Alice’s menu button shows a red dot'));
 await alice.locator('[aria-label="Menu"]').click();
 await alice.waitForTimeout(150);
@@ -238,7 +238,7 @@ await bob.waitForFunction(async () => (await (await fetch('/api/friends')).json(
   .then(() => check(true, 'accepting from the drawing menu makes them friends'), () => check(false, 'accepting from the drawing menu makes them friends'));
 await alice.waitForFunction(() => document.querySelector('[aria-label="Menu"] .red-dot').hidden, null, { timeout: 4000 })
   .then(() => check(true, 'the red dot clears once read'), () => check(false, 'the red dot clears once read'));
-await alice.locator('.modal [title="Close"]').click();
+await alice.locator('.modal [data-tip="Close"]').click();
 
 // ---- Blocking ----
 const cara = await person('Cara', '#4f7cff', `${url}?room=${roomId}`);

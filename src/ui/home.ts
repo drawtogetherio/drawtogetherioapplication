@@ -678,7 +678,7 @@ export class Home {
         const info = await api.room(p.id), invited = info.invited ?? [], visitors = info.visitors ?? [];
         const sh = info.share, who = sh.visibility === 'private' ? 'Only you and people you invite' : sh.visibility === 'friends' ? 'Your friends' : sh.visibility === 'unlisted' ? 'Anyone with the link (hidden from lists)'
           : `Anyone with the link${sh.requireLogin ? ' who is logged in' : ''}${sh.approveJoins ? ', once you let them in' : ''}`;
-        const people = (list: PublicProfile[]) => list.length ? h('span.avatar-row', {}, ...list.map((u) => Object.assign(avatarEl(u, 28), { title: u.displayName }))) : h('span.muted', {}, 'No one yet');
+        const people = (list: PublicProfile[]) => list.length ? h('span.avatar-row', {}, ...list.map((u) => { const a = avatarEl(u, 28); a.dataset.tip = u.displayName; return a; })) : h('span.muted', {}, 'No one yet');
         body.append(row('Size', size(info.settings)),
           row('Stored', h('span', { html: icon('cloud', 16) }), 'Safe on the server'),
           row('Who can join', who),

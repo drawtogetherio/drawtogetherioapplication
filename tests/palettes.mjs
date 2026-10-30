@@ -58,11 +58,11 @@ check(await pop.locator('.cp-swatches').first().locator('.cp-swatch').count() ==
 // ---- Imports ----
 const importFile = async (file) => {
   const chooser = page.waitForEvent('filechooser');
-  await pop.locator('button[title^="Import a palette"]').click();
+  await pop.locator('button[data-tip^="Import a palette"]').click();
   await (await chooser).setFiles(file);
   await page.waitForTimeout(300);
 };
-const swatchesOf = () => pop.locator('.cp-swatches').first().locator('.cp-swatch').evaluateAll((els) => els.map((e) => e.title.split(' ')[0]));
+const swatchesOf = () => pop.locator('.cp-swatches').first().locator('.cp-swatch').evaluateAll((els) => els.map((e) => e.dataset.tip.split(' ')[0]));
 await importFile(`${out}/t.aco`);
 check((await pop.locator('.cp-palette-sel').inputValue()) !== '' && (await pop.locator('.cp-palette-sel option:checked').innerText()) === 't', 'the .aco import becomes the current palette');
 check((await swatchesOf()).join() === '#ff0000,#00ff00,#ffff00', `.aco RGB, HSB and CMYK swatches read (${await swatchesOf()})`);
@@ -76,7 +76,7 @@ check(await pop.locator('.cp-palette-sel option').count() === 5, 'four palettes 
 
 // ---- Editing ----
 await ed((e) => e.setColor('#123456', true));
-await pop.locator('button[title="Add the current colour"]').click();
+await pop.locator('button[data-tip="Add the current colour"]').click();
 check((await swatchesOf()).at(-1) === '#123456', 'the current colour is added to the palette');
 await pop.locator('.cp-swatches').first().locator('.cp-swatch').first().click({ modifiers: ['Alt'] });
 check((await swatchesOf()).join() === '#0080ff,#123456', 'Alt+click removes a swatch');
@@ -91,14 +91,14 @@ await page.selectOption('#canvas-preset', 'square');
 await page.getByText('Create canvas').click();
 await page.locator('.topbar .color-btn').click();
 check((await pop.locator('.cp-palette-sel option:checked').innerText()) === 'Sunset' && (await swatchesOf()).join() === '#ff0000,#008080', 'palettes and the chosen one survive a reload');
-await pop.locator('button[title="Delete palette"]').click();
+await pop.locator('button[data-tip="Delete palette"]').click();
 check((await pop.locator('.cp-palette-sel').inputValue()) === '' && (await pop.locator('.cp-palette-sel option').count()) === 4, 'Delete drops the palette and returns to Default');
 
 // ---- Harmony ----
 await ed((e) => e.setColor('#ff0000', true));
 check(await pop.locator('.cp-harmony button.active').innerText() === 'Off' && (await pop.locator('.cp-swatches').nth(1).isHidden()), 'harmony starts off');
 await pop.locator('.cp-harmony button', { hasText: 'Complementary' }).click();
-const harm = () => pop.locator('.cp-swatches').nth(1).locator('.cp-swatch').evaluateAll((els) => els.map((e) => e.title));
+const harm = () => pop.locator('.cp-swatches').nth(1).locator('.cp-swatch').evaluateAll((els) => els.map((e) => e.dataset.tip));
 check((await harm()).join() === '#00ffff', `complementary of red is cyan (${await harm()})`);
 await pop.locator('.cp-harmony button', { hasText: 'Triadic' }).click();
 check((await harm()).join() === '#00ff00,#0000ff', `triadic gives green and blue (${await harm()})`);

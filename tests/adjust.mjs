@@ -45,7 +45,7 @@ await drag([[c[0] - 150, c[1] - 150], [c[0] + 150, c[1] + 150]]);
 check(near(await layerPixel(c[0], c[1]), 255, 0, 0), 'red square drawn');
 
 // ---- Effects popover lists the adjustments ----
-await page.locator('.topbar button[title="Effects"]').click();
+await page.locator('.topbar button[data-tip="Effects"]').click();
 const items = await page.locator('.effects-pop .menu-item').allInnerTexts();
 check(items.includes('Hue / saturation / brightness') && items.includes('Curves') && items.includes('Gradient map'), 'effects popover offers the adjustments');
 check(await page.locator('.effects-pop .menu-label', { hasText: 'Adjust' }).isVisible(), 'under an Adjust heading');
@@ -55,7 +55,7 @@ await page.locator('.effects-pop .menu-item', { hasText: 'Invert' }).click();
 const bar = page.locator('.effect-bar');
 check(await bar.isVisible() && (await bar.locator('select').inputValue()) === 'invert', 'the effects bar opens on Invert');
 check((await bar.locator('.slider-label').first().innerText()) === 'Mix', 'amount reads Mix for adjustments');
-await bar.locator('button[title="Apply"]').click();
+await bar.locator('button[data-tip="Apply"]').click();
 await page.waitForTimeout(400);
 check(near(await layerPixel(c[0], c[1]), 0, 255, 255), `invert bakes cyan (${await layerPixel(c[0], c[1])})`);
 check(await ed((e) => e.doc.log.at(-1).t === 'effect' && e.doc.log.at(-1).effect === 'invert'), 'as one effect op');
@@ -86,7 +86,7 @@ await page.screenshot({ path: `${out}/01-baked.png` });
 
 // ---- Adjustment layer ----
 await page.keyboard.press('l');
-await page.locator('.layers-panel button[title="New adjustment layer"]').click();
+await page.locator('.layers-panel button[data-tip="New adjustment layer"]').click();
 await page.locator('.adjust-pick .menu-item', { hasText: 'Invert' }).click();
 await page.waitForTimeout(300);
 check(await ed((e) => !!e.layer?.props.adjust && e.layer.props.adjust.effect === 'invert'), 'a new layer carries the adjustment');
@@ -94,7 +94,7 @@ check(await page.locator('.effect-bar[aria-label="Adjustment layer"]').isVisible
 check(await page.locator('.layers-panel .adjust-thumb').count() === 1, 'the row shows an adjustment badge');
 let seen = await screenPixel(c[0], c[1]);
 check(near(seen, 0, 255, 255), `the canvas shows the square inverted live (${seen})`);
-await page.locator('.effect-bar button[title="Apply"]').click();
+await page.locator('.effect-bar button[data-tip="Apply"]').click();
 await page.waitForTimeout(300);
 check(await ed((e) => e.doc.log.at(-1).t === 'layer.props' && e.doc.log.at(-1).props.adjust.effect === 'invert'), 'Apply saves it as a layer.props op');
 // The pixel layer itself is untouched.
@@ -135,7 +135,7 @@ check(await page.locator('.effect-bar[aria-label="Adjustment layer"]').isVisible
 await page.locator('.effect-bar select').selectOption('hsb');
 await page.waitForTimeout(100);
 check(await page.locator('.effect-bar .adjust-row .slider').count() === 3, 'HSB shows three sliders');
-await page.locator('.effect-bar button[title="Cancel"]').click();
+await page.locator('.effect-bar button[data-tip="Cancel"]').click();
 check(await ed((e) => e.layer.props.adjust.effect === 'invert'), 'Cancel keeps the saved adjustment');
 
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);

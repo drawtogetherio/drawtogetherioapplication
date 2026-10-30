@@ -154,7 +154,7 @@ export class ColorPicker {
     const pf = this.ed.prefs, cur = this.active;
     this.paletteSel.replaceChildren(h('option', { value: '' }, 'Default'), ...pf.palettes.map((p) => h('option', { value: p.id }, p.name)));
     this.paletteSel.value = cur?.id ?? '';
-    for (const b of this.paletteTools.querySelectorAll('button')) b.hidden = !cur && b.title !== 'Import a palette (.aco, .ase, .swatches, .gpl, .txt)';
+    for (const b of this.paletteTools.querySelectorAll('button')) b.hidden = !cur && b.dataset.tip !== 'Import a palette (.aco, .ase, .swatches, .gpl, .txt)';
     this.palette.replaceChildren(...(cur ? cur.colors.map((c, i) => this.swatch(c, () => { cur.colors.splice(i, 1); this.savePrefs(); })) : PALETTE.map((c) => this.swatch(c))));
   }
 
