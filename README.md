@@ -133,10 +133,10 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - `src/ui/memory.ts` watches canvas memory and caps undo history as it nears the device budget.
 
 **Branding (v0.35)**
-- The DoodleHive bee-on-a-brush logo. The kit's SVG originals are in `src/assets/brand/kit`
+- The DoodleHive bee-on-a-brush logo by [Sebm](https://x.com/SebmSebm), credited in Preferences → About. The kit's SVG originals are in `src/assets/brand/kit`
   (Full Logo, Simplified Icon and Brush, each in Multi Color, Brown and Yellow, with and without the cream outline).
   `src/assets/brand` holds cropped copies with plain fills that `src/site/brand.ts` inlines: `full-*` (lettering
-  with the bee on its brush) for headers and About, `mark-*` (the bee alone) for the login card, 404, loading
+  with the bee on its brush, the kit's one-colour Yellow on dark and Brown on light) for headers and About, `mark-*` (the bee alone) for the login card, 404, loading
   screen, favicon and Staff badge. Each has an `on-dark` version (with the cream outline) and an `on-light` one, and
   CSS shows the one for the current mode. `app-icon.svg` (the brush bee on an orange tile, after the kit's mock-up)
   and `app-icon-maskable.svg` are the sources for `public/apple-touch-icon.png`, `public/icon-*.png` and

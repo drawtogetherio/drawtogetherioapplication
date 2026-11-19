@@ -157,6 +157,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
       row('Doodlehive', h('span.muted', {}, `v${__APP_VERSION__}`)),
     ];
     if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
+    rows.push(row('Logo design', h('a.about-link', { href: 'https://x.com/SebmSebm', target: '_blank', rel: 'noopener noreferrer' }, 'Sebm')));
     const news = h('div.md.whats-new', {}, h('span.muted', {}, 'Loading…'));
     api.whatsNew().then(({ md, at }) => {
       if (!md.trim()) { news.replaceChildren(h('span.muted', {}, 'Nothing yet.')); return; }

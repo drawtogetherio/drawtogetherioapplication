@@ -1,6 +1,7 @@
-// DoodleHive logo kit (Brown #6d2400, Orange #ef8720, Cream #f2d9b6). Originals in src/assets/brand/kit; the copies
-// here are cropped to the artwork and use plain fills, so several can sit inline on one page. Each logo has a
-// version for dark backgrounds (with the kit's cream outline) and one for light; CSS shows the one for the mode.
+// DoodleHive logo kit by Sebm (x.com/SebmSebm): Brown #6d2400, Orange #ef8720, Cream #f2d9b6. Originals in
+// src/assets/brand/kit; the copies here are cropped to the artwork and use plain fills, so several can sit inline on
+// one page. Each logo has a version for dark backgrounds and one for light; CSS shows the one for the mode. The full
+// logo is the kit's one-colour Yellow (dark) and Brown (light); the bee is Multi Color, outlined on dark.
 import markOnDark from '../assets/brand/mark-on-dark.svg?raw';
 import markOnLight from '../assets/brand/mark-on-light.svg?raw';
 import fullOnDark from '../assets/brand/full-on-dark.svg?raw';
