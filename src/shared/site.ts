@@ -11,7 +11,7 @@ export interface SiteSettings {
   notice: SiteNotice;
 }
 
-export const DEFAULT_SITE: SiteSettings = { earlyBadge: true, notice: { on: false, text: '', bg: '#fdb302', fg: '#212021' } };
+export const DEFAULT_SITE: SiteSettings = { earlyBadge: true, notice: { on: false, text: '', bg: '#ef8720', fg: '#3d1500' } };
 
 export function cleanSite(raw: unknown): SiteSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;

@@ -33,7 +33,7 @@ const paint = () => {
   const m = mode === 'system' ? (dark.matches ? 'dark' : 'light') : mode;
   document.documentElement.dataset.mode = m;
   // iOS home-screen apps tint the strip behind the status bar from theme-color, so keep it on the top bar's colour.
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', m === 'light' ? '#ffffff' : '#212021');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', m === 'light' ? '#fffaf3' : '#1f1610');
   // app.html reads this before anything loads, so the loading screen matches.
   try { localStorage.setItem(MODE_KEY, m); } catch { /* storage may be blocked */ }
 };
