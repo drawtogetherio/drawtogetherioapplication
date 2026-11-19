@@ -1,17 +1,20 @@
-// Logo by Logocraftz (fiverr.com/logocraftz). Originals in src/assets/brand/kit; these are the same artwork with plain fills,
-// so several can sit inline on one page. The mark has a version for dark backgrounds and one for light; CSS shows the right one.
+// DoodleHive logo kit (Brown #6d2400, Orange #ef8720, Cream #f2d9b6). Originals in src/assets/brand/kit; the copies
+// here are cropped to the artwork and use plain fills, so several can sit inline on one page. Each logo has a
+// version for dark backgrounds (with the kit's cream outline) and one for light; CSS shows the one for the mode.
 import markOnDark from '../assets/brand/mark-on-dark.svg?raw';
 import markOnLight from '../assets/brand/mark-on-light.svg?raw';
-import wordmark from '../assets/brand/wordmark.svg?raw';
+import fullOnDark from '../assets/brand/full-on-dark.svg?raw';
+import fullOnLight from '../assets/brand/full-on-light.svg?raw';
 
 const tag = (svg: string, cls: string) => svg.trim().replace('<svg ', `<svg class="${cls}" aria-hidden="true" focusable="false" `);
 
+/** The bee on its own. */
 export const LOGO_SVG = `<span class="logo-mark">${tag(markOnDark, 'on-dark')}${tag(markOnLight, 'on-light')}</span>`;
-/** "Doodlehive" in the logo's lettering, drawn in currentColor. */
-export const WORDMARK_SVG = tag(wordmark, 'brand-word');
+/** "Doodle Hive" lettering with the bee on its brush. */
+export const FULL_LOGO_SVG = `<span class="logo-full">${tag(fullOnDark, 'on-dark')}${tag(fullOnLight, 'on-light')}</span>`;
 
 export function brandHtml(href = '/') {
-  return `<a class="brand-link" href="${href}" aria-label="Doodlehive home">${LOGO_SVG}${WORDMARK_SVG}</a>`;
+  return `<a class="brand-link" href="${href}" aria-label="DoodleHive home">${FULL_LOGO_SVG}</a>`;
 }
 
 export const DISCORD_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M20.3 4.6A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.5 19.5 0 0 0-4.9 1.6C.6 9.2-.3 13.7.1 18.1a19.8 19.8 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14 14 0 0 0 12.2 0l.5.4c-.7.4-1.3.7-2 1l1.3 2a19.7 19.7 0 0 0 6-3c.5-5.1-.8-9.6-3.6-13.5zM8 15.4c-1.2 0-2.2-1.1-2.2-2.4S6.8 10.6 8 10.6s2.2 1.1 2.2 2.4-1 2.4-2.2 2.4zm8 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4z"/></svg>`;

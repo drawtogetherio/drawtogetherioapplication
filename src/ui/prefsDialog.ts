@@ -6,7 +6,7 @@ import { modal } from './dialogs';
 import { clear, h } from './dom';
 import { Slider } from './slider';
 import { native } from '../io/native';
-import { LOGO_SVG, WORDMARK_SVG } from '../site/brand';
+import { FULL_LOGO_SVG } from '../site/brand';
 import { describe } from './memory';
 import { penTestPad } from './penTest';
 import { api } from '../net/api';
@@ -153,11 +153,10 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
 
   const about = () => {
     const rows = [
-      h('div.about-brand', { html: LOGO_SVG + WORDMARK_SVG }),
+      h('div.about-brand', { html: FULL_LOGO_SVG }),
       row('Doodlehive', h('span.muted', {}, `v${__APP_VERSION__}`)),
     ];
     if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
-    rows.push(row('Logo design', h('a.about-link', { href: 'https://www.fiverr.com/logocraftz', target: '_blank', rel: 'noopener noreferrer' }, 'Logocraftz')));
     const news = h('div.md.whats-new', {}, h('span.muted', {}, 'Loading…'));
     api.whatsNew().then(({ md, at }) => {
       if (!md.trim()) { news.replaceChildren(h('span.muted', {}, 'Nothing yet.')); return; }
