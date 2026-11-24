@@ -1,5 +1,5 @@
 import { DrawDoc } from '../core/document';
-import { Editor, TOOLS, ToolId } from '../editor';
+import { DEFAULT_COLOR, Editor, TOOLS, ToolId } from '../editor';
 import { BrushTool } from '../tools/brushTool';
 import { SmudgeTool } from '../tools/smudgeTool';
 import { EyedropperTool } from '../tools/eyedropperTool';
@@ -33,7 +33,7 @@ import { api } from '../net/api';
 import { accentColor, applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
 import { editLogDialog } from './editLog';
-import { KeyAction, actionFor, keyOf, applyPressure } from '../shared/prefs';
+import { KeyAction, STROKE_TOOLS, StrokeTool, actionFor, keyOf, applyPressure } from '../shared/prefs';
 import { Studio } from './panels';
 import { PREFS_KEY } from './session';
 import { Home } from './home';
@@ -43,7 +43,7 @@ import { QuickMenu } from './quickMenu';
 import { ensureAssets } from '../engine/brushAssets';
 import { brushAssets } from '../shared/brushAssets';
 import { commandPalette } from './commandPalette';
-import { BrushTool as BrushToolId, FILL_MODES, SELECT_MODES, SHAPE_KINDS, brushLibrary, brushPreview, currentPreset, iconChoices, sizePreview } from './toolPicker';
+import { BrushTool as BrushToolId, FILL_MODES, SELECT_MODES, SHAPE_KINDS, brushLibrary, currentPreset, iconChoices, sizePreview, toolOptions } from './toolPicker';
 import { effectsBar } from './effectsBar';
 
 const PICKER_TOOLS: ToolId[] = ['brush', 'eraser', 'smudge', 'fill', 'select', 'shape'];
@@ -61,8 +61,8 @@ export class App {
   readonly select: SelectTool;
   private shape: ShapeTool;
   quickMenu: QuickMenu;
-  effectsBtn: HTMLButtonElement;
-  guidesBtn: HTMLButtonElement;
+  private effectsPop: HTMLElement;
+  private guidesPop: HTMLElement;
   private toolButtons = new Map<ToolId, HTMLElement>();
   private options = h('div.optionsbar');
   private sliders: Slider[] = []; // size and opacity, vertical for the classic sidebar and flat for the studio panel
@@ -140,36 +140,18 @@ export class App {
     dismissOnOutside(menuPop, [menuBtn], () => { menuPop.hidden = true; });
 
     const effectItem = (e: EffectId) => h('button.menu-item', { html: `<span>${EFFECT_INFO[e].name}</span>`, onclick: () => { effectsPop.hidden = true; effectsBar(ed, e); } });
-    const effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {},
+    const effectsPop = this.effectsPop = h('div.popover.effects-pop', { hidden: true }, h('div.panel', {},
       ...EFFECTS.filter((e) => !isAdjustment(e)).map(effectItem), h('div.menu-sep'), h('div.menu-label', {}, 'Adjust'), ...EFFECTS.filter(isAdjustment).map(effectItem)));
-    const effectsBtn = this.effectsBtn = btn('sparkle', 'Effects', () => {
-      effectsPop.style.left = `${effectsBtn.getBoundingClientRect().left}px`;
-      effectsPop.hidden = !effectsPop.hidden;
-    }, '.edit-only');
-    dismissOnOutside(effectsPop, [effectsBtn], () => { effectsPop.hidden = true; });
+    dismissOnOutside(effectsPop, [], () => { effectsPop.hidden = true; });
 
-    const guidesPop = h('div.popover.guides-pop', { hidden: true });
-    const guidesBtn = this.guidesBtn = btn('grid', 'Guides: symmetry, grid, reference', () => {
-      guidesPop.style.left = `${guidesBtn.getBoundingClientRect().left}px`;
-      guidesPop.hidden = !guidesPop.hidden;
-      if (!guidesPop.hidden) guidesPop.replaceChildren(guidesPanel(this));
-    }, '.edit-only');
-    dismissOnOutside(guidesPop, [guidesBtn], () => { guidesPop.hidden = true; });
+    const guidesPop = this.guidesPop = h('div.popover.guides-pop', { hidden: true });
+    dismissOnOutside(guidesPop, [], () => { guidesPop.hidden = true; });
     this.minimap = new Minimap(ed);
     this.reference = new ReferencePanel(ed, this.minimap);
     stage.append(this.reference.el);
 
-    const left = h('div.bar-group', {},
-      menuBtn,
-      btn('download', 'Export (Ctrl+Shift+E)', () => this.export(), '.edit-only'),
-      h('span.sep'),
-      btn('flipH', 'Flip canvas horizontally (H)', () => ed.view.viewport.flip(true)),
-      btn('flipV', 'Flip canvas vertically (V)', () => ed.view.viewport.flip(false)),
-      btn('fit', 'Fit to screen (0)', () => ed.fitView()),
-      effectsBtn,
-      guidesBtn,
-      this.zoomLabel,
-    );
+    // Export, flip, centre, effects and guides live in the menu's icon row; the bar keeps the menu and the zoom.
+    const left = h('div.bar-group', {}, menuBtn, this.zoomLabel);
     this.zoomLabel.addEventListener('click', () => ed.fitView());
 
     const right = h('div.bar-group');
@@ -202,6 +184,7 @@ export class App {
       colorPop.hidden = !colorPop.hidden; if (!colorPop.hidden) picker.opened();
     });
     dismissOnOutside(colorPop, [this.colorBtn], () => { colorPop.hidden = true; });
+    this.colorDrop(this.colorBtn);
     right.append(layersBtn, this.colorBtn, h('span.sep'), this.saveBadge);
     this.saveBadge.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a')) return; this.saveBadge.classList.toggle('open'); });
     dismissOnOutside(this.saveBadge, [], () => this.saveBadge.classList.remove('open'));
@@ -235,7 +218,7 @@ export class App {
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
-    ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); this.minimap.place(); };
+    ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); this.syncFlips(); this.minimap.place(); };
     this.bindKeys();
     this.applyPrefs();
     this.onChange('tool');
@@ -264,11 +247,10 @@ export class App {
 
   /** Puts the preferences into effect: colour mode, shortcuts, hover outline. */
   applyPrefs() {
-    const p = this.ed.prefs, st = this.ed.settings;
+    const p = this.ed.prefs;
     void ensureAssets(p.customBrushes.flatMap((b) => brushAssets(b.params)));
     applyMode(p.mode);
-    applyPressure(p, st.brush);
-    applyPressure(p, st.eraser);
+    for (const t of STROKE_TOOLS) this.applyToolOpts(t);
     if (this.ed.room) this.ed.room.batchMs = p.remoteEvery * 1000;
     this.ed.view.setLowLatency(p.lowLatency);
     this.reference.syncPref();
@@ -282,6 +264,12 @@ export class App {
     this.layersBtn.setAttribute('aria-label', this.layersBtn.dataset.tip);
     this.applyLayout();
     this.ed.view.requestRender();
+  }
+
+  /** Puts one drawing tool's saved pressure switches on its current brush. */
+  applyToolOpts(tool: StrokeTool) {
+    const st = this.ed.settings, o = this.ed.prefs.toolOpts[tool];
+    applyPressure(o, tool === 'eraser' ? st.eraser : tool === 'smudge' ? st.smudge : st.brush, tool === 'smudge' ? 0.5 : 1);
   }
 
   get studioOn() { return this.ed.prefs.layout === 'studio'; }
@@ -471,6 +459,21 @@ export class App {
 
   export() { if (!this.ed.readOnly) exportDialog(this.ed); }
 
+  /** The Effects list, under `anchor` (the menu's icon) or the top-left corner. */
+  openEffects(anchor?: HTMLElement) { if (!this.ed.readOnly) this.openPop(this.effectsPop, anchor); }
+
+  /** Symmetry, grid and reference image. */
+  openGuides(anchor?: HTMLElement) {
+    if (this.ed.readOnly) return;
+    this.guidesPop.replaceChildren(guidesPanel(this));
+    this.openPop(this.guidesPop, anchor);
+  }
+
+  private openPop(pop: HTMLElement, anchor?: HTMLElement, r = anchor?.getBoundingClientRect()) {
+    pop.style.left = `${Math.round(Math.max(8, r ? r.left : 8))}px`;
+    pop.hidden = false;
+  }
+
   shareLinks() {
     const room = this.ed.room;
     if (!room?.info) return;
@@ -658,33 +661,17 @@ export class App {
       const tool = ed.toolId, smudge = tool === 'smudge';
       const params = tool === 'eraser' ? st.eraser : smudge ? st.smudge : st.brush;
       const name = ed.preset(currentPreset(ed, tool)).name;
-      const pick: HTMLButtonElement = h('button.preset-btn', {
-        title: 'Choose a brush', 'aria-label': `Brush: ${name}. Choose a brush`, html: '',
-        onclick: () => this.togglePicker(tool, pick),
-      });
-      pick.append(brushPreview(params, 64, 24), h('span', {}, name), h('span.caret', { html: icon('chevronDown', 14) }));
-      o.append(pick);
+      // Brushes, stabilizer and pressure live in the tool's own menu (tap the tool again); the bar just names the brush.
+      o.append(h('span.opt-brush', {}, name));
       // The simple layout keeps the bar short; the studio brush panel has room for everything.
       if (this.studioOn) o.append(
         range(smudge ? 'Strength' : 'Flow', params.flow, 0.02, 1, (v) => { params.flow = v; }),
         range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
         range('Grain', params.grain ?? 0, 0, 1, (v) => { params.grain = v; }),
         range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
+        toolOptions(this, tool),
       );
-      const pf = ed.prefs, pref = () => ed.emit('prefs');
-      if (!smudge) {
-        o.append(toggle('Stabilizer', pf.stabilizerOn, (v) => { pf.stabilizerOn = v; pref(); this.renderOptions(); }));
-        if (pf.stabilizerOn) o.append(range('', pf.stabilizer, 0, 1, (v) => { pf.stabilizer = v; pref(); }));
-      }
-      o.append(label('Pressure:'));
-      if (smudge) o.append(
-        toggle('Size', params.pressureSize > 0, (v) => { params.pressureSize = v ? 0.5 : 0; }),
-        toggle('Strength', params.pressureFlow > 0, (v) => { params.pressureFlow = v ? 0.5 : 0; }),
-      );
-      else o.append(
-        toggle('Size', params.pressureSize > 0, (v) => { pf.pressureSize = v; applyPressure(pf, st.brush); applyPressure(pf, st.eraser); pref(); }),
-        toggle('Opacity', params.pressureFlow > 0, (v) => { pf.pressureOpacity = v; applyPressure(pf, st.brush); applyPressure(pf, st.eraser); pref(); }),
-      );
+      else o.append(h('span.hint', {}, `Tap ${TOOLS.find((t) => t.id === tool)!.label.toLowerCase()} again for brushes, stabilizer and pressure`));
     } else if (ed.toolId === 'fill' && st.fillMode === 'gradient') {
       const endColor = h('input.swatch-input', { type: 'color', title: 'End colour' });
       endColor.value = st.gradientEnd ?? ed.color;
@@ -750,6 +737,87 @@ export class App {
     return h('div.popover.menu-pop', { hidden: true }, h('div.panel', {}, this.menuDyn));
   }
 
+  /** The icon row at the top of the menu: export, flips (lit while on), centre, effects, guides. */
+  private menuTools(close: () => void): HTMLElement {
+    const ed = this.ed, vp = ed.view.viewport, ro = ed.readOnly;
+    const tip = (t: string, a?: KeyAction) => { const k = a && keyOf(ed.prefs, a); return k ? `${t} (${k.toUpperCase()})` : t; };
+    const b = (ic: string, label: string, fn: (el: HTMLButtonElement) => void, on?: boolean) => {
+      const el: HTMLButtonElement = h(`button.icon-btn${on ? '.active' : ''}` as 'button', { type: 'button', title: label, 'aria-label': label, html: icon(ic, 20), onclick: () => fn(el) });
+      if (on !== undefined) el.setAttribute('aria-pressed', String(on));
+      return el;
+    };
+    const row = h('div.menu-tools', { role: 'toolbar', 'aria-label': 'Canvas tools' },
+      ro ? null : b('download', 'Export (Ctrl+Shift+E)', () => { close(); this.export(); }),
+      b('flipH', tip('Flip horizontally', 'flipH'), () => vp.flip(true), vp.flipX < 0),
+      b('flipV', tip('Flip vertically', 'flipV'), () => vp.flip(false), vp.flipY < 0),
+      b('fit', tip('Center canvas', 'fit'), () => ed.fitView()),
+      ro ? null : b('sparkle', 'Effects', (el) => { const r = el.getBoundingClientRect(); close(); this.openPop(this.effectsPop, undefined, r); }),
+      ro ? null : b('grid', 'Guides: symmetry, grid, reference', (el) => { const r = el.getBoundingClientRect(); close(); this.guidesPop.replaceChildren(guidesPanel(this)); this.openPop(this.guidesPop, undefined, r); }),
+    );
+    return row;
+  }
+
+  /**
+   * Press and hold the colour button (or drag it away) to pick the colour up, then drop it on the canvas:
+   * a bucket fill there in that colour, whichever tool is out.
+   */
+  private colorDrop(src: HTMLElement) {
+    const ed = this.ed;
+    let drag: { id: number; x0: number; y0: number; timer: number; ghost: HTMLElement | null } | null = null;
+    let swallowClick = false;
+    src.style.touchAction = 'none';
+    src.addEventListener('contextmenu', (e) => e.preventDefault());
+    const lift = (x: number, y: number) => {
+      if (!drag || drag.ghost) return;
+      clearTimeout(drag.timer);
+      const g = drag.ghost = h('div.color-drop', { 'aria-hidden': 'true', style: `background:${ed.color}` });
+      document.body.append(g);
+      place(x, y);
+      this.colorPop.hidden = true;
+    };
+    const place = (x: number, y: number) => { if (drag?.ghost) drag.ghost.style.transform = `translate(${x - 22}px, ${y - 22}px)`; };
+    const end = (e: PointerEvent, drop: boolean) => {
+      const d = drag;
+      if (!d || e.pointerId !== d.id) return;
+      drag = null;
+      clearTimeout(d.timer);
+      if (!d.ghost) return;
+      d.ghost.remove();
+      swallowClick = true;
+      setTimeout(() => { swallowClick = false; }, 0);
+      if (!drop) return;
+      const canvas = ed.view.canvas, target = document.elementFromPoint(e.clientX, e.clientY);
+      if (target !== canvas) return;
+      const r = canvas.getBoundingClientRect(), p = ed.view.viewport.toDoc(e.clientX - r.left, e.clientY - r.top);
+      if (!(ed.tools.fill as FillTool).bucket(p.x, p.y)) this.toast(ed.paintableLayer() ? 'Drop the colour on the canvas' : 'This layer can’t be painted');
+    };
+    src.addEventListener('pointerdown', (e) => {
+      if (ed.readOnly || e.button !== 0) return;
+      drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, ghost: null, timer: window.setTimeout(() => lift(e.clientX, e.clientY), 350) };
+      try { src.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+    });
+    src.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.ghost && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 12) lift(e.clientX, e.clientY);
+      place(e.clientX, e.clientY);
+    });
+    src.addEventListener('pointerup', (e) => end(e, true));
+    src.addEventListener('pointercancel', (e) => end(e, false));
+    src.addEventListener('click', (e) => { if (swallowClick) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  }
+
+  /** Keeps the menu's flip buttons lit to match the view. */
+  private syncFlips() {
+    const row = this.menuDyn.querySelector('.menu-tools');
+    if (!row) return;
+    const vp = this.ed.view.viewport;
+    for (const [sel, on] of [['[aria-label^="Flip horizontally"]', vp.flipX < 0], ['[aria-label^="Flip vertically"]', vp.flipY < 0]] as const) {
+      const el = row.querySelector(sel);
+      el?.classList.toggle('active', on);
+      el?.setAttribute('aria-pressed', String(on));
+    }
+  }
+
   private renderMenuDyn() {
     const ed = this.ed, s = this.session, d = this.menuDyn, st = ed.settings;
     const close = () => { (d.closest('.popover') as HTMLElement).hidden = true; };
@@ -768,6 +836,7 @@ export class App {
     } else if (s.server) {
       d.append(item('user', 'Log in to draw together…', () => { location.href = '/login?next=/app'; }), h('div.menu-sep'));
     }
+    d.append(this.menuTools(close), h('div.menu-sep'));
     if (ed.room || s.local) {
       const info = ed.room?.info, own = info?.ownerId === ed.room?.you;
       d.append(h('div.menu-label', {}, info?.name ?? s.local?.meta.name ?? 'Canvas'));
@@ -785,7 +854,6 @@ export class App {
     } else {
       d.append(item('file', 'New canvas…', () => this.newCanvas()));
     }
-    if (!ed.readOnly) d.append(item('download', 'Export PNG / PSD / .hivecanvas…', () => this.export()));
     if (CANVAS_LOG) d.append(item('download', 'Export canvas log (beta)', () => void exportCanvasLog(ed).catch((e) => this.toast((e as Error).message))));
     d.append(item('fit', `Focus mode${keyOf(ed.prefs, 'focus') ? ` (${keyOf(ed.prefs, 'focus').toUpperCase()})` : ''}`, () => this.toggleFocus()),
       item('search', 'Commands… (Ctrl+K)', () => this.commandPalette()),
@@ -801,7 +869,7 @@ export class App {
   async newCanvas() {
     const empty = this.ed.doc.log.length <= 1;
     if (!empty && !(await confirmDialog('Start a new canvas?', 'You’ll lose what’s on this one.', 'Discard'))) return;
-    newCanvasDialog((doc) => this.ed.setDoc(doc));
+    newCanvasDialog((doc) => { this.ed.setColor(DEFAULT_COLOR); this.ed.setDoc(doc); });
   }
 
   private drawOverlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) {

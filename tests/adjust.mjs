@@ -45,7 +45,7 @@ await drag([[c[0] - 150, c[1] - 150], [c[0] + 150, c[1] + 150]]);
 check(near(await layerPixel(c[0], c[1]), 255, 0, 0), 'red square drawn');
 
 // ---- Effects popover lists the adjustments ----
-await page.locator('.topbar button[data-tip="Effects"]').click();
+await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label="Effects"]').click();
 const items = await page.locator('.effects-pop .menu-item').allInnerTexts();
 check(items.includes('Hue / saturation / brightness') && items.includes('Curves') && items.includes('Gradient map'), 'effects popover offers the adjustments');
 check(await page.locator('.effects-pop .menu-label', { hasText: 'Adjust' }).isVisible(), 'under an Adjust heading');

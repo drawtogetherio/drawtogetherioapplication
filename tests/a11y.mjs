@@ -32,10 +32,10 @@ for (const [key, pop, label] of [['l', '.layers-pop', 'layers'], ['m', '.options
   check(bad.length === 0, `every ${label} control has a name${bad.length ? ': ' + bad.join(', ') : ''}`);
 }
 await page.keyboard.press('Escape');
-await page.locator('.topbar button[data-tip^="Guides"]').click();
+await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label^="Guides"]').click();
 check((await unnamed('.guides-pop')).length === 0, 'every guides control has a name');
 await page.keyboard.press('Escape');
-await page.locator('.topbar button[data-tip="Effects"]').click();
+await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label="Effects"]').click();
 check((await unnamed('.effects-pop')).length === 0, 'every effects item has a name');
 await page.keyboard.press('Escape');
 await page.locator('.topbar button[data-tip="Menu"]').click();

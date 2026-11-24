@@ -95,7 +95,7 @@ await page.keyboard.press('h');
 // Exports
 const sizes = {};
 for (const f of ['PNG', 'JPG', 'PSD (layers)']) {
-  await page.locator('[data-tip="Export (Ctrl+Shift+E)"]').click();
+  await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label="Export (Ctrl+Shift+E)"]').click();
   await page.locator('.segmented button', { hasText: f }).click();
   const [dl] = await Promise.all([page.waitForEvent('download'), page.locator('.modal .btn.primary').click()]);
   const p = `${out}/export-${dl.suggestedFilename()}`;

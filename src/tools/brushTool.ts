@@ -78,11 +78,13 @@ export class BrushTool implements Tool {
       const vp = this.ed.view.viewport;
       clog('stroke.start', { id: this.id, erase: this.erase, brush: params, preset: this.erase ? this.ed.settings.eraserPreset : this.ed.settings.brushPreset,
         color: this.ed.color, layer: layer.props.id, layerTiles: layer.surface.tiles.size, mask: this.ed.onMask, zoom: vp.zoom, rot: vp.rot, mirrors: this.mirrors.length,
-        stabilizer: this.ed.prefs.stabilizerOn ? this.ed.prefs.stabilizer : 0, quickShape: this.ed.prefs.quickShape, room: !!this.ed.room, x: p.x, y: p.y, p: p.pressure });
+        stabilizer: this.opts.stabilizerOn ? this.opts.stabilizer : 0, quickShape: this.ed.prefs.quickShape, room: !!this.ed.room, x: p.x, y: p.y, p: p.pressure });
     }
     this.add(p);
   }
   private startedAt = 0;
+  /** This tool's own stabilizer setting: the brush and the eraser each keep one. */
+  private get opts() { return this.ed.prefs.toolOpts[this.erase ? 'eraser' : 'brush']; }
 
   move(p: PointerInfo) {
     if (!this.buffer) return;
@@ -127,7 +129,7 @@ export class BrushTool implements Tool {
 
   /** The brush trails the cursor on a rope: it only moves once the rope is taut. */
   private pull(p: PointerInfo): PointerInfo {
-    const pf = this.ed.prefs, L = pf.stabilizerOn ? (pf.stabilizer * ROPE_MAX) / this.ed.view.viewport.zoom : 0;
+    const o = this.opts, L = o.stabilizerOn ? (o.stabilizer * ROPE_MAX) / this.ed.view.viewport.zoom : 0;
     if (!L) return p;
     const t = this.tether ?? (this.tether = { bx: p.x, by: p.y, cx: p.x, cy: p.y });
     t.cx = p.x; t.cy = p.y;

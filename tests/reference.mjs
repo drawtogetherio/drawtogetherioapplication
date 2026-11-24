@@ -30,7 +30,7 @@ const c = [box.width / 2, box.height / 2];
 const circle = (r, n = 40) => Array.from({ length: n + 1 }, (_, i) => [c[0] + Math.cos((i / n) * Math.PI * 2) * r, c[1] + Math.sin((i / n) * Math.PI * 2) * r]);
 
 // Line art on layer 1, an empty layer 2 above.
-await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 14; e.settings.brush.smoothing = 0; e.prefs.stabilizerOn = false; e.prefs.quickShape = false; });
+await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 14; e.settings.brush.smoothing = 0; e.prefs.toolOpts.brush.stabilizerOn = false; e.prefs.quickShape = false; });
 await drag(circle(120));
 const lineArt = await ed((e) => e.activeLayer);
 await ed((e) => e.addLayer());

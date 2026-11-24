@@ -18,7 +18,7 @@ const r = await page.evaluate(async (LAYERS) => {
   const app = window.doodlehive, ed = app.ed, doc = ed.doc, view = ed.view;
   const uid = () => 'b' + Math.random().toString(36).slice(2, 10);
   // Paint: each layer gets long strokes across the whole canvas, so every tile has content on most layers.
-  ed.settings.brush.size = 60; ed.settings.brush.smoothing = 0; ed.prefs.stabilizerOn = false;
+  ed.settings.brush.size = 60; ed.settings.brush.smoothing = 0; ed.prefs.toolOpts.brush.stabilizerOn = false;
   for (let i = 0; i < LAYERS; i++) {
     if (i) ed.addLayer();
     const layer = ed.activeLayer;

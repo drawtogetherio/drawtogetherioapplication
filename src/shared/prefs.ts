@@ -46,6 +46,36 @@ export const DEFAULT_PANELS: Record<PanelId, PanelState> = {
   layers: { dock: 'right', x: 0, y: 0, w: 300, h: 420, show: true, order: 2 },
 };
 
+export type StrokeTool = 'brush' | 'eraser' | 'smudge';
+export const STROKE_TOOLS: StrokeTool[] = ['brush', 'eraser', 'smudge'];
+/**
+ * Stabilizer: on, and 0..1 how long the rope between cursor and brush is.
+ * Pressure: whether it drives size, and opacity (strength for smudge); applied to every brush the tool picks.
+ */
+export interface ToolOpts { stabilizerOn: boolean; stabilizer: number; pressureSize: boolean; pressureOpacity: boolean }
+export const DEFAULT_TOOL_OPTS: Record<StrokeTool, ToolOpts> = {
+  brush: { stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false },
+  eraser: { stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: false },
+  smudge: { stabilizerOn: false, stabilizer: 0.4, pressureSize: true, pressureOpacity: true },
+};
+
+/** Older accounts kept one set of switches for brush and eraser at the top level; they seed both. */
+function cleanToolOpts(raw: unknown, legacy: Record<string, unknown>): Record<StrokeTool, ToolOpts> {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, Record<string, unknown> | undefined>;
+  const out = {} as Record<StrokeTool, ToolOpts>;
+  for (const t of STROKE_TOOLS) {
+    const d = DEFAULT_TOOL_OPTS[t], o = r[t] && typeof r[t] === 'object' ? r[t]! : t === 'smudge' ? {} : legacy;
+    const bool = (v: unknown, def: boolean) => (typeof v === 'boolean' ? v : def);
+    out[t] = {
+      stabilizerOn: bool(o.stabilizerOn, d.stabilizerOn),
+      stabilizer: typeof o.stabilizer === 'number' && Number.isFinite(o.stabilizer) ? Math.min(1, Math.max(0, o.stabilizer)) : d.stabilizer,
+      pressureSize: bool(o.pressureSize, d.pressureSize),
+      pressureOpacity: bool(o.pressureOpacity, d.pressureOpacity),
+    };
+  }
+  return out;
+}
+
 export interface Prefs {
   /** Only the bindings that differ from the defaults; '' unbinds. */
   keys: Partial<Record<KeyAction, string>>;
@@ -66,14 +96,10 @@ export interface Prefs {
   pressureCurve: number[];
   /** One finger draws; otherwise it pans. Turns off by itself once a pen is used. */
   fingerDraws: boolean;
-  /** Brush stabilizer: on, and 0..1 how long the rope between cursor and brush is. */
-  stabilizerOn: boolean;
-  stabilizer: number;
+  /** Stabilizer and pressure switches, remembered for each drawing tool on its own. */
+  toolOpts: Record<StrokeTool, ToolOpts>;
   /** Holding still at the end of a stroke snaps it to a shape. */
   quickShape: boolean;
-  /** Whether pressure drives brush size and opacity; applied to every brush picked. */
-  pressureSize: boolean;
-  pressureOpacity: boolean;
   /** The Patreon banner on the home screen; false once it has been closed. */
   supportBanner: boolean;
   /** Brush ids starred in the library. */
@@ -97,7 +123,7 @@ export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
 
 export const DEFAULT_PREFS: Prefs = {
   keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, minimap: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
-  fingerDraws: true, stabilizerOn: false, stabilizer: 0.4, quickShape: true, pressureSize: true, pressureOpacity: false, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], palettes: [], palette: '', layout: 'classic', leftHanded: false, quickMenu: DEFAULT_QUICK_MENU, panels: DEFAULT_PANELS,
+  fingerDraws: true, toolOpts: DEFAULT_TOOL_OPTS, quickShape: true, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], palettes: [], palette: '', layout: 'classic', leftHanded: false, quickMenu: DEFAULT_QUICK_MENU, panels: DEFAULT_PANELS,
 };
 
 const isKey = (v: unknown) => typeof v === 'string' && (v === '' || (v.length === 1 && v.trim() === v));
@@ -159,11 +185,8 @@ export function cleanPrefs(raw: unknown): Prefs {
     pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],
     fingerDraws: r.fingerDraws !== false,
-    stabilizerOn: r.stabilizerOn === true,
+    toolOpts: cleanToolOpts(r.toolOpts, r),
     quickShape: r.quickShape !== false,
-    stabilizer: typeof r.stabilizer === 'number' ? Math.min(1, Math.max(0, r.stabilizer)) : DEFAULT_PREFS.stabilizer,
-    pressureSize: r.pressureSize !== false,
-    pressureOpacity: r.pressureOpacity === true,
     supportBanner: r.supportBanner !== false,
     favoriteBrushes: list(r.favoriteBrushes).filter(isBrushId).slice(0, 40),
     customBrushes: brushes,
@@ -177,10 +200,11 @@ export function cleanPrefs(raw: unknown): Prefs {
   };
 }
 
-/** The remembered pressure switches, on top of a brush's own strengths. */
-export function applyPressure(p: Prefs, b: BrushParams) {
-  b.pressureSize = p.pressureSize ? b.pressureSize || 1 : 0;
-  b.pressureFlow = p.pressureOpacity ? b.pressureFlow || 1 : 0;
+/** A tool's remembered pressure switches, on top of a brush's own strengths. */
+/** `full`: the strength a switch turns on at when the brush has none of its own (smudge uses half). */
+export function applyPressure(o: ToolOpts, b: BrushParams, full = 1) {
+  b.pressureSize = o.pressureSize ? b.pressureSize || full : 0;
+  b.pressureFlow = o.pressureOpacity ? b.pressureFlow || full : 0;
 }
 
 export function pressureMap(p: Prefs, v: number): number {

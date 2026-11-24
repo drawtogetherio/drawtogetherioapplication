@@ -33,7 +33,7 @@ const digest = () => ed((e) => {
   return JSON.stringify(o, Object.keys(o).sort());
 });
 
-await ed((e) => { e.setColor('#1040c0'); e.settings.brush.size = 14; e.settings.brush.smoothing = 0; e.prefs.stabilizerOn = false; });
+await ed((e) => { e.setColor('#1040c0'); e.settings.brush.size = 14; e.settings.brush.smoothing = 0; e.prefs.toolOpts.brush.stabilizerOn = false; });
 await drag([[200, 200], [700, 240], [600, 600]]);
 await page.waitForTimeout(100);
 const one = await digest();

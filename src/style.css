@@ -105,6 +105,10 @@ input, select { font: inherit; }
 .icon-btn.active, .icon-btn.on { color: var(--accent-ink); background: var(--accent-soft); }
 .zoom-label { border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 0 8px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+.color-drop {
+  position: fixed; left: 0; top: 0; z-index: 60; width: 44px; height: 44px; border-radius: 50%; pointer-events: none;
+  border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 6px 18px rgba(0, 0, 0, 0.35);
+}
 .color-btn {
   width: 32px; height: 32px; border-radius: 50%; margin: 0 4px 0 6px; cursor: pointer;
   border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.25);
@@ -374,6 +378,9 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 /* Menu account header */
 .account { display: flex; align-items: center; gap: 10px; padding: 4px 4px 2px; }
 .account-actions { display: flex; gap: 6px; padding: 4px; }
+.menu-tools { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 4px; }
+.menu-tools .icon-btn { width: 40px; height: 40px; border-radius: var(--r-md); }
+.menu-tools .icon-btn.active { background: var(--accent-soft); color: var(--accent-ink, var(--accent)); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .account-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .has-dot, .menu-bell { position: relative; }
 .menu-bell { flex: none; }
@@ -1054,6 +1061,9 @@ body.spectating .stage { cursor: grab; }
 /* Brush management */
 .brush-library { width: 300px; padding: 10px; position: relative; }
 .brush-library .icon-btn.small { width: 30px; height: 30px; }
+.tool-opts { display: flex; flex-direction: column; gap: 6px; padding: 6px 2px 8px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.tool-opts-row { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.tool-opts-row .slider { flex: 1; min-width: 0; }
 .brush-more { color: var(--muted); opacity: 0; flex: none; }
 .brush-row:hover .brush-more, .brush-row:focus-within .brush-more { opacity: 1; }
 .brush-menu { position: absolute; right: 10px; width: 160px; padding: 4px; z-index: 2; display: flex; flex-direction: column; gap: 1px; }

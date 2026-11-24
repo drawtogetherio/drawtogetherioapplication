@@ -35,19 +35,25 @@ export class FillTool implements Tool {
   overlay(ctx: CanvasRenderingContext2D, M: DOMMatrix) { this.lasso.overlay(ctx, M); }
 
   up(p: PointerInfo) {
-    const ed = this.ed, st = ed.settings;
     const sub = this.sub;
     if (sub) { sub.up(); return; }
-    if (!ed.paintableLayer()) return;
-    const region = fillRegion(ed, p.x, p.y);
-    if (!rectContains(region, p.x, p.y)) return;
-    if (this.pending) return;
+    this.bucket(p.x, p.y);
+  }
+
+  /** A bucket fill at a document point with the current colour, whatever the fill mode (also the colour drop). */
+  bucket(x: number, y: number): boolean {
+    const ed = this.ed, st = ed.settings;
+    if (ed.readOnly || !ed.paintableLayer()) return false;
+    const region = fillRegion(ed, x, y);
+    if (!rectContains(region, x, y)) return false;
+    if (this.pending) return false;
     ed.pushRecent(ed.color);
     this.pending = true;
     ed.applyPrepared({
-      t: 'fill', id: uid(), layer: ed.activeLayer, x: Math.floor(p.x), y: Math.floor(p.y), color: ed.color,
+      t: 'fill', id: uid(), layer: ed.activeLayer, x: Math.floor(x), y: Math.floor(y), color: ed.color,
       tolerance: st.fillTolerance, sampleAll: st.fillSampleAll, sampleLayer: ed.sampleLayer(), expand: st.fillExpand, region,
       clip: ed.selection ?? undefined, mask: ed.onMask,
     }).finally(() => { this.pending = false; });
+    return true;
   }
 }
