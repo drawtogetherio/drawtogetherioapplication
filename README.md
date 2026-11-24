@@ -132,16 +132,20 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   (`src/view/canvasView.ts`). `tests/compbench.mjs` has the numbers.
 - `src/ui/memory.ts` watches canvas memory and caps undo history as it nears the device budget.
 
-**Branding (v0.31)**
-- Logo by [Logocraftz](https://www.fiverr.com/logocraftz), credited in Preferences → About. The kit's
-  originals are in `src/assets/brand/kit`; `src/site/brand.ts` inlines copies with plain fills. The mark
-  has a version for dark backgrounds (`mark-on-dark.svg`) and one for light (`mark-on-light.svg`), and CSS
-  shows the one for the current mode; the wordmark is one SVG in `currentColor`. `public/favicon.svg`
-  follows the browser's colour scheme. `public/apple-touch-icon.png`, `public/og.png` and
-  `desktop/build/icon.png` are rendered from the same artwork.
-- Brand colours: Dark `#212021`, Honey `#fdb302`, White `#ffffff`. Honey is the default accent; dark mode
-  is built on Dark, light mode on White with Dark text. The last mode is kept in localStorage
-  (`doodlehive.mode`) so the loading screen matches it.
+**Branding (v0.35)**
+- The DoodleHive bee-on-a-brush logo by [Sebm](https://x.com/SebmSebm), credited in Preferences → About. The kit's SVG originals are in `src/assets/brand/kit`
+  (Full Logo, Simplified Icon and Brush, each in Multi Color, Brown and Yellow, with and without the cream outline).
+  `src/assets/brand` holds cropped copies with plain fills that `src/site/brand.ts` inlines: `full-*` (lettering
+  with the bee on its brush, the kit's one-colour Yellow on dark and Brown on light) for headers and About, `mark-*` (the bee alone) for the login card, 404, loading
+  screen, favicon and Staff badge. Each has an `on-dark` version (with the cream outline) and an `on-light` one, and
+  CSS shows the one for the current mode. `app-icon.svg` (the brush bee on an orange tile, after the kit's mock-up)
+  and `app-icon-maskable.svg` are the sources for `public/apple-touch-icon.png`, `public/icon-*.png` and
+  `desktop/build/icon.png`; `public/og.png` is the full logo on Cream.
+- Brand colours: Brown `#6d2400`, Orange `#ef8720`, Cream `#f2d9b6`. Orange is the Honey theme's accent (the
+  default), with dark brown `#3d1500` text on it. Dark mode is an espresso built from the Brown (panel `#1f1610`,
+  text `#fbf3e9`); light mode a warm off-white from the Cream (panel `#fffaf3`, text `#3d1500`). Accent used as
+  text or an icon goes through `--accent-ink`, which light mode darkens so it stays readable. The last mode is kept
+  in localStorage (`doodlehive.mode`) so the loading screen matches it.
 
 **Drawing (v0.1)**
 - Fixed or **Unlimited** canvas; brush/eraser presets with pen pressure, smoothing, hardness, flow; **Smudge** (S) drags and blends paint in place
