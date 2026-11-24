@@ -32,8 +32,7 @@ function render(downloads: { mac: string | null; windows: string | null } | unde
       ${scene()}
     </div>
     <p class="account-line" id="account-line">Already have an account? <a href="/login">Log in</a></p>
-  </main>
-  <footer class="intro-footer">© ${new Date().getFullYear()} Doodlehive</footer>`;
+  </main>`;
 }
 
 function scene() {

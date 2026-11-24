@@ -90,6 +90,7 @@ check(await page.evaluate(() => window.doodlehive.ed.prefs.chime === false), 'th
 // ---- About ----
 await group('About');
 check(/^v\d+\.\d+\.\d+$/.test((await page.locator('.pref-row', { hasText: 'Doodlehive' }).locator('span').last().textContent()).trim()), 'About shows the app version');
+check((await page.locator('.pref-row', { hasText: 'Bea, our mascot' }).locator('a').getAttribute('href')) === 'https://instagram.com/cheeoscorner' && await page.locator('.about-bea img').isVisible() && (await page.locator('.about-bea img').evaluate((i) => i.naturalWidth)) > 0, 'Bea’s design sheet and her artist’s credit are in About');
 
 // ---- Pressure ----
 await group('Pressure');

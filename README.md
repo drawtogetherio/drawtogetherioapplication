@@ -133,12 +133,14 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - `src/ui/memory.ts` watches canvas memory and caps undo history as it nears the device budget.
 
 **Branding (v0.35)**
+- Bea, the mascot, by [Cheeo](https://instagram.com/cheeoscorner): her design sheet (`src/assets/brand/bea.webp`) and
+  the credit are in Preferences → About.
 - The DoodleHive bee-on-a-brush logo by [Sebm](https://x.com/SebmSebm), credited in Preferences → About. The kit's SVG originals are in `src/assets/brand/kit`
   (Full Logo, Simplified Icon and Brush, each in Multi Color, Brown and Yellow, with and without the cream outline).
-  `src/assets/brand` holds cropped copies with plain fills that `src/site/brand.ts` inlines: `full-*` (lettering
-  with the bee on its brush, the kit's one-colour Yellow on dark and Brown on light) for headers and About, `mark-*` (the bee alone) for the login card, 404, loading
-  screen, favicon and Staff badge. Each has an `on-dark` version (with the cream outline) and an `on-light` one, and
-  CSS shows the one for the current mode. `app-icon.png` is the designer's app icon (the bee on an orange tile,
+  `src/assets/brand` holds cropped copies with plain fills that `src/site/brand.ts` inlines: `full-multi-outline`
+  (lettering with the bee on its brush, Multi Color with the cream outline, the same in both modes) for headers
+  and About, `mark-*` (the bee alone) for the login card, 404, loading screen, favicon and Staff badge, with an
+  `on-dark` version (cream outline) and an `on-light` one that CSS switches by mode. `app-icon.png` is the designer's app icon (the bee on an orange tile,
   750 px): `public/apple-touch-icon.png` (180) and `public/icon-*.png` are scaled from it, the maskable one at
   80% so the bee stays inside the safe zone.
   `desktop/build/icon.png` still comes from `app-icon.svg` until the desktop app is next built; `public/og.png`

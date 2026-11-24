@@ -86,7 +86,6 @@ button { font: inherit; }
 .account-line { margin: 28px 0 0; color: var(--muted); font-size: 15px; }
 .account-line a { color: var(--accent); font-weight: 600; text-decoration: none; }
 .account-line a:hover { text-decoration: underline; }
-.intro-footer { text-align: center; color: var(--muted); font-size: 13px; padding: 8px 16px calc(24px + env(safe-area-inset-bottom)); }
 
 /* The drawing scene */
 .mock {

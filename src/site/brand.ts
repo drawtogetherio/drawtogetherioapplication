@@ -1,18 +1,17 @@
 // DoodleHive logo kit by Sebm (x.com/SebmSebm): Brown #6d2400, Orange #ef8720, Cream #f2d9b6. Originals in
 // src/assets/brand/kit; the copies here are cropped to the artwork and use plain fills, so several can sit inline on
-// one page. Each logo has a version for dark backgrounds and one for light; CSS shows the one for the mode. The full
-// logo is the kit's one-colour Yellow (dark) and Brown (light); the bee is Multi Color, outlined on dark.
+// one page. The full logo is the kit's Multi Color with the cream outline, the same in both modes; the bee alone has
+// a version for dark backgrounds and one for light, and CSS shows the one for the mode.
 import markOnDark from '../assets/brand/mark-on-dark.svg?raw';
 import markOnLight from '../assets/brand/mark-on-light.svg?raw';
-import fullOnDark from '../assets/brand/full-on-dark.svg?raw';
-import fullOnLight from '../assets/brand/full-on-light.svg?raw';
+import fullMulti from '../assets/brand/full-multi-outline.svg?raw';
 
 const tag = (svg: string, cls: string) => svg.trim().replace('<svg ', `<svg class="${cls}" aria-hidden="true" focusable="false" `);
 
 /** The bee on its own. */
 export const LOGO_SVG = `<span class="logo-mark">${tag(markOnDark, 'on-dark')}${tag(markOnLight, 'on-light')}</span>`;
 /** "Doodle Hive" lettering with the bee on its brush. */
-export const FULL_LOGO_SVG = `<span class="logo-full">${tag(fullOnDark, 'on-dark')}${tag(fullOnLight, 'on-light')}</span>`;
+export const FULL_LOGO_SVG = `<span class="logo-full">${tag(fullMulti, 'multi')}</span>`;
 
 export function brandHtml(href = '/') {
   return `<a class="brand-link" href="${href}" aria-label="DoodleHive home">${FULL_LOGO_SVG}</a>`;

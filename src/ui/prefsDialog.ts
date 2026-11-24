@@ -7,6 +7,7 @@ import { clear, h } from './dom';
 import { Slider } from './slider';
 import { native } from '../io/native';
 import { FULL_LOGO_SVG } from '../site/brand';
+import beaUrl from '../assets/brand/bea.webp';
 import { describe } from './memory';
 import { penTestPad } from './penTest';
 import { api } from '../net/api';
@@ -158,6 +159,9 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     ];
     if (native) rows.push(row(native.version === 'ipad' ? 'iPad app' : 'Desktop app', h('span.muted', {}, native.version === 'ipad' ? 'installed' : `v${native.version || '?'}`)));
     rows.push(row('Logo design', h('a.about-link', { href: 'https://x.com/SebmSebm', target: '_blank', rel: 'noopener noreferrer' }, 'Sebm')));
+    rows.push(row('Bea, our mascot', h('a.about-link', { href: 'https://instagram.com/cheeoscorner', target: '_blank', rel: 'noopener noreferrer' }, 'Cheeo')));
+    rows.push(h('div.about-bea', {}, h('a', { href: beaUrl, target: '_blank', rel: 'noopener noreferrer' },
+      h('img', { src: beaUrl, alt: 'Bea’s design sheet: a bee-winged artist in an orange beret, honey-drip sleeves, brown overalls and striped stockings, with her brush and palette' }))));
     const news = h('div.md.whats-new', {}, h('span.muted', {}, 'Loading…'));
     api.whatsNew().then(({ md, at }) => {
       if (!md.trim()) { news.replaceChildren(h('span.muted', {}, 'Nothing yet.')); return; }

@@ -1012,6 +1012,8 @@ body.spectating .stage { cursor: grab; }
 .about-brand .logo-full { height: 72px; }
 .pref-page h3.sub { margin-top: 14px; }
 .whats-new-at { display: block; margin-top: 10px; }
+.about-bea { margin: 2px 0 6px; }
+.about-bea img { display: block; width: 100%; height: auto; border-radius: 12px; }
 .about-link { color: var(--text); font-weight: 600; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .pref-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 2px; font-size: 14px; }
 .pref-keys { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; }
