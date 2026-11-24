@@ -137,10 +137,12 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   (Full Logo, Simplified Icon and Brush, each in Multi Color, Brown and Yellow, with and without the cream outline).
   `src/assets/brand` holds cropped copies with plain fills that `src/site/brand.ts` inlines: `full-*` (lettering
   with the bee on its brush, the kit's one-colour Yellow on dark and Brown on light) for headers and About, `mark-*` (the bee alone) for the login card, 404, loading
-  screen, favicon and Staff badge. Each has an `on-dark` version (with the cream outline) and an `on-light` one, and
-  CSS shows the one for the current mode. `app-icon.svg` (the brush bee on an orange tile, after the kit's mock-up)
-  and `app-icon-maskable.svg` are the sources for `public/apple-touch-icon.png`, `public/icon-*.png` and
-  `desktop/build/icon.png`; `public/og.png` is the full logo on Cream.
+  screen and Staff badge. Each has an `on-dark` version (with the cream outline) and an `on-light` one, and
+  CSS shows the one for the current mode. `app-icon.png` is the designer's app icon (the bee on an orange tile,
+  750 px): `public/favicon.ico` (16/32/48), `public/favicon.png` (128), `public/apple-touch-icon.png` (180) and
+  `public/icon-*.png` are scaled from it, the maskable one at 80% so the bee stays inside the safe zone.
+  `desktop/build/icon.png` still comes from `app-icon.svg` until the desktop app is next built; `public/og.png`
+  is the full logo on Cream.
 - Brand colours: Brown `#6d2400`, Orange `#ef8720`, Cream `#f2d9b6`. Orange is the Honey theme's accent (the
   default), with dark brown `#3d1500` text on it. Dark mode is an espresso built from the Brown (panel `#1f1610`,
   text `#fbf3e9`); light mode a warm off-white from the Cream (panel `#fffaf3`, text `#3d1500`). Accent used as
