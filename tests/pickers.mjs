@@ -34,7 +34,7 @@ await page.locator('.brush-tab', { hasText: 'Pencil' }).click();
 await page.locator('.brush-row', { hasText: 'HB Pencil' }).click();
 check(await page.locator('.brush-library').isHidden(), 'picking closes the library');
 check(await ed((e) => e.settings.brushPreset) === 'pencil', 'HB Pencil selected');
-check(await page.locator('.preset-btn', { hasText: 'HB Pencil' }).count() === 1, 'options bar shows HB Pencil');
+check(await page.locator('.opt-brush', { hasText: 'HB Pencil' }).count() === 1, 'options bar shows HB Pencil');
 
 // Eraser: first tap selects, second opens.
 const eraserBtn = page.locator('.topbar [aria-label^="Eraser (E)"]');

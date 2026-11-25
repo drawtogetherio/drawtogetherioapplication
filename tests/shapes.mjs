@@ -31,7 +31,7 @@ const last = () => ed((e) => { const o = e.doc.log.at(-1); return o ? { t: o.t, 
 const ops = () => ed((e) => e.doc.log.length);
 const c = [box.width / 2, box.height / 2];
 
-await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 10; e.settings.brush.smoothing = 0; e.prefs.stabilizerOn = false; e.settings.shapeFill = true; });
+await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 10; e.settings.brush.smoothing = 0; e.prefs.toolOpts.brush.stabilizerOn = false; e.settings.shapeFill = true; });
 await page.keyboard.press('u');
 
 // ---- Picker lists the new shapes ----

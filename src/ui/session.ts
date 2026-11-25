@@ -22,6 +22,7 @@ import type { LiveEvent } from '../net/api';
 import { DEFAULT_SHARE, PRIVATE_ROOM_MSG, RoomInfo, ShareSettings, WATCH_KEY_RE } from '../shared/protocol';
 import type { Op } from '../core/model';
 import { cleanPrefs } from '../shared/prefs';
+import { DEFAULT_COLOR } from '../editor';
 
 export const PREFS_KEY = 'doodlehive.prefs';
 
@@ -84,7 +85,7 @@ export class Session {
       try { this.ed.prefs = cleanPrefs(JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}')); } catch { /* fresh device */ }
       this.app.refreshAccount();
       this.booted();
-      newCanvasDialog((doc) => this.ed.setDoc(doc), false);
+      newCanvasDialog((doc) => { this.ed.setColor(DEFAULT_COLOR); this.ed.setDoc(doc); }, false);
       return;
     }
     this.ed.me = await api.me().catch(() => null);
@@ -222,6 +223,7 @@ export class Session {
     newCanvasDialog(() => {}, true, {
       solo,
       onCreate: async (c) => {
+        this.ed.setColor(DEFAULT_COLOR);
         const settings = { width: c.width, height: c.height, infinite: c.infinite, background: c.background };
         if (this.me?.premium) { this.joinRoom((await api.createRoom(c.roomName, settings, c.share)).id); return; }
         const copy = await LocalCopy.create(this.me!.id, c.roomName, settings, c.share), doc = DrawDoc.create(settings);

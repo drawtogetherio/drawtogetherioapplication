@@ -67,7 +67,7 @@ await page.waitForSelector('.brush-edit', { state: 'detached' });
 const mine = await ed((e) => e.prefs.customBrushes[0]);
 check(mine?.name === 'Soft Ink' && mine.cat === 'Pen' && Math.abs(mine.params.hardness - 0.3) < 0.05 && (await page.locator('.brush-row .brush-name').allTextContents()).includes('Soft Ink'), 'saving adds it to the Pen tab and prefs');
 await page.locator('.brush-row', { hasText: 'Soft Ink' }).locator('.brush-pick').click();
-check(await ed((e) => e.settings.brushPreset === e.prefs.customBrushes[0].id && e.settings.brush.hardness < 0.35) && (await page.locator('.optionsbar .preset-btn').textContent()).includes('Soft Ink'), 'picking it uses its settings');
+check(await ed((e) => e.settings.brushPreset === e.prefs.customBrushes[0].id && e.settings.brush.hardness < 0.35) && (await page.locator('.optionsbar .opt-brush').textContent()).includes('Soft Ink'), 'picking it uses its settings');
 await brushBtn.click();
 await page.locator('[aria-label="New category"]').click();
 await page.fill('#text-dialog-input', 'Inks');
@@ -95,7 +95,7 @@ await page.locator('.brush-tab', { hasText: 'Pencil' }).click();
 check((await page.locator('.brush-row .brush-name').allTextContents()).join() === 'Graphite Pencil,HB Pencil,Crayon,Charcoal', 'Pencil tab lists the pencils');
 await page.screenshot({ path: `${out}/01-pencil-tab.png` });
 await page.locator('.brush-row', { hasText: 'Crayon' }).click();
-check(await ed((e) => e.settings.brushPreset) === 'crayon' && (await page.locator('.optionsbar .preset-btn', { hasText: 'Crayon' }).count()) === 1, 'Crayon picked; the simple bar names it (no Grain slider)');
+check(await ed((e) => e.settings.brushPreset) === 'crayon' && (await page.locator('.optionsbar .opt-brush', { hasText: 'Crayon' }).count()) === 1, 'Crayon picked; the simple bar names it (no Grain slider)');
 
 // ---- Grain breaks a stroke up; the plain brush is solid ----
 await ed((e) => { e.settings.brush.size = 30; });
@@ -154,7 +154,7 @@ check(await page.locator('.slider-preview').isHidden(), 'it goes away after the 
 
 // ---- Effects: baked, undoable, and replay the same ----
 const before = await ed((e) => e.doc.log.length);
-await page.locator('.topbar [aria-label="Effects"]').click();
+await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label="Effects"]').click();
 check(await page.locator('.effects-pop .menu-item').count() === 13, 'the Effects button by the flip buttons lists 7 effects and 6 adjustments');
 await page.locator('.effects-pop .menu-item', { hasText: 'Mosaic' }).click();
 await page.waitForSelector('.effect-bar');
@@ -168,7 +168,7 @@ await page.waitForFunction((n) => window.doodlehive.ed.doc.log.length === n + 1,
 check(await ed((e, n) => e.doc.log.length === n + 1 && e.doc.log.at(-1).t === 'effect' && e.doc.log.at(-1).effect === 'mosaic', before), 'mosaic baked in as one effect op');
 await page.locator('.layers-pop').count();
 for (const effect of ['glitch', 'blur', 'chroma', 'motion']) {
-  await page.locator('.topbar [aria-label="Effects"]').click();
+  await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label="Effects"]').click();
   await page.locator('.effects-pop .menu-item', { hasText: EFFECT_NAMES[effect] }).click();
   await page.waitForSelector('.effect-bar');
   await page.getByRole('button', { name: 'Apply' }).click();

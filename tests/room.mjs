@@ -82,6 +82,7 @@ check(bobLayer.parent === 'uf_' + bobLayer.me, 'Bob’s first layer lives in his
 
 // ---- Live strokes + bubble ----
 const aliceLayer = await ed(alice, (e) => e.activeLayer);
+await ed(alice, (e) => e.setColor('#1b1b1f')); // dark ink, so the gap count below can see it
 const pending = stroke(alice, line(400, 300, 700, 420), 700);
 await bob.waitForTimeout(500);
 const liveCount = await ed(bob, (e) => e.view.remoteLive.size);
@@ -158,7 +159,7 @@ check(undoOp.t === 'tiles' && undoOp.keys.some((k) => k.includes('@')), `Alice�
 check((await digest(bob, aliceLayer)) === bobBefore, 'and put Bob’s copy of her layer back exactly');
 
 // ---- Effects bar survives other people's strokes ----
-await bob.locator('[aria-label="Effects"]').click();
+await bob.locator('[aria-label="Menu"]').click(); await bob.locator('.menu-tools [aria-label="Effects"]').click();
 await bob.locator('.effects-pop .menu-item', { hasText: 'Gaussian blur' }).click();
 await bob.waitForSelector('.effect-bar');
 await stroke(alice, line(400, 560, 700, 580));

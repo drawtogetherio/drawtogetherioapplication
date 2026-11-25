@@ -62,6 +62,9 @@ export interface ViewTurn { rot: number; flipX: number; flipY: number }
 /** The last pointer sample as the device reported it (raw pressure, tilt in degrees, lean), for the pen test and tilt brushes. */
 export interface PenState { type: 'pen' | 'mouse' | 'touch'; pressure: number; tiltX: number; tiltY: number; altitude: number; azimuth: number; at: number }
 
+/** A new canvas starts in DoodleHive honey, so it's plain the colour is yours to change. */
+export const DEFAULT_COLOR = '#ef8720';
+
 /** Per-user state around a document: tool, layer, colour, selection, room. */
 export class Editor {
   doc: DrawDoc;
@@ -69,7 +72,7 @@ export class Editor {
   tools = {} as Record<ToolId, Tool>;
   toolId: ToolId = 'brush';
   activeLayer = '';
-  color = '#1b1b1f';
+  color = DEFAULT_COLOR;
   recentColors: string[] = [];
   selection: Selection | null = null;
   /** Edits go to the active layer's mask instead of its pixels. */

@@ -47,8 +47,23 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 
 ## Features
 
+**Tidier drawing screen (beta)**
+- **Top bar**: just the menu, zoom, tools, layers, colour and save badge. Export, Flip horizontally/vertically
+  (lit while on), Center canvas, Effects and Guides are an icon row at the top of the hamburger menu, under the
+  account card and above Share (`menuTools` in `src/ui/app.ts`).
+- **Per-tool stabilizer and pressure**: tapping the active brush, eraser or smudge opens its menu, which now
+  starts with that tool's Stabilizer (brush and eraser) and Pressure Size/Opacity (Strength for smudge)
+  switches. Each tool keeps its own (`prefs.toolOpts`); older accounts' single set seeds brush and eraser.
+  The options bar names the brush instead of carrying a brush drop-down.
+- **Honey to start**: a new canvas starts in DoodleHive honey (`DEFAULT_COLOR` in `src/editor.ts`), so it's
+  plain the colour is yours to change.
+- **Colour drop**: press and hold the colour button (or drag it away), then drop it on the canvas for a bucket
+  fill there in that colour, whatever the tool (`colorDrop`, `FillTool.bucket`).
+- **Hold to pick**: with the brush, eraser, smudge or bucket, pressing and holding still on the canvas drops the
+  dab and turns into the eyedropper until you lift (`toolHold` in `src/view/input.ts`).
+
 **Everyday drawing tools (v0.33)**
-- **Guides** (one top-bar button): symmetry (vertical, horizontal, quadrant, radial) mirrors strokes and
+- **Guides** (in the menu's icon row): symmetry (vertical, horizontal, quadrant, radial) mirrors strokes and
   shapes; a grid with rulers and snapping; a floating reference image panel (`src/ui/guides.ts`,
   `src/ui/reference.ts`).
 - **QuickShape**: hold still at the end of a stroke and it snaps to a line, circle, arc or polyline
@@ -525,6 +540,7 @@ node tests/brushes.mjs http://localhost:4180/app.html   # categories, grain, squ
 node tests/masks.mjs http://localhost:4180/app.html     # clipping masks, layer masks, replay
 node tests/studio.mjs http://localhost:4180/app.html    # studio layout: docking, floating, resizing, colour wheel, back to simple
 node tests/pen.mjs http://localhost:4180/app.html       # a pen down with no pressure waits for the next sample
+node tests/topbar.mjs http://localhost:4180/app.html    # honey start colour, menu icon row and lit flips, per-tool stabilizer/pressure, hold to pick, colour drop
 node tests/tools.mjs http://localhost:4180/app.html     # fill lasso (inside lines or not), magic wand with holes, rope stabilizer, long strokes split
 node tests/undo.mjs http://localhost:4180/app.html      # partial-tile undo, memory meter, history panel, minimap
 node tests/guides.mjs http://localhost:4180/app.html    # symmetry, grid snapping, rulers, reference panel

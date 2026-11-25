@@ -85,7 +85,7 @@ await page.screenshot({ path: `${out}/01-feather.png` });
 await page.keyboard.press('Control+z');
 await page.waitForTimeout(100);
 await page.keyboard.press('b');
-await ed((e) => { e.settings.brush.size = 60; e.settings.brush.smoothing = 0; e.prefs.stabilizerOn = false; e.prefs.quickShape = false; });
+await ed((e) => { e.settings.brush.size = 60; e.settings.brush.smoothing = 0; e.prefs.toolOpts.brush.stabilizerOn = false; e.prefs.quickShape = false; });
 const toScreen = (x, y) => ed((e, p) => { const s = e.view.viewport.toScreen(p[0], p[1]); return [s.x, s.y]; }, [x, y]);
 const a = await toScreen(700, 1000), b = await toScreen(1300, 1000);
 await drag([a, b]);

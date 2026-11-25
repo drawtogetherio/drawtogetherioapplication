@@ -32,7 +32,7 @@ const size = await ed((e) => [e.doc.settings.width, e.doc.settings.height]);
 const log = () => ed((e) => e.doc.log.map((o) => o.t));
 
 // ---- Guides popover ----
-await page.locator('.topbar button[data-tip^="Guides"]').click();
+await page.locator('[aria-label="Menu"]').click(); await page.locator('.menu-tools [aria-label^="Guides"]').click();
 const pop = page.locator('.guides-pop');
 check(await pop.isVisible(), 'the Guides button opens its popover');
 for (const t of ['Symmetry', 'Grid', 'Rulers', 'Reference image…']) check(await pop.getByText(t, { exact: false }).first().isVisible(), `popover shows ${t}`);
@@ -41,7 +41,7 @@ check((await page.locator('.topbar .bar-group:first-child .icon-btn:visible').co
 // ---- Vertical symmetry mirrors a stroke ----
 await pop.locator('.segmented button', { hasText: 'Vertical' }).click();
 await page.keyboard.press('Escape');
-await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 14; e.settings.brush.smoothing = 0; e.prefs.stabilizerOn = false; });
+await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 14; e.settings.brush.smoothing = 0; e.prefs.toolOpts.brush.stabilizerOn = false; });
 const centre = [box.width / 2, box.height / 2];
 await drag([[centre[0] - 300, centre[1] - 100], [centre[0] - 200, centre[1] - 60]]);
 await page.waitForTimeout(150);
@@ -225,7 +225,7 @@ await page.keyboard.press('F');
 await page.keyboard.press('l');
 await page.waitForTimeout(100);
 check((await page.locator('.layers-pop button[data-tip="Layer effects"], .panel button[data-tip="Layer effects"]').count()) === 0, 'layer stack has no Layer effects button');
-check((await page.locator('.topbar button[data-tip^="Effects"]').count()) === 1, 'the Effects button stays in the top bar');
+check((await page.locator('.topbar button[aria-label="Effects"]').count()) === 0, 'the Effects button moved out of the top bar');
 
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);
 await browser.close();

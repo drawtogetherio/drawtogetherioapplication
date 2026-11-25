@@ -7,6 +7,8 @@ interface Touch { x: number; y: number; x0: number; y0: number }
 
 /** A finger held still this long picks a colour (Procreate's touch and hold). */
 const HOLD_MS = 450, HOLD_SLOP = 8;
+/** Tools where pressing and holding still before drawing grabs a colour instead (the bucket, not the fill drags). */
+const holdPicks = (ed: Editor) => ed.toolId === 'brush' || ed.toolId === 'eraser' || ed.toolId === 'smudge' || (ed.toolId === 'fill' && ed.settings.fillMode === 'bucket');
 /** Pinch-rotating this close to a right angle snaps to it. */
 const SNAP_DEG = 3;
 
@@ -33,6 +35,9 @@ export class InputController {
   altPick = false; // Alt held: temporary eyedropper
   /** A finger held still: the eyedropper until it lifts. */
   private hold: { timer: number; id: number; picking: boolean } | null = null;
+  /** A pen, mouse or drawing finger pressed and held still: the stroke is dropped and the eyedropper takes over until it lifts. */
+  private toolHold: { timer: number; id: number; x0: number; y0: number; last: PointerEvent } | null = null;
+  private holdPicking: number | null = null;
   onGesture: (g: 'hideUI') => void = () => {};
   /** A right click or pen barrel button, in client coordinates. */
   onContext: (x: number, y: number) => void = () => {};
@@ -126,6 +131,9 @@ export class InputController {
     this.toolType = e.pointerType as PointerInfo['type'];
     this.activeTool = this.tool;
     this.ed.hover = null;
+    if (holdPicks(this.ed) && this.activeTool !== this.ed.tools.eyedropper && !this.ed.readOnly) {
+      this.toolHold = { id: e.pointerId, x0: e.clientX, y0: e.clientY, last: e, timer: window.setTimeout(() => this.startToolPick(), HOLD_MS) };
+    }
     // A pen that reports no pressure yet (iPad) would start with a dot of the last stroke's size: wait for the next sample.
     if (e.pointerType === 'pen' && e.pressure === 0) { this.pendingDown = e; return; }
     this.activeTool.down(this.info(e));
@@ -144,6 +152,7 @@ export class InputController {
   private abortTool() {
     if (this.toolPointer === null) return;
     if (CANVAS_LOG) clog('abort', { tool: this.ed.toolId });
+    this.endToolHold();
     this.pendingDown = null;
     this.activeTool.cancel();
     this.toolPointer = null;
@@ -166,7 +175,7 @@ export class InputController {
     if (this.toolPointer !== null && this.toolType === 'touch') {
       // Second finger: a gesture. Drop a stroke that just started, keep a long one.
       if (performance.now() - this.toolStart < 300) this.abortTool();
-      else { this.activeTool.up(this.info(e)); this.toolPointer = null; }
+      else { this.endToolHold(); this.activeTool.up(this.info(e)); this.toolPointer = null; }
     }
     if (this.toolPointer === null) this.startGesture();
   }
@@ -192,6 +201,23 @@ export class InputController {
     this.ed.view.requestRender();
   }
 
+  /** Held without moving: drop the dab and pick colours under the pointer instead. */
+  private startToolPick() {
+    const hd = this.toolHold;
+    this.toolHold = null;
+    if (!hd || this.toolPointer !== hd.id) return;
+    this.abortTool();
+    this.holdPicking = hd.id;
+    this.ed.tools.eyedropper.down(this.info(hd.last));
+    this.ed.view.requestRender();
+  }
+
+  private endToolHold() {
+    if (!this.toolHold) return;
+    clearTimeout(this.toolHold.timer);
+    this.toolHold = null;
+  }
+
   private endHold() {
     if (!this.hold) return;
     clearTimeout(this.hold.timer);
@@ -209,6 +235,12 @@ export class InputController {
       this.ed.view.viewport.panBy(e.clientX - this.pan.x, e.clientY - this.pan.y);
       this.pan.x = e.clientX; this.pan.y = e.clientY;
       return;
+    }
+    if (e.pointerId === this.holdPicking) { this.ed.tools.eyedropper.move(this.info(e)); return; }
+    const th = this.toolHold;
+    if (th && th.id === e.pointerId) {
+      th.last = e;
+      if (Math.hypot(e.clientX - th.x0, e.clientY - th.y0) > HOLD_SLOP) this.endToolHold();
     }
     if (e.pointerId === this.toolPointer) {
       // iPad Safari delivers each Apple Pencil move twice. Replaying the copy walks the stroke back over
@@ -316,6 +348,15 @@ export class InputController {
     if (CANVAS_LOG) clog(e.type === 'pointercancel' ? 'cancel' : 'up', { ...pointerData(e), tool: e.pointerId === this.toolPointer, touches: this.touches.size });
     if (this.viewDrag && e.pointerId === this.viewDrag.id) { this.viewDrag = null; return; }
     if (this.pan && e.pointerId === this.pan.id) { this.pan = null; return; }
+    if (this.toolHold?.id === e.pointerId) this.endToolHold();
+    if (e.pointerId === this.holdPicking) {
+      this.holdPicking = null;
+      this.ed.tools.eyedropper.up(this.info(e));
+      this.ed.view.requestRender();
+      this.touches.delete(e.pointerId);
+      if (this.touches.size === 0) { this.tap = null; this.gesture = null; }
+      return;
+    }
     if (e.pointerId === this.toolPointer) {
       this.toolPointer = null;
       this.started(e);

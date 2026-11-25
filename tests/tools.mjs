@@ -31,7 +31,7 @@ const drag = async (pts) => { await m.move(...at(...pts[0])); await m.down(); fo
 const circle = (cx, cy, r, n = 48) => Array.from({ length: n + 1 }, (_, i) => [cx + Math.cos((i / n) * Math.PI * 2) * r, cy + Math.sin((i / n) * Math.PI * 2) * r]);
 
 // A black ring: the "line art".
-await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 12; e.settings.brush.smoothing = 0; e.prefs.stabilizerOn = false; });
+await ed((e) => { e.setColor('#000000'); e.settings.brush.size = 12; e.settings.brush.smoothing = 0; e.prefs.toolOpts.brush.stabilizerOn = false; });
 await drag(circle(500, 400, 120));
 await page.waitForTimeout(100);
 check((await pixel(620, 400))[3] > 200, 'ring drawn');
@@ -88,7 +88,7 @@ check(hole[1] < 100 && ok[1] > 200, `the hole is protected, the rest paints (${h
 await ed((e) => { e.selection = null; e.emit('selection'); });
 
 // ---- Stabilizer ----
-await ed((e) => { e.prefs.stabilizerOn = true; e.prefs.stabilizer = 1; e.settings.brush.size = 6; e.setColor('#000000'); });
+await ed((e) => { e.prefs.toolOpts.brush.stabilizerOn = true; e.prefs.toolOpts.brush.stabilizer = 1; e.settings.brush.size = 6; e.setColor('#000000'); });
 await m.move(...at(200, 500)); await m.down();
 await m.move(...at(400, 500), { steps: 4 });
 const tether = await ed((e) => e.tools.brush.tether && { ...e.tools.brush.tether, pts: e.tools.brush['pts'].length });
@@ -98,7 +98,7 @@ await m.up();
 await page.waitForTimeout(200);
 const end = await ed((e) => { const op = e.doc.log.at(-1); return [op.t, op.pts.at(-3), e.tools.brush.tether]; });
 check(end[0] === 'stroke' && Math.abs(end[1] - tether.bx) < 2 && !end[2], `lifting ends the line where the brush was (${Math.round(end[1])} vs ${Math.round(tether.bx)})`);
-await ed((e) => { e.prefs.stabilizerOn = false; });
+await ed((e) => { e.prefs.toolOpts.brush.stabilizerOn = false; });
 
 // ---- Very long strokes split instead of failing ----
 const before = await ed((e) => e.doc.log.filter((o) => o.t === 'stroke').length);

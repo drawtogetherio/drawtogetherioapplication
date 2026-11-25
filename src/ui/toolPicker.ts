@@ -13,6 +13,7 @@ import type { Editor, FillMode, SelectMode, ToolId } from '../editor';
 import { ctx2d, makeCanvas, uid } from '../core/geom';
 import { clear, dismissOnOutside, h } from './dom';
 import { icon } from './icons';
+import { Slider } from './slider';
 
 export const SELECT_MODES: [SelectMode, string, string][] = [['rect', 'Rectangle', 'selRect'], ['lasso', 'Lasso', 'selLasso'], ['ellipse', 'Ellipse', 'selEllipse'], ['wand', 'Magic wand', 'wand'], ['range', 'Colour range', 'colorRange']];
 export const FILL_MODES: [FillMode, string, string][] = [['bucket', 'Bucket', 'fill'], ['lasso', 'Fill lasso', 'lassoFill'], ['gradient', 'Gradient', 'gradient']];
@@ -85,9 +86,9 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
   const pick = (pr: BrushPreset) => {
     const params = { ...pr.params };
     void ensureAssets(brushAssets(params));
-    if (tool !== 'smudge') applyPressure(ed.prefs, params);
+    if (tool !== 'smudge') applyPressure(ed.prefs.toolOpts[tool], params);
     if (tool === 'eraser') { st.eraserPreset = pr.id; st.eraser = params; }
-    else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); }
+    else if (tool === 'smudge') { st.smudgePreset = pr.id; st.smudge = smudgeParams(params); applyPressure(ed.prefs.toolOpts.smudge, st.smudge, 0.5); }
     else { st.brushPreset = pr.id; st.brush = params; }
     ed.setTool(tool);
     ed.emit('brush');
@@ -178,8 +179,35 @@ export function brushLibrary(app: App, tool: BrushTool, onPick: () => void): HTM
   };
   render();
   const title = tool === 'eraser' ? 'Eraser' : tool === 'smudge' ? 'Smudge' : 'Brush';
-  const el = h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library'), head), tabs, list, menu, file);
+  const el = h('div.panel.brush-library', {}, h('div.panel-head', {}, h('span.panel-title', {}, title + ' Library'), head), toolOptions(app, tool), tabs, list, menu, file);
   dismissOnOutside(menu, [], () => { menu.hidden = true; });
+  return el;
+}
+
+/** The stabilizer and pressure switches for one drawing tool, saved for that tool alone. */
+export function toolOptions(app: App, tool: BrushTool): HTMLElement {
+  const ed = app.ed, o = ed.prefs.toolOpts[tool];
+  const el = h('div.tool-opts', { role: 'group', 'aria-label': `${tool === 'eraser' ? 'Eraser' : tool === 'smudge' ? 'Smudge' : 'Brush'} options` });
+  const saved = () => { app.applyToolOpts(tool); ed.emit('prefs'); };
+  const check = (name: string, value: boolean, set: (v: boolean) => void) => {
+    const cb = h('input', { type: 'checkbox' });
+    cb.checked = value;
+    cb.addEventListener('change', () => { set(cb.checked); saved(); render(); });
+    return h('label.check', {}, cb, name);
+  };
+  const render = () => {
+    const rows: (HTMLElement | null)[] = [];
+    if (tool !== 'smudge') {
+      const amount = new Slider({ min: 0, max: 1, value: o.stabilizer, label: 'Amount', format: (v) => Math.round(v * 100) + '%', onInput: (v) => { o.stabilizer = v; ed.emit('prefs'); } });
+      amount.el.classList.add('compact');
+      rows.push(h('div.tool-opts-row', {}, check('Stabilizer', o.stabilizerOn, (v) => { o.stabilizerOn = v; }), o.stabilizerOn ? amount.el : null));
+    }
+    rows.push(h('div.tool-opts-row', {}, h('span.opt-label', {}, 'Pressure:'),
+      check('Size', o.pressureSize, (v) => { o.pressureSize = v; }),
+      check(tool === 'smudge' ? 'Strength' : 'Opacity', o.pressureOpacity, (v) => { o.pressureOpacity = v; })));
+    el.replaceChildren(...rows.filter((r): r is HTMLElement => !!r));
+  };
+  render();
   return el;
 }
 
