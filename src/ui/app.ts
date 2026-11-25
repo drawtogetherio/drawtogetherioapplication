@@ -600,10 +600,13 @@ export class App {
       // Beside the vertical toolbar instead of under it.
       this.toolPop.style.top = `${Math.round(Math.max(8, Math.min(window.innerHeight - hh - 8, r.top)))}px`;
       this.toolPop.style.left = `${Math.round(Math.min(window.innerWidth - w - 8, r.right + 6))}px`;
+      this.toolPop.style.transformOrigin = `left ${Math.round(r.top + r.height / 2 - parseFloat(this.toolPop.style.top))}px`;
       return;
     }
     this.toolPop.style.top = `${Math.round(r.bottom + 6)}px`;
     this.toolPop.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2)))}px`;
+    // Grow out of the button that opened it.
+    this.toolPop.style.transformOrigin = `${Math.round(r.left + r.width / 2 - parseFloat(this.toolPop.style.left))}px top`;
   }
 
   private modeButton([, label, ic]: [string, string, string]) {
