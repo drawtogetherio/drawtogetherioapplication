@@ -67,7 +67,7 @@ await page.waitForSelector('.brush-edit', { state: 'detached' });
 const mine = await ed((e) => e.prefs.customBrushes[0]);
 check(mine?.name === 'Soft Ink' && mine.cat === 'Pen' && Math.abs(mine.params.hardness - 0.3) < 0.05 && (await page.locator('.brush-row .brush-name').allTextContents()).includes('Soft Ink'), 'saving adds it to the Pen tab and prefs');
 await page.locator('.brush-row', { hasText: 'Soft Ink' }).locator('.brush-pick').click();
-check(await ed((e) => e.settings.brushPreset === e.prefs.customBrushes[0].id && e.settings.brush.hardness < 0.35) && (await page.locator('.optionsbar .opt-brush').textContent()).includes('Soft Ink'), 'picking it uses its settings');
+check(await ed((e) => e.settings.brushPreset === e.prefs.customBrushes[0].id && e.settings.brush.hardness < 0.35) && await page.locator('.optionsbar').isHidden(), 'picking it uses its settings; the brush has no options bar');
 await brushBtn.click();
 await page.locator('[aria-label="New category"]').click();
 await page.fill('#text-dialog-input', 'Inks');
@@ -95,7 +95,7 @@ await page.locator('.brush-tab', { hasText: 'Pencil' }).click();
 check((await page.locator('.brush-row .brush-name').allTextContents()).join() === 'Graphite Pencil,HB Pencil,Crayon,Charcoal', 'Pencil tab lists the pencils');
 await page.screenshot({ path: `${out}/01-pencil-tab.png` });
 await page.locator('.brush-row', { hasText: 'Crayon' }).click();
-check(await ed((e) => e.settings.brushPreset) === 'crayon' && (await page.locator('.optionsbar .opt-brush', { hasText: 'Crayon' }).count()) === 1, 'Crayon picked; the simple bar names it (no Grain slider)');
+check(await ed((e) => e.settings.brushPreset) === 'crayon' && await page.locator('.optionsbar').isHidden(), 'Crayon picked; the simple layout shows no brush bar');
 
 // ---- Grain breaks a stroke up; the plain brush is solid ----
 await ed((e) => { e.settings.brush.size = 30; });

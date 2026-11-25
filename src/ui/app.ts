@@ -661,17 +661,16 @@ export class App {
       const tool = ed.toolId, smudge = tool === 'smudge';
       const params = tool === 'eraser' ? st.eraser : smudge ? st.smudge : st.brush;
       const name = ed.preset(currentPreset(ed, tool)).name;
-      // Brushes, stabilizer and pressure live in the tool's own menu (tap the tool again); the bar just names the brush.
-      o.append(h('span.opt-brush', {}, name));
-      // The simple layout keeps the bar short; the studio brush panel has room for everything.
+      // Brushes, stabilizer and pressure live in the tool's own menu (tap the tool again). The simple layout shows
+      // no options for these tools; the studio brush panel has room for everything.
       if (this.studioOn) o.append(
+        h('span.opt-brush', {}, name),
         range(smudge ? 'Strength' : 'Flow', params.flow, 0.02, 1, (v) => { params.flow = v; }),
         range('Hardness', params.hardness, 0, 1, (v) => { params.hardness = v; }),
         range('Grain', params.grain ?? 0, 0, 1, (v) => { params.grain = v; }),
         range('Smoothing', params.smoothing, 0, 1, (v) => { params.smoothing = v; }),
         toolOptions(this, tool),
       );
-      else o.append(h('span.hint', {}, `Tap ${TOOLS.find((t) => t.id === tool)!.label.toLowerCase()} again for brushes, stabilizer and pressure`));
     } else if (ed.toolId === 'fill' && st.fillMode === 'gradient') {
       const endColor = h('input.swatch-input', { type: 'color', title: 'End colour' });
       endColor.value = st.gradientEnd ?? ed.color;
@@ -728,9 +727,11 @@ export class App {
         h('button.btn.small', { onclick: () => this.shape.commit() }, 'Done'),
       );
       else o.append(h('span.hint', {}, 'Shift constrains, Alt from centre'));
-    } else if (ed.toolId === 'eyedropper') {
+    } else if (ed.toolId === 'eyedropper' && this.studioOn) {
       o.append(h('span.hint', {}, 'Tap to pick. Alt + brush also works'));
     }
+    // In the simple layout the options float under the tool buttons, and only when the tool has some.
+    o.hidden = !this.studioOn && o.childElementCount <= 1;
   }
 
   private menu(): HTMLElement {

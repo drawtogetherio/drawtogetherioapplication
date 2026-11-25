@@ -66,7 +66,7 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
     };
     render();
     return [row('Layout', segmented(['classic', 'studio'] as const, (v) => (v === 'classic' ? 'Simple' : 'Studio'), () => p.layout, (v) => { p.layout = v; render(); })), panels,
-      toggle('Show the canvas overview (minimap)', () => p.minimap, (v) => { p.minimap = v; }),
+      toggle('Show the canvas overview (minimap)', () => p.overview, (v) => { p.overview = v; }),
       toggle('Left-handed: tools on the left, sliders on the right', () => p.leftHanded, (v) => { p.leftHanded = v; })];
   };
 
