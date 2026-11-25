@@ -89,7 +89,8 @@ export interface Prefs {
   remoteEvery: number;
   /** A desynchronized stage canvas: the line lands a frame sooner; off if a device shows tearing. */
   lowLatency: boolean;
-  minimap: boolean;
+  /** The canvas overview (minimap) panel. Off until turned on; it replaced `minimap`, which was on for everyone. */
+  overview: boolean;
   pressureGamma: number;
   /** Advanced pressure: a curve through points instead of the exponent. */
   pressureMode: 'simple' | 'advanced';
@@ -122,7 +123,7 @@ export interface Prefs {
 export const REMOTE_EVERY: number[] = [0, 2, 5, 10];
 
 export const DEFAULT_PREFS: Prefs = {
-  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, minimap: true, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
+  keys: {}, mode: 'dark', hoverPreview: true, showBubbles: true, chime: true, showLive: true, remoteEvery: 0, lowLatency: true, overview: false, pressureGamma: 1, pressureMode: 'simple', pressureCurve: DEFAULT_CURVE,
   fingerDraws: true, toolOpts: DEFAULT_TOOL_OPTS, quickShape: true, supportBanner: true, favoriteBrushes: [], customBrushes: [], brushCategories: [], palettes: [], palette: '', layout: 'classic', leftHanded: false, quickMenu: DEFAULT_QUICK_MENU, panels: DEFAULT_PANELS,
 };
 
@@ -180,7 +181,7 @@ export function cleanPrefs(raw: unknown): Prefs {
     showLive: r.showLive !== false,
     remoteEvery: REMOTE_EVERY.includes(r.remoteEvery as number) ? r.remoteEvery as number : 0,
     lowLatency: r.lowLatency !== false,
-    minimap: r.minimap !== false,
+    overview: r.overview === true,
     pressureGamma: gamma >= 0.4 && gamma <= 2.5 ? gamma : DEFAULT_PREFS.pressureGamma,
     pressureMode: r.pressureMode === 'advanced' ? 'advanced' : 'simple',
     pressureCurve: validCurve(r.pressureCurve) ? [...r.pressureCurve] : [...DEFAULT_CURVE],

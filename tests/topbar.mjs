@@ -36,6 +36,17 @@ for (const label of ['Export (Ctrl+Shift+E)', 'Effects']) check(await page.locat
 check(await page.locator('.topbar [aria-label^="Flip"], .topbar [aria-label^="Guides"], .topbar .icon-btn[aria-label^="Fit"]').count() === 0, 'no flip, guides or fit buttons in the top bar');
 check(await page.locator('.optionsbar .preset-btn').count() === 0 && await page.locator('.optionsbar input[type=checkbox]').count() === 0, 'the options bar has no brush dropdown or pressure checkboxes');
 
+// ---- Options float at the right, only for tools that have some ----
+check(await page.locator('.optionsbar').isHidden(), 'the brush has no options bar');
+await page.keyboard.press('g');
+const ob = await page.locator('.optionsbar').boundingBox(), fillBtn = await page.locator('.topbar .tool[aria-label^="Fill"]').boundingBox();
+check(ob && ob.x + ob.width > 1200 && ob.y >= fillBtn.y + fillBtn.height, `fill settings sit at the right under the tool buttons (${ob && Math.round(ob.x)}..${ob && Math.round(ob.x + ob.width)})`);
+await page.screenshot({ path: `${out}/00-fill-options.png` });
+await page.keyboard.press('i');
+check(await page.locator('.optionsbar').isHidden(), 'the eyedropper has no options bar');
+await page.keyboard.press('b');
+check(await page.locator('.ref-panel').isHidden(), 'the canvas overview starts closed');
+
 // ---- Menu icon row ----
 await page.locator('[aria-label="Menu"]').click();
 const row = page.locator('.menu-pop .menu-tools');

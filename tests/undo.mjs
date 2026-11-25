@@ -114,6 +114,8 @@ await page.keyboard.press('Escape');
 
 // Overview panel: the canvas map shows, a click past the frame recentres the view, the preference and the X hide it.
 const panel = page.locator('.ref-panel');
+check(await panel.isHidden(), 'the overview panel starts closed');
+await ed((e) => { e.prefs.overview = true; window.doodlehive.applyPrefs(); });
 check(await panel.isVisible() && (await page.locator('.ref-tab.active').textContent()) === 'Canvas' && await page.locator('.minimap:not(.empty)').isVisible(), 'the overview panel opens on the canvas map');
 await ed((e) => e.view.viewport.zoomAt(400, 400, 4));
 await page.waitForTimeout(50);
@@ -123,9 +125,9 @@ const c0 = await ed((e) => [e.view.viewport.cx, e.view.viewport.cy]);
 await page.mouse.click(mm.x + mm.width - 6, mm.y + mm.height - 6);
 const c1 = await ed((e) => [e.view.viewport.cx, e.view.viewport.cy]);
 check(c1[0] > c0[0] && c1[1] > c0[1], `clicking the map's corner recentres the view (${c0.map(Math.round)} → ${c1.map(Math.round)})`);
-await ed((e) => { e.prefs.minimap = false; window.doodlehive.applyPrefs(); });
+await ed((e) => { e.prefs.overview = false; window.doodlehive.applyPrefs(); });
 check(await panel.isHidden(), 'the preference hides it');
-await ed((e) => { e.prefs.minimap = true; window.doodlehive.applyPrefs(); });
+await ed((e) => { e.prefs.overview = true; window.doodlehive.applyPrefs(); });
 check(await panel.isVisible(), 'and brings it back');
 // It moves by its bar and remembers the spot.
 const mh = await page.locator('.ref-head .grow').boundingBox(), m0 = await panel.boundingBox();
@@ -137,8 +139,8 @@ const c2 = await ed((e) => [e.view.viewport.cx, e.view.viewport.cy]);
 check(c2[0] === c1[0] && c2[1] === c1[1], 'moving the panel did not pan the view');
 await page.evaluate(() => localStorage.removeItem('doodlehive.refBox'));
 await page.locator('.ref-head [aria-label="Close"]').click();
-check(await panel.isHidden() && !(await ed((e) => e.prefs.minimap)), 'the X on the canvas tab hides it through the preference');
-await ed((e) => { e.prefs.minimap = true; window.doodlehive.applyPrefs(); });
+check(await panel.isHidden() && !(await ed((e) => e.prefs.overview)), 'the X on the canvas tab hides it through the preference');
+await ed((e) => { e.prefs.overview = true; window.doodlehive.applyPrefs(); });
 
 await page.screenshot({ path: `${out}/01-undo.png` });
 check(errors.length === 0, `no page errors (${errors.join('; ')})`);

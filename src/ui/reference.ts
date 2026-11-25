@@ -103,12 +103,12 @@ export class ReferencePanel {
   /** The X: on the canvas tab it also turns the overview preference off, so it stays away. */
   close() {
     this.el.hidden = true;
-    if (this.mode === 'canvas' && this.ed.prefs.minimap) { this.ed.prefs.minimap = false; this.ed.emit('prefs'); }
+    if (this.mode === 'canvas' && this.ed.prefs.overview) { this.ed.prefs.overview = false; this.ed.emit('prefs'); }
   }
 
   /** Follows the overview preference: on shows the canvas tab, off hides it. */
   syncPref() {
-    const on = this.ed.prefs.minimap;
+    const on = this.ed.prefs.overview;
     if (on && this.el.hidden && !this.img) this.show('canvas');
     else if (!on && !this.el.hidden && this.mode === 'canvas') this.el.hidden = true;
   }

@@ -141,6 +141,8 @@ await page.keyboard.press('Control+d');
 // ---- Reference panel ----
 await ed((e) => { e.settings.guides.grid.mode = 'off'; e.settings.guides.grid.rulers = false; e.view.invalidate(null); });
 const ref = page.locator('.ref-panel');
+check(await ref.isHidden(), 'the overview panel starts closed');
+await ed((e) => { e.prefs.overview = true; window.doodlehive.applyPrefs(); });
 check(await ref.isVisible() && (await page.locator('.ref-tab.active').textContent()) === 'Canvas', 'the overview panel starts on the canvas map');
 // Offline canvases have no id of their own; give the panel one so the image can be kept.
 await page.evaluate(() => window.doodlehive.reference.bind('test-canvas'));
