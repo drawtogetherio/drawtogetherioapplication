@@ -20,8 +20,13 @@ import { deleteLapse, roomLapseKey } from '../io/lapse';
 import { frameBar } from './frame';
 import { SAVE_BADGE } from './app';
 import { LAST_KEY, LastOpen } from './session';
+import { cloudOff, loadStorage, offload, storageLevel, storageNow, storageWarningText } from './storage';
+import { formatBytes } from '../shared/storage';
+import type { StorageInfo } from '../shared/storage';
 
 const BANNER_KEY = 'doodlehive.support';
+/** The storage warning level closed this browser session. */
+const STORAGE_WARN_KEY = 'doodlehive.storagewarn';
 const RESUME_MS = 7 * 24 * 3600_000;
 const FRIENDS_POLL_MS = 60_000;
 
@@ -78,6 +83,7 @@ export class Home {
   private notices: Notice[] = [];
   private banner = h('div.support-banner', { hidden: true });
   private notice = h('div.site-notice', { hidden: true, role: 'status' });
+  private storageWarn = h('div.storage-warn', { hidden: true, role: 'status' });
   private thumbUrls: string[] = [];
 
   constructor(private app: App) {
@@ -105,7 +111,7 @@ export class Home {
     // header is the window's top strip, so the banner goes under it, clear of the resize border. A
     // home-screen app on iPad draws under the status bar, so it goes under there too or iOS blurs it.
     const under = !!native?.frameless || matchMedia('(display-mode: standalone)').matches;
-    if (!under) this.el.append(this.notice, this.banner);
+    if (!under) this.el.append(this.notice, this.storageWarn, this.banner);
     const s = () => this.app.session;
     const startBtn = (ic: string, text: string, fn: () => void) => h('button.start-btn', { type: 'button', html: icon(ic, 22) + `<span>${text}</span>`, onclick: fn });
     this.start.append(
@@ -117,7 +123,7 @@ export class Home {
     const plus = h('button.icon-btn.create-tile', { type: 'button', title: 'New canvas', 'aria-label': 'New canvas', html: icon('plus', 22), onclick: () => s().createNew() });
     this.el.append(h('div.home-main', {},
       frameBar(h('header.home-top', {}, h('div.home-brand', { html: brandHtml('/') }), h('span.grow'), plus)),
-      under ? this.notice : null, under ? this.banner : null,
+      under ? this.notice : null, under ? this.storageWarn : null, under ? this.banner : null,
       h('div.home-body', {},
         this.friendsPanel = h('aside.friends-panel', { 'aria-label': 'Friends' },
           this.meCard,
@@ -181,6 +187,7 @@ export class Home {
     this.loadProjects();
     this.loadVisits();
     this.loadFriends();
+    loadStorage().then((st) => this.renderStorageWarn(st));
     this.loadNotices();
     clearInterval(this.timer);
     this.timer = window.setInterval(() => { if (!document.hidden) this.loadFriends(); }, FRIENDS_POLL_MS);
@@ -206,6 +213,25 @@ export class Home {
       h('span.grow', {}, h('b', {}, name || 'Untitled'), h('small', {}, ` · open ${timeAgo(at)}`)),
       h('button.btn.small.primary', { type: 'button', onclick: () => { r.hidden = true; if (canvas) s.openLocal(canvas); else if (room) s.joinRoom(room); } }, 'Keep drawing'),
       h('button.icon-btn', { type: 'button', title: 'Dismiss', 'aria-label': 'Dismiss', html: icon('x', 16), onclick: forget }),
+    );
+  }
+
+  /** Free accounts nearing or at their cloud cap; closing it hides that level for this browser session. */
+  private renderStorageWarn(st: StorageInfo | null) {
+    const lvl = storageLevel(st), w = this.storageWarn;
+    let closed: string | null = null;
+    try { closed = sessionStorage.getItem(STORAGE_WARN_KEY); } catch { /* storage blocked */ }
+    w.hidden = !lvl || closed === lvl || !!this.app.ed.me?.guest;
+    if (w.hidden) return;
+    w.className = `storage-warn ${lvl}`;
+    w.replaceChildren(
+      h('span', { html: icon('cloud', 18) }),
+      h('span.grow', {}, storageWarningText(st!)),
+      h('button.btn.small', { type: 'button', onclick: () => preferencesDialog(this.app, 'Storage') }, 'Manage storage'),
+      h('button.icon-btn', { type: 'button', title: 'Close', 'aria-label': 'Close', html: icon('x', 16), onclick: () => {
+        w.hidden = true;
+        try { sessionStorage.setItem(STORAGE_WARN_KEY, lvl!); } catch { /* storage blocked */ }
+      } }),
     );
   }
 
@@ -586,11 +612,12 @@ export class Home {
     const thumb = this.thumb(p.thumb, p.online, 'brush');
     const more = h('button.icon-btn.tile-more', { type: 'button', title: 'More', 'aria-label': `More options for ${p.name}`, html: icon('more', 18) });
     const s = this.app.session, premium = !!this.app.ed.me?.premium;
-    // Free accounts keep canvases on this device; premium ones on the server. A tile on the other side moves when opened.
-    const open = () => p.local ? (premium ? s.moveLocalToServer(p.id) : s.openLocal(p.id)) : s.joinRoom(p.id, null, { takeLocal: !premium });
-    const where = p.local ? (p.private ? 'On this device' : VIS_LABEL[p.visibility]) : premium ? VIS_LABEL[p.visibility] : 'On the server';
+    // Cloud canvases open where they are. Premium has no cap, so a device canvas moves to the account when
+    // opened; a free account's stays here until it is moved (Properties → Move to the cloud).
+    const open = () => p.local ? (premium ? s.moveLocalToServer(p.id) : s.openLocal(p.id)) : s.joinRoom(p.id);
+    const where = p.local ? (p.private ? 'On this device' : VIS_LABEL[p.visibility]) : VIS_LABEL[p.visibility];
     const tile = h('div.project-tile', {},
-      h('button.tile-open', { type: 'button', 'aria-label': `Open ${p.name}`, title: !!p.local !== premium ? '' : premium ? 'Moves to your account when opened' : 'Moves to this device when opened', onclick: open },
+      h('button.tile-open', { type: 'button', 'aria-label': `Open ${p.name}`, title: p.local && premium ? 'Moves to your account when opened' : '', onclick: open },
         thumb,
         h('span.tile-name', {}, p.name),
         h('span.tile-meta', {}, h('span', { html: icon(p.local && p.private ? 'file' : VIS_ICON[p.visibility], 13) }), `${where} · ${timeAgo(p.updatedAt)}`, saveMark(p)),
@@ -660,7 +687,7 @@ export class Home {
 
   /** Where the canvas lives, with what fits that: who was invited, show the file, save a copy, or bring it off the server. */
   private async properties(p: ProjectInfo) {
-    const s = this.app.session;
+    const s = this.app.session, premium = !!this.app.ed.me?.premium;
     const row = (label: string, ...value: (Node | string | null)[]) => h('div.prop-row', {}, h('span.prop-label', {}, label), h('span.prop-value', {}, ...value));
     const size = (st: { infinite: boolean; width: number; height: number } | undefined) => st ? (st.infinite ? 'Unlimited' : `${st.width} × ${st.height}`) : '';
     const body = h('div.modal-body.props'), actions: HTMLElement[] = [];
@@ -674,20 +701,33 @@ export class Home {
             reveal ? h('button.icon-btn', { type: 'button', title: 'Show in folder', 'aria-label': 'Show in folder', html: icon('folder', 18), onclick: () => reveal(p.id) }) : null),
           row('People', 'Just you'));
         if (!isNativeApp) actions.push(h('button.btn', { type: 'button', html: icon('download', 16) + '<span>Save as file</span>', onclick: () => { close(); s.exportLocal(p.id); } }));
+        if (p.private && (premium || !cloudOff(storageNow()))) actions.push(h('button.btn', { type: 'button', html: icon('cloud', 16) + '<span>Move to the cloud</span>', onclick: () => { close(); s.moveLocalToServer(p.id); } }));
       } else {
-        const info = await api.room(p.id), invited = info.invited ?? [], visitors = info.visitors ?? [];
+        const [info, st] = await Promise.all([api.room(p.id), loadStorage()]);
+        const bytes = st?.canvases.find((c) => c.id === p.id)?.bytes ?? null, invited = info.invited ?? [], visitors = info.visitors ?? [];
         const sh = info.share, who = sh.visibility === 'private' ? 'Only you and people you invite' : sh.visibility === 'friends' ? 'Your friends' : sh.visibility === 'unlisted' ? 'Anyone with the link (hidden from lists)'
           : `Anyone with the link${sh.requireLogin ? ' who is logged in' : ''}${sh.approveJoins ? ', once you let them in' : ''}`;
         const people = (list: PublicProfile[]) => list.length ? h('span.avatar-row', {}, ...list.map((u) => { const a = avatarEl(u, 28); a.dataset.tip = u.displayName; return a; })) : h('span.muted', {}, 'No one yet');
         body.append(row('Size', size(info.settings)),
-          row('Stored', h('span', { html: icon('cloud', 16) }), 'Safe on the server'),
+          row('Stored', h('span', { html: icon('cloud', 16) }), 'In your cloud storage', bytes != null ? h('span.muted', {}, ` · ${formatBytes(bytes)}`) : null),
           row('Who can join', who),
           row('Invited', people(invited)),
           row('Opened by', people(visitors)));
-        actions.push(h('button.btn', { type: 'button', html: icon('device', 16) + '<span>Move to this device</span>', onclick: async () => {
+        const move = async (to: 'device' | 'file') => {
           close();
-          if (await confirmDialog('Move to this device?', 'It leaves the server when you close it. A copy stays on this device.', 'Move')) s.joinRoom(p.id, null, { takeLocal: true });
-        } }));
+          const c = { id: p.id, name: p.name, bytes: bytes ?? 0, updatedAt: p.updatedAt, visibility: p.visibility, thumb: p.thumb };
+          const shared = p.visibility !== 'private' ? ' People you shared it with won’t be able to open it.' : '';
+          if (to === 'device' && !(await confirmDialog('Move to this device?', `It leaves your cloud storage and is kept here instead.${shared}`, 'Move'))) return;
+          try {
+            await offload(this.app, c, to);
+            if (to === 'device') { this.app.toast(`${p.name} is on this device now`); this.loadProjects(); return; }
+            if (await confirmDialog('File saved?', `Once ${p.name}.hivecanvas has downloaded, you can remove the canvas from your cloud storage.${shared}`, 'Remove from cloud')) {
+              await api.deleteRoom(p.id); deleteLapse(roomLapseKey(p.id)).catch(() => {}); this.loadProjects();
+            }
+          } catch (e) { this.app.toast((e as Error).message || 'That canvas couldn’t be moved.'); }
+        };
+        actions.push(h('button.btn', { type: 'button', html: icon('download', 16) + '<span>Save as file</span>', onclick: () => move('file') }));
+        actions.push(h('button.btn', { type: 'button', html: icon('device', 16) + '<span>Move to this device</span>', onclick: () => move('device') }));
       }
     } catch (e) { this.app.toast((e as Error).message); return; }
     close = modal(p.name, body, actions);

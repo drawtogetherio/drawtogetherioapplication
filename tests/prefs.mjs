@@ -49,7 +49,7 @@ check(await banner.isHidden(), 'it stays closed after a reload');
 // ---- Groups ----
 await openPrefs();
 const groups = await page.locator('.pref-group').evaluateAll((els) => els.map((e) => e.textContent));
-check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Performance,Shortcuts,Gestures,About', 'groups down the left: appearance, layout, canvas, pressure, performance, shortcuts, gestures, about');
+check(groups.join() === 'Appearance,Layout,Canvas,Pressure,Performance,Storage,Shortcuts,Gestures,About', 'groups down the left: appearance, layout, canvas, pressure, performance, storage, shortcuts, gestures, about');
 check((await page.locator('.pref-page h3').textContent()) === 'Appearance', 'opens on appearance');
 
 // ---- Performance ----

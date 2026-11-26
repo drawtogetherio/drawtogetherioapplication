@@ -12,9 +12,10 @@ import { describe } from './memory';
 import { penTestPad } from './penTest';
 import { api } from '../net/api';
 import { renderMarkdown } from './markdown';
+import { storagePage } from './storage';
 
 const MODE_LABELS: Record<Mode, string> = { dark: 'Dark', light: 'Light', system: 'System' };
-const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Shortcuts', 'Gestures', 'About'] as const;
+const GROUPS = ['Appearance', 'Layout', 'Canvas', 'Pressure', 'Performance', 'Storage', 'Shortcuts', 'Gestures', 'About'] as const;
 
 /** Every touch and pen gesture the canvas understands, for the Gestures page. */
 const GESTURES: [string, string][] = [
@@ -174,14 +175,18 @@ export function preferencesDialog(app: App, open: (typeof GROUPS)[number] = 'App
 
   const gestures = () => GESTURES.map(([g, what]) => h('div.pref-row.gesture', {}, h('strong', {}, g), h('span', {}, what)));
 
-  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Performance: performance, Shortcuts: shortcuts, Gestures: gestures, About: about };
+  const storage = () => storagePage(app);
+  const pages = { Appearance: appearance, Layout: layout, Canvas: canvas, Pressure: pressure, Performance: performance, Storage: storage, Shortcuts: shortcuts, Gestures: gestures, About: about };
   const page = h('div.pref-page');
   const nav = h('nav.pref-nav', { 'aria-label': 'Preference groups' });
   const show = (g: (typeof GROUPS)[number]) => {
     for (const b of nav.children) b.classList.toggle('active', (b as HTMLElement).dataset.group === g);
     page.replaceChildren(h('h3', {}, g), ...pages[g]());
   };
-  for (const g of GROUPS) nav.append(h('button.pref-group', { type: 'button', 'data-group': g, onclick: () => show(g) }, g));
+  // Cloud storage belongs to an account; offline and guests have none.
+  const groups = GROUPS.filter((g) => g !== 'Storage' || (ed.me && !ed.me.guest));
+  if (!groups.includes(open)) open = 'Appearance';
+  for (const g of groups) nav.append(h('button.pref-group', { type: 'button', 'data-group': g, onclick: () => show(g) }, g));
   show(open);
   modal('Preferences', h('div.modal-body.prefs', {}, nav, page), []);
 }

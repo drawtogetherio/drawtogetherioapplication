@@ -8,6 +8,7 @@ import { brushAssets } from '../src/shared/brushAssets.ts';
 import { bump } from './stats.ts';
 import type { DocSettings, Op } from '../src/core/model.ts';
 import type { PublicProfile } from '../src/shared/profile.ts';
+import type { CloudCanvas } from '../src/shared/storage.ts';
 import {
   CHAT_MAX, ChatMsg, ClientMsg, DEFAULT_SHARE, LogEntry, Member, PRIVATE_ROOM_MSG, ProjectInfo, Role, RoomInfo, ServerMsg, ShareSettings, VisitInfo, Visibility, userFolderId,
 } from '../src/shared/protocol.ts';
@@ -38,6 +39,7 @@ const raw = (ws: WebSocket, m: ServerMsg) => { if (ws.readyState === 1) ws.send(
 const OP_FLUSH_MS = 100;
 const insertOp = db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)');
 const updatedAt = db.prepare('UPDATE rooms SET updated_at = ? WHERE id = ?');
+const addBytes = db.prepare('UPDATE rooms SET bytes = coalesce(bytes, 0) + ? WHERE id = ?');
 let opQueue: [string, number, string][] = [];
 let opTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -53,9 +55,11 @@ export function flushOps() {
   if (!opQueue.length) return;
   const batch = opQueue;
   opQueue = [];
+  const grew = new Map<string, number>();
   db.exec('BEGIN');
   try {
-    for (const [room, seq, json] of batch) insertOp.run(room, seq, json);
+    for (const [room, seq, json] of batch) { insertOp.run(room, seq, json); grew.set(room, (grew.get(room) ?? 0) + Buffer.byteLength(json)); }
+    for (const [room, n] of grew) addBytes.run(n, room);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
@@ -129,8 +133,10 @@ export class Room {
       const s = seen.get(id);
       if (!s || s.kind !== n.kind || s.owner !== n.owner || !!s.user !== !!n.user) return 'Invalid snapshot.';
     }
-    const json = ops.map((op) => JSON.stringify(op));
-    db.prepare('INSERT OR REPLACE INTO room_snapshots (room_id, seq, ops) VALUES (?, ?, ?)').run(this.info.id, seq, JSON.stringify(json));
+    const json = ops.map((op) => JSON.stringify(op)), stored = JSON.stringify(json);
+    const old = db.prepare('SELECT length(CAST(ops AS BLOB)) AS n FROM room_snapshots WHERE room_id = ?').get(this.info.id) as { n: number } | undefined;
+    db.prepare('INSERT OR REPLACE INTO room_snapshots (room_id, seq, ops) VALUES (?, ?, ?)').run(this.info.id, seq, stored);
+    addBytes.run(Buffer.byteLength(stored) - (old?.n ?? 0), this.info.id);
     this.ops = this.ops.slice(seq - this.snapSeq);
     this.snap = json;
     this.snapSeq = seq;
@@ -532,6 +538,9 @@ export class Room {
 
   systemChat(text: string) { this.pushChat({ id: newId('m_'), from: 'system', text, at: Date.now(), system: true }); }
 
+  /** The canvas as a welcome carries it: the snapshot and every op after, as a JSON array. */
+  contents(): string { return `[${[...this.snap, ...this.ops].join(',')}]`; }
+
   updateInfo(patch: { name?: string; share?: ShareSettings; ephemeral?: true }) {
     if (patch.name !== undefined) this.info.name = patch.name;
     if (patch.ephemeral) this.info.ephemeral = true;
@@ -593,12 +602,16 @@ export function createRoom(owner: UserRow, name: string, settings: DocSettings, 
     db.prepare('INSERT INTO rooms (id, name, owner_id, settings, created_at, updated_at, watch_key, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, name, owner.id, JSON.stringify(info.settings), now, now, randomId(16), ephemeral ? 1 : 0);
     const ins = db.prepare('INSERT INTO room_ops (room_id, seq, op) VALUES (?, ?, ?)');
+    let bytes = 0;
     ops.forEach((op, i) => {
       op.author = owner.id;
       if (op.t === 'layer.add') op.layer.owner = owner.id;
       if (op.t === 'folder.add') { op.folder.owner = owner.id; delete op.folder.user; }
-      ins.run(id, i + 1, JSON.stringify(op));
+      const json = JSON.stringify(op);
+      bytes += Buffer.byteLength(json);
+      ins.run(id, i + 1, json);
     });
+    db.prepare('UPDATE rooms SET bytes = ? WHERE id = ?').run(bytes, id);
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }
   saveShare(id, share);
@@ -661,6 +674,25 @@ export const visited = (userId: string, roomId: string) => !!db.prepare('SELECT 
 export function resumeEphemeral(ms: number) {
   for (const r of db.prepare('SELECT id FROM rooms WHERE ephemeral = 1').all() as { id: string }[]) getRoom(r.id)?.hostGrace(ms);
 }
+
+/** Bytes the person's canvases take on the server. Live-only rooms don't count: they go when the session ends. */
+export function cloudUsage(userId: string): number {
+  flushOps();
+  const r = db.prepare('SELECT coalesce(sum(coalesce(bytes, 0) + coalesce(length(thumb), 0)), 0) AS n FROM rooms WHERE owner_id = ? AND ephemeral = 0').get(userId) as { n: number };
+  return r.n;
+}
+
+/** The person's canvases on the server, biggest first. */
+export function cloudCanvases(userId: string): CloudCanvas[] {
+  flushOps();
+  const rows = db.prepare(`SELECT id, name, visibility, coalesce(updated_at, created_at) AS updated_at, coalesce(bytes, 0) + coalesce(length(thumb), 0) AS bytes,
+    thumb_version, thumb IS NOT NULL AS has_thumb FROM rooms WHERE owner_id = ? AND ephemeral = 0 ORDER BY bytes DESC, updated_at DESC`).all(userId) as
+    { id: string; name: string; visibility: Visibility; updated_at: number; bytes: number; thumb_version: number; has_thumb: number }[];
+  return rows.map((r) => ({ id: r.id, name: r.name, visibility: r.visibility, updatedAt: r.updated_at, bytes: r.bytes, thumb: r.has_thumb ? `/thumbs/${r.id}?v=${r.thumb_version}` : null }));
+}
+
+/** JSON's size on the server, for a cloud save checked before it is written. */
+export const opsBytes = (ops: Op[]) => ops.reduce((n, op) => n + Buffer.byteLength(JSON.stringify(op)), 0);
 
 export function deleteRoom(id: string) {
   flushOps();

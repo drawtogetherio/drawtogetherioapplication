@@ -1,8 +1,10 @@
-// Free accounts keep canvases on this device; sharing opens a live-only room that closes after the host leaves.
+// Device canvases: with the free cloud allowance set to 0 (Admin → Site), free accounts keep canvases on this
+// device; sharing opens a live-only room that closes after the host leaves. tests/storage.mjs covers the allowance.
 // Needs the dev server with EPHEMERAL_GRACE_MS=1500 and DB_PATH set. Usage: DB_PATH=... node tests/local.mjs [http://localhost:5173]
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 
 const base = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '');
 const out = 'test-results/local';
@@ -39,6 +41,9 @@ async function stroke(page, y) {
   await page.mouse.up();
   await page.waitForTimeout(150);
 }
+// No cloud storage for free accounts in this test.
+new DatabaseSync(process.env.DB_PATH).prepare(`INSERT INTO site (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+  .run(JSON.stringify({ earlyBadge: true, freeCloudMB: 0 }));
 const projects = (page) => page.evaluate(async () => (await (await fetch('/api/projects')).json()).length);
 
 // ---- Ren (free) draws alone: nothing reaches the server ----
@@ -168,18 +173,23 @@ await pia.screenshot({ path: `${out}/05-cloud.png` });
 await stroke(pia, 300);
 check(await projects(pia) === 1, 'listed as a server canvas');
 
-// ---- Premium ends: the old server canvas moves to the device when opened ----
+// ---- Premium ends: the canvas stays in the cloud; Properties moves it to the device ----
 admin(`premium ${piaHandle} off`);
 await pia.goto(base + '/app');
 await pia.waitForSelector('.home:not([hidden]) .project-tile');
-check(await mine(pia).locator('.tile-meta', { hasText: 'On the server' }).count() === 1, 'a free account sees the old canvas as on the server');
+check(await mine(pia).locator('.save-mark.cloud').count() === 1, 'a free account still sees the canvas in the cloud');
 await pia.locator('.tile-open').first().click();
-await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open' && window.doodlehive.session.local);
-await pia.waitForFunction(() => window.doodlehive.ed.room.info.ephemeral);
-check(await projects(pia) === 0 && (await strokes(pia)) === 1, 'opening it moves the drawing to the device');
+await pia.waitForFunction(() => window.doodlehive.ed.room?.status === 'open');
+check(!(await dh(pia, (dh) => dh.ed.room.info.ephemeral)) && await projects(pia) === 1 && (await strokes(pia)) === 1, 'it opens where it is, nothing deleted');
 await pia.locator('[aria-label=\"Menu\"]').click(); await pia.locator('.menu-pop .menu-item', { hasText: 'Back to home' }).click();
+await pia.waitForSelector('.home:not([hidden]) .project-tile');
+await mine(pia).locator('.tile-more').first().click();
+await pia.locator('.tile-pop .menu-item', { hasText: 'Properties' }).click();
+await pia.getByRole('button', { name: 'Move to this device' }).click();
+await pia.getByRole('button', { name: 'Move', exact: true }).click();
 await pia.waitForSelector('.home:not([hidden]) .tile-meta', { hasText: 'On this device' });
-check(true, 'it now shows as on this device');
+await pia.waitForFunction(async () => !(await (await fetch('/api/projects')).json()).length);
+check(true, 'Move to this device takes it off the server');
 await pia.screenshot({ path: `${out}/04-moved.png` });
 
 if (errors.length) { console.log('page errors:'); for (const e of errors) console.log('  ' + e); failed++; }

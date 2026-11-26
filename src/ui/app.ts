@@ -32,6 +32,8 @@ import { THEMES, canUseTheme, customTheme } from '../shared/themes';
 import { api } from '../net/api';
 import { accentColor, applyMode, applyTheme, theme } from './theme';
 import { preferencesDialog } from './prefsDialog';
+import { onStorage, storageLevel, storageNow, storageWarningText } from './storage';
+import { storageShare } from '../shared/storage';
 import { editLogDialog } from './editLog';
 import { KeyAction, STROKE_TOOLS, StrokeTool, actionFor, keyOf, applyPressure } from '../shared/prefs';
 import { Studio } from './panels';
@@ -184,7 +186,8 @@ export class App {
     dismissOnOutside(colorPop, [this.colorBtn], () => { colorPop.hidden = true; });
     this.colorDrop(this.colorBtn);
     right.append(layersBtn, this.colorBtn, h('span.sep'), this.saveBadge);
-    this.saveBadge.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a')) return; this.saveBadge.classList.toggle('open'); });
+    this.saveBadge.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('a, .hint button')) return; this.saveBadge.classList.toggle('open'); });
+    onStorage(() => this.renderSaveBadge());
     dismissOnOutside(this.saveBadge, [], () => this.saveBadge.classList.remove('open'));
     const topbar = this.topbar = h('header.topbar', {}, left, right);
     frameBar(topbar, right);
@@ -432,9 +435,14 @@ export class App {
     clear(b);
     if (!kind) return;
     const text = SAVE_BADGE[kind];
+    // A free account's own cloud canvas also shows when its storage is nearly full.
+    const st = kind === 'cloud' && room?.info?.ownerId === me?.id ? storageNow() : null, lvl = storageLevel(st);
+    if (lvl) b.classList.add(lvl);
+    const short = lvl === 'full' ? 'Cloud full' : lvl ? `${Math.round(storageShare(st!) * 100)}% full` : text.short;
     b.append(
-      h('button.save-pill', { type: 'button', 'aria-label': text.label, html: icon(text.icon, 16) + (text.short ? `<span>${text.short}</span>` : '') }),
-      h('div.hint', { role: 'tooltip' }, text.hint, kind === 'cache' ? h('a', { href: '/' }, 'Get the app') : null),
+      h('button.save-pill', { type: 'button', 'aria-label': lvl ? storageWarningText(st!) : text.label, html: icon(text.icon, 16) + (short ? `<span>${short}</span>` : '') }),
+      h('div.hint', { role: 'tooltip' }, lvl ? storageWarningText(st!) : text.hint, kind === 'cache' ? h('a', { href: '/' }, 'Get the app') : null,
+        lvl ? h('button.btn.small', { type: 'button', onclick: () => { b.classList.remove('open'); preferencesDialog(this, 'Storage'); } }, 'Manage storage') : null),
     );
   }
 
@@ -621,11 +629,11 @@ export class App {
     this.sliders.forEach((s, i) => s.set(i % 2 ? p.opacity : p.size));
   }
 
-  toast(msg: string) {
+  toast(msg: string, ms = 1800) {
     this.toastEl.textContent = msg;
     this.toastEl.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), 1800);
+    this.toastTimer = window.setTimeout(() => this.toastEl.classList.remove('show'), ms);
   }
 
   private renderOptions() {

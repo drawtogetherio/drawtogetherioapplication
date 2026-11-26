@@ -117,6 +117,13 @@ addColumn('users', 'avatar_key', 'TEXT');
 addColumn('users', 'avatar_anim_key', 'TEXT');
 addColumn('users', 'banner_key', 'TEXT');
 addColumn('rooms', 'invited', `TEXT NOT NULL DEFAULT '[]'`); // user ids let into the room by a host
+// Bytes a canvas takes on the server: its ops and snapshot (the thumbnail is counted on top). Kept up
+// to date as ops are written (rooms.ts); rooms from before the column are measured once here.
+addColumn('rooms', 'bytes', 'INTEGER');
+db.exec(`UPDATE rooms SET bytes =
+  coalesce((SELECT sum(length(CAST(op AS BLOB))) FROM room_ops WHERE room_id = rooms.id), 0)
+  + coalesce((SELECT length(CAST(ops AS BLOB)) FROM room_snapshots WHERE room_id = rooms.id), 0)
+  WHERE bytes IS NULL`);
 db.exec('CREATE TABLE IF NOT EXISTS site (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
 /** Dashboard settings; one JSON row. */

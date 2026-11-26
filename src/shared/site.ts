@@ -1,5 +1,6 @@
 // Site-wide settings an admin changes from the dashboard.
 import { normalizeColor } from './profile';
+import { DEFAULT_FREE_CLOUD_MB, FREE_CLOUD_MB_MAX } from './storage';
 
 export const NOTICE_MAX = 200;
 
@@ -9,16 +10,20 @@ export interface SiteSettings {
   earlyBadge: boolean;
   /** A line across the top of the home screen. */
   notice: SiteNotice;
+  /** Cloud storage each free account gets, in MB. Premium has no cap. */
+  freeCloudMB: number;
 }
 
-export const DEFAULT_SITE: SiteSettings = { earlyBadge: true, notice: { on: false, text: '', bg: '#ef8720', fg: '#3d1500' } };
+export const DEFAULT_SITE: SiteSettings = { earlyBadge: true, notice: { on: false, text: '', bg: '#ef8720', fg: '#3d1500' }, freeCloudMB: DEFAULT_FREE_CLOUD_MB };
 
 export function cleanSite(raw: unknown): SiteSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const n = (r.notice && typeof r.notice === 'object' ? r.notice : {}) as Record<string, unknown>;
   const text = typeof n.text === 'string' ? n.text.replace(/\s+/g, ' ').trim().slice(0, NOTICE_MAX) : '';
+  const mb = Number(r.freeCloudMB);
   return {
     earlyBadge: r.earlyBadge !== false,
+    freeCloudMB: Number.isFinite(mb) && r.freeCloudMB !== null && r.freeCloudMB !== '' ? Math.max(0, Math.min(FREE_CLOUD_MB_MAX, Math.round(mb))) : DEFAULT_FREE_CLOUD_MB,
     notice: {
       on: n.on === true && !!text, text,
       bg: (typeof n.bg === 'string' && normalizeColor(n.bg)) || DEFAULT_SITE.notice.bg,

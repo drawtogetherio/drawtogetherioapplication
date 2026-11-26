@@ -1212,3 +1212,36 @@ body.left-handed .history-pop { --pop-from: right 0; }
 @media (prefers-reduced-motion: reduce) {
   .popover, .optionsbar, .brush-menu, .quick-menu, .quick-pick { animation: none; }
 }
+
+/* Cloud storage: the allowance meter, Preferences → Storage, the free-up picker and the home warning. */
+.storage-meter { display: flex; flex-direction: column; gap: 6px; }
+.storage-bar { display: block; height: 8px; border-radius: var(--r-pill); background: var(--panel-2); overflow: hidden; }
+.storage-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s; }
+.storage-meter.near .storage-fill { background: #e9a800; }
+.storage-meter.full .storage-fill { background: var(--alert); }
+.storage-text { font-size: 13.5px; font-weight: 600; }
+.storage-list { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.storage-list .sub { margin: 0 0 4px; }
+.storage-list > small { margin-top: 8px; }
+.storage-list.pick { max-height: min(46vh, 360px); overflow-y: auto; margin: 8px 0; }
+.storage-list.pick label { display: block; border-radius: var(--r-md); cursor: pointer; }
+.storage-list.pick label:hover { background: var(--hover); }
+.storage-row { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 6px; flex-wrap: wrap; }
+.storage-thumb { flex: none; width: 36px; height: 36px; border-radius: var(--r-sm); background: var(--panel-2); display: grid; place-items: center; overflow: hidden; color: var(--muted); }
+.storage-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.storage-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.storage-name strong { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.storage-actions { display: inline-flex; gap: 2px; }
+.storage-actions .icon-btn { width: 36px; height: 36px; }
+.storage-confirm { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.storage-row input[type=checkbox] { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.storage-free { min-width: min(480px, 86vw); }
+.storage-free .segmented button { white-space: nowrap; }
+.storage-warn { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; font-size: 13.5px; font-weight: 600; background: #ffd84d; color: #3d2a00; }
+.storage-warn.full { background: #ffb3a8; color: #4a0d00; }
+.storage-warn .btn { flex: none; }
+.storage-warn .icon-btn { width: 30px; height: 30px; color: inherit; flex: none; }
+.storage-warn .icon-btn:hover { background: rgba(0, 0, 0, 0.1); }
+.save-badge.near .save-pill { color: #8a6100; background: #ffd84d; }
+.save-badge.full .save-pill { color: #4a0d00; background: #ffb3a8; }
+.save-badge .hint .btn { margin-top: 8px; }

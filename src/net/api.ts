@@ -4,6 +4,7 @@ import type { LogEntry, ProjectInfo, RoomInfo, ShareSettings, VisitInfo } from '
 import type { Notice } from '../shared/notices';
 import type { SiteNotice } from '../shared/site';
 import type { Prefs } from '../shared/prefs';
+import type { StorageInfo } from '../shared/storage';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public field?: string) { super(message); }
@@ -74,11 +75,15 @@ export const api = {
   uploadBanner: (img: Blob) => call<MyProfile>('PUT', '/api/me/banner', undefined, img),
   deleteBanner: () => call<MyProfile>('DELETE', '/api/me/banner'),
   deleteAnimatedAvatar: () => call<MyProfile>('DELETE', '/api/me/avatar-animated'),
-  createRoom: (name: string, settings: Omit<DocSettings, 'id'>, share: ShareSettings, ops: Op[] = []) =>
-    call<RoomInfo>('POST', '/api/rooms', { name, settings, share, ops }),
+  /** `cloud` keeps a free account's canvas in its cloud storage instead of only while it's live. */
+  createRoom: (name: string, settings: Omit<DocSettings, 'id'>, share: ShareSettings, ops: Op[] = [], cloud = false) =>
+    call<RoomInfo>('POST', '/api/rooms', { name, settings, share, ops, cloud }),
   /** A .hivecanvas file becomes a room. */
-  importRoom: (file: Blob, name: string, share: ShareSettings) =>
-    call<RoomInfo>('POST', `/api/rooms/import?name=${encodeURIComponent(name)}&share=${encodeURIComponent(JSON.stringify(share))}`, undefined, file),
+  importRoom: (file: Blob, name: string, share: ShareSettings, cloud = false) =>
+    call<RoomInfo>('POST', `/api/rooms/import?name=${encodeURIComponent(name)}&share=${encodeURIComponent(JSON.stringify(share))}${cloud ? '&cloud=1' : ''}`, undefined, file),
+  storage: () => call<StorageInfo>('GET', '/api/storage'),
+  /** A canvas of yours as ops, to keep on this device or save as a file. */
+  roomContents: (id: string) => call<{ name: string; settings: DocSettings; share: ShareSettings; ops: Op[] }>('GET', `/api/rooms/${id}/contents`),
   updateRoom: (id: string, patch: { name?: string; share?: ShareSettings; ephemeral?: true }) => call<RoomInfo>('PATCH', '/api/rooms/' + id, patch),
   invite: (roomId: string, userId: string) => call<{ ok: true }>('POST', `/api/rooms/${roomId}/invite`, { user: userId }),
   deleteRoom: (id: string) => call<{ ok: true }>('DELETE', '/api/rooms/' + id),

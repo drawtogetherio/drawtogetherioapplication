@@ -6,6 +6,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 
 const base = (process.argv[2] ?? 'http://localhost:5173').replace(/\/$/, '');
 const out = 'test-results/hivecanvas';
@@ -17,6 +18,10 @@ const check = (ok, msg) => { console.log((ok ? 'ok   ' : 'FAIL ') + msg); if (!o
 const admin = (args) => execSync(`npx tsx server/admin.ts ${args}`, { stdio: 'pipe', env: process.env }).toString();
 // Reference logs are files Vite serves from the project folder; big ones don't fit through page.route.
 const refs = { set: (name, text) => fs.writeFileSync(`${out}/${name}`, text), get: (name) => fs.readFileSync(`${out}/${name}`, 'utf8') };
+
+// Device canvases are what this covers, so free accounts get no cloud storage here (tests/storage.mjs covers it).
+new DatabaseSync(process.env.DB_PATH).prepare(`INSERT INTO site (key, value) VALUES ('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
+  .run(JSON.stringify({ earlyBadge: true, freeCloudMB: 0 }));
 
 async function person(name) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 820 }, acceptDownloads: true });
@@ -91,7 +96,7 @@ refs.set('ren.jsonl', await localOps(ren, id));
 check((await dh(ren, (dh) => dh.ed.doc.log.filter((o) => o.t === 'tiles').length)) === 3, 'undos are in the log as tiles');
 
 await ren.locator('[aria-label="Menu"]').click();
-await ren.locator('.menu-pop .menu-item', { hasText: 'Export' }).click();
+await ren.locator('.menu-pop [aria-label^="Export ("]').click();
 await ren.locator('.segmented button', { hasText: '.hivecanvas' }).click();
 await ren.fill('input[aria-label="File name"]', 'hive study');
 const [dl] = await Promise.all([ren.waitForEvent('download'), ren.locator('.modal').getByRole('button', { name: 'Export' }).click()]);
@@ -107,7 +112,7 @@ const frames = await dh(ren, async (dh) => { const { loadLapse } = await import(
 check(frames >= 1, `the timelapse has frames (${frames})`);
 await stroke(ren, 600);
 await ren.locator('[aria-label="Menu"]').click();
-await ren.locator('.menu-pop .menu-item', { hasText: 'Export' }).click();
+await ren.locator('.menu-pop [aria-label^="Export ("]').click();
 await ren.locator('.modal').getByRole('button', { name: 'Timelapse…' }).click();
 await ren.waitForSelector('.modal-head h2:text("Timelapse")');
 check(await ren.locator('.modal-body', { hasText: 'never uploaded' }).isVisible(), 'the timelapse dialog says frames stay on the device');

@@ -326,13 +326,25 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
   whether the room is open now, so a lobby can be rejoined from home. Private rooms show no
   thumbnail there. At the bottom, cards for Patreon and, when `DISCORD_INVITE_URL` is set, the
   Discord server. The + top right opens the create menu (the same three choices plus a join box).
-- **Where canvases live (v0.19).** Free accounts keep their canvases in the browser (IndexedDB), so
-  they only exist on that device and the server stores nothing for them. Premium accounts keep
-  canvases on the server, so every device sees them. A tile from the other side moves when opened:
-  a free account opening an old server canvas brings it to the device; a premium account opening a
-  device canvas uploads it to the account. Server canvases of free owners that go unused for 30 days
-  are deleted. Browsers may evict site data when the device is low on space (Safari after 7 days
-  without a visit), so a free account's canvases are only as safe as the device.
+- **Where canvases live (v0.36).** Every account keeps canvases in the cloud (on the server), so every
+  device sees them. Free accounts get a capped allowance, measured in bytes: `freeCloudMB` in the
+  site settings (Admin → Site → Cloud storage, 50 MB to start; `src/shared/storage.ts`). Premium has no
+  cap. A canvas's size is what the server stores for it: its ops and snapshot (`rooms.bytes`, kept up
+  to date as ops are written, measured once for older rooms at startup) plus its thumbnail. The cap
+  gates new cloud canvases (create, open a file, move a device canvas up): `needCloud` answers 413 with
+  `field: 'storage'` when one doesn't fit, and the app opens a picker of the cloud canvases, biggest
+  first, to move some off **to this device** or **as .hivecanvas files** (a download, which is the
+  fallback on iPad Safari; the cloud copy is only removed once the person says the file saved), then
+  tries again, or keeps the new canvas on the device. A canvas already in the cloud keeps saving past
+  the cap. From 80% free accounts see a warning across the home screen and on the canvas's cloud
+  badge (rechecked every 2 minutes while drawing); full, it says new canvases stay on the device.
+  **Preferences → Storage** shows the meter and the biggest canvases, each with Move to this device
+  and Save as file; a tile's Properties has the same, and a device canvas has **Move to the cloud**.
+  An allowance of 0 turns the cloud off for free accounts (they keep canvases on the device, as before
+  v0.36). Lowering the cap never deletes anything, and free canvases are no longer swept after 30 days.
+  Premium accounts' device canvases still move up when opened. Browsers may evict site data when the
+  device is low on space (Safari after 7 days without a visit), so a device canvas in a browser is only
+  as safe as the device.
 - Sharing from a device canvas opens a **live-only room** seeded with the drawing. Everyone in it
   keeps a copy on their own device as they draw. When the host leaves (or drops) the room stays up
   for `EPHEMERAL_GRACE_MS` (2 minutes) so they can come back; then everyone is told the host left,
@@ -390,7 +402,7 @@ Only the `identify` scope is requested: we read the Discord user id and name, no
 - Users: search and filter, then manage: premium (30 days, a year, forever, off), badges (Staff,
   Supporter, Featured artist, Early bee, shown next to the name), rename, clear status, remove avatar,
   sign out everywhere, make admin, ban/unban, ban their address, delete the account and its canvases.
-- Site: whether every new account starts with the Early bee badge (on by default; guests never get
+- Site: the free cloud storage allowance in MB (50 to start), whether every new account starts with the Early bee badge (on by default; guests never get
   it), and a home screen message with background and text colours, previewed as you type. Settings are
   one JSON row in the `site` table (`src/shared/site.ts` cleans them); `/api/config` carries the
   message while it is on, and the home screen shows it above the Patreon banner.
@@ -572,7 +584,8 @@ DB_PATH=... node tests/prefs.mjs              # preferences: groups, themes, pre
 DB_PATH=... node tests/assets.mjs             # brush images: upload rules, room rejections, a tip drawn by one person shows for another
 DB_PATH=... node tests/admin.mjs              # admin: gating, stats, premium/badges, bans, IP bans, log, delete, site settings
 DB_PATH=... node tests/room.mjs               # start the server with SNAPSHOT_EVERY=5 so the snapshot check passes
-DB_PATH=... node tests/local.mjs              # device canvases, live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
+DB_PATH=... node tests/local.mjs              # device canvases (free cloud set to 0), live-only rooms, host leaves, premium on/off (server needs EPHEMERAL_GRACE_MS=1500)
+DB_PATH=... node tests/storage.mjs            # cloud storage: free cap, warnings, Preferences → Storage, the free-up picker, admin cap, premium
 DB_PATH=... node tests/hivecanvas.mjs         # .hivecanvas export/open/move to server, log compaction, timelapse + video (HIVE_OPS=ops.jsonl adds a real canvas)
 node tests/security.mjs                       # cross-site requests, rate limits, headers, op validation
 node tests/embed.mjs                          # invite link embeds: Open Graph tags, sharer's name, public canvas image, private fallback

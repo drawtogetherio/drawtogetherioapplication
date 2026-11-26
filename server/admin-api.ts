@@ -154,7 +154,7 @@ export async function adminRoute(req: Req, res: Res, url: URL, me: UserRow, chan
   if (p === '/api/admin/site' && m === 'PATCH') {
     const b = await jsonBody(req);
     const site = setSite(b);
-    log(me, `site: early badge ${site.earlyBadge ? 'on' : 'off'}, notice ${site.notice.on ? 'on' : 'off'}`);
+    log(me, `site: early badge ${site.earlyBadge ? 'on' : 'off'}, notice ${site.notice.on ? 'on' : 'off'}, free cloud ${site.freeCloudMB} MB`);
     return json(res, 200, site);
   }
   if (p === '/api/admin/whatsnew' && m === 'GET') return json(res, 200, getWhatsNew());

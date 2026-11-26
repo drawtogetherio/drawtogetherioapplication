@@ -8,7 +8,8 @@ import { config } from './config.ts';
 import {
   SESSION_MS, createGuest, createSession, db, deleteSession, findOrCreateUser, freeHandle, getAsset, getSite, getUser, getWhatsNew, handleTaken, hasAsset, isAdmin, isPremium, keepGuest, myProfile, publicProfile, putAsset, sessionUser, userByHandle, UserRow,
 } from './db.ts';
-import { Room, cleanShare, createRoom, deleteRoom, flushOps, getRoom, projectsOf, resumeEphemeral, roomsWithUser, saveShare, visited, visitsOf } from './rooms.ts';
+import { Room, cleanShare, cloudCanvases, cloudUsage, createRoom, deleteRoom, flushOps, getRoom, opsBytes, projectsOf, resumeEphemeral, roomsWithUser, saveShare, visited, visitsOf } from './rooms.ts';
+import { MB, STORAGE_FULL, type StorageInfo, formatBytes } from '../src/shared/storage.ts';
 import { validOp } from './validate.ts';
 import type { Op } from '../src/core/model.ts';
 import { HiveFileError, canvasOps, unzip } from '../src/shared/hivecanvas.ts';
@@ -124,6 +125,17 @@ function ownRoom(req: Req, id: string) {
   if (!row) throw new HttpError(404, 'That canvas doesn’t exist.');
   if (row.owner_id !== u.id) throw new HttpError(403, 'Only the owner can do that.');
   return u;
+}
+
+/** Cloud storage a free account gets (Admin → Site); premium has no cap. */
+const cloudCap = (u: UserRow): number | null => isPremium(u) ? null : getSite().freeCloudMB * MB;
+const storageOf = (u: UserRow): StorageInfo => ({ used: cloudUsage(u.id), cap: cloudCap(u), canvases: cloudCanvases(u.id) });
+/** A new cloud canvas of `bytes` must fit the free allowance. Canvases already there keep saving past it. */
+function needCloud(u: UserRow, bytes: number) {
+  const cap = cloudCap(u);
+  if (cap == null) return;
+  const used = cloudUsage(u.id);
+  if (used + bytes > cap) throw new HttpError(413, `Your cloud storage is full (${formatBytes(used)} of ${formatBytes(cap)} used).`, STORAGE_FULL);
 }
 
 function login(res: Res, user: UserRow) {
@@ -535,8 +547,11 @@ async function route(req: Req, res: Res) {
     const bg = s.background === null ? null : normalizeColor(String(s.background ?? '#ffffff'));
     const name = sanitizeDisplayName(String(b.name ?? '')).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
     const share = cleanShare(b.share ?? (b.private ? { visibility: 'private' } : undefined));
-    // Free accounts keep canvases on their devices; the server only holds a room while it's live.
-    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, share, !isPremium(u), ops);
+    // Premium canvases always live on the server; a free account's do when it asks for the cloud and
+    // they fit its allowance. Otherwise the server only holds the room while it's live (a device canvas shared).
+    const cloud = isPremium(u) || b.cloud === true;
+    if (cloud) needCloud(u, opsBytes(ops));
+    const info = createRoom(u, name, { id: '', width: infinite ? 2048 : width, height: infinite ? 2048 : height, infinite, background: bg }, share, !cloud, ops);
     return json(res, 200, info);
   }
   // A .hivecanvas file: the canvas as it looks now, so even long-lived canvases stay a few MB.
@@ -558,10 +573,21 @@ async function route(req: Req, res: Res) {
     try { shareIn = JSON.parse(url.searchParams.get('share') ?? 'null'); } catch { throw new HttpError(400, 'Invalid request.'); }
     const share = cleanShare(shareIn ?? { visibility: 'private' });
     const name = sanitizeDisplayName(url.searchParams.get('name') ?? manifest.name).slice(0, ROOM_NAME_MAX) || `${u.display_name}’s room`;
-    const info = createRoom(u, name, { id: '', width: s.infinite ? 2048 : s.width, height: s.infinite ? 2048 : s.height, infinite: s.infinite, background: s.background }, share, !isPremium(u), ops);
+    const cloud = isPremium(u) || url.searchParams.get('cloud') === '1';
+    if (cloud) needCloud(u, opsBytes(ops));
+    const info = createRoom(u, name, { id: '', width: s.infinite ? 2048 : s.width, height: s.infinite ? 2048 : s.height, infinite: s.infinite, background: s.background }, share, !cloud, ops);
     return json(res, 200, info);
   }
   if (p === '/api/projects' && m === 'GET') return json(res, 200, projectsOf(requireUser(req).id));
+  if (p === '/api/storage' && m === 'GET') return json(res, 200, storageOf(requireMember(req, 'keep canvases in the cloud')));
+  // The canvas as its owner's device needs it to keep it there or save it as a file (moving it off the server).
+  mm = /^\/api\/rooms\/([a-z0-9]+)\/contents$/.exec(p);
+  if (mm && m === 'GET') {
+    ownRoom(req, mm[1]);
+    const r = getRoom(mm[1])!;
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(`{"name":${JSON.stringify(r.info.name)},"settings":${JSON.stringify(r.info.settings)},"share":${JSON.stringify(r.info.share)},"ops":${r.contents()}}`);
+  }
   if (p === '/api/visits' && m === 'GET') return json(res, 200, visitsOf(requireUser(req).id));
   mm = /^\/api\/rooms\/([a-z0-9]+)\/thumb$/.exec(p);
   if (mm && m === 'PUT') {

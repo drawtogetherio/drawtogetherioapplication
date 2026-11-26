@@ -23,12 +23,15 @@ import { DEFAULT_SHARE, PRIVATE_ROOM_MSG, RoomInfo, ShareSettings, WATCH_KEY_RE 
 import type { Op } from '../core/model';
 import { cleanPrefs } from '../shared/prefs';
 import { DEFAULT_COLOR } from '../editor';
+import { cloudHasRoom, cloudOff, freeUpDialog, isStorageFull, loadStorage, storageLevel, storageNow, storageWarningText } from './storage';
 
 export const PREFS_KEY = 'doodlehive.prefs';
 
 const blankDoc = () => DrawDoc.create({ width: 2048, height: 2048, infinite: true, background: '#ffffff' });
 const THUMB_DELAY_MS = 15_000;
 const SQUASH_DELAY_MS = 3_000;
+/** How often a free account drawing in the cloud rechecks its storage. */
+const STORAGE_CHECK_MS = 120_000;
 export const LAST_KEY = 'doodlehive.last';
 export interface LastOpen { canvas?: string; room?: string; name: string; at: number }
 /** About 6 MB of undo pixels. */
@@ -46,6 +49,8 @@ export class Session {
   /** The copy of the open canvas kept in this browser (free accounts; everyone in a live-only room). */
   local: LocalCopy | null = null;
   private squashTimer = 0;
+  private storageTimer = 0;
+  private storageWarned = false;
 
   constructor(private app: App) {}
 
@@ -172,7 +177,7 @@ export class Session {
       });
     const body = h('div.modal-body', {},
       guest ? null : h('div.preset-grid.home-grid', {},
-        card('Draw alone', this.me?.premium ? 'Private, saved to your account' : 'Private, saved on this device', 'brush', true),
+        card('Draw alone', this.me?.premium || cloudHasRoom(storageNow()) ? 'Private, saved to your account' : 'Private, saved on this device', 'brush', true),
         card('Shared room', 'Draw together on one canvas', 'users', false),
         h('button.preset-card.home-card', {
           html: `${icon('file', 26)}<strong>Open a file</strong><small>A .hivecanvas or .hivelapse</small>`,
@@ -225,13 +230,40 @@ export class Session {
       onCreate: async (c) => {
         this.ed.setColor(DEFAULT_COLOR);
         const settings = { width: c.width, height: c.height, infinite: c.infinite, background: c.background };
-        if (this.me?.premium) { this.joinRoom((await api.createRoom(c.roomName, settings, c.share)).id); return; }
+        // Premium, and free accounts with room in their cloud storage, keep canvases on the server.
+        const made = await this.cloudSave(`“${c.roomName}”`, 0, () => api.createRoom(c.roomName, settings, c.share, [], true));
+        if (made === null) throw new Error(''); // cancelled: the new canvas dialog stays open
+        if (made !== 'device') { this.joinRoom(made.id); return; }
         const copy = await LocalCopy.create(this.me!.id, c.roomName, settings, c.share), doc = DrawDoc.create(settings);
         copy.replaceWith(doc.log);
         this.startLocal(copy, doc);
         if (c.share.visibility !== 'private') await this.shareLocal(c.share);
       },
     });
+  }
+
+  /**
+   * A save to the cloud; when a free account's storage is full, offers to move canvases off it and tries
+   * again. 'device' means keep this one on the device instead, null that the person cancelled.
+   */
+  private async cloudSave<T>(what: string, need: number, attempt: () => Promise<T>): Promise<T | 'device' | null> {
+    if (!this.me?.premium && cloudOff(storageNow() ?? await loadStorage())) return 'device';
+    for (;;) {
+      try { const r = await attempt(); loadStorage(); return r; }
+      catch (e) {
+        if (!isStorageFull(e)) throw e;
+        const pick = await freeUpDialog(this.app, what, need);
+        if (pick !== 'retry') return pick;
+      }
+    }
+  }
+
+  /** Free accounts hear when their cloud storage is nearly full or full, once per level, while drawing in it. */
+  private async checkStorage() {
+    const before = storageLevel(storageNow());
+    const s = await loadStorage(), lvl = storageLevel(s);
+    if (lvl && s && (lvl !== before || !this.storageWarned)) this.app.toast(storageWarningText(s), 6000);
+    this.storageWarned = !!lvl;
   }
 
   // ---- Canvases on this device ----
@@ -302,7 +334,10 @@ export class Session {
     await saveFile(await hiveCanvasBlob(doc, name), `${safeFileName(name)}.hivecanvas`);
   }
 
-  /** Premium accounts keep canvases on the server; one made while free moves there when opened, as a .hivecanvas. */
+  /**
+   * A device canvas moves to the cloud as a .hivecanvas: premium ones when opened, a free account's when
+   * asked (if its storage has room; otherwise it stays here and opens).
+   */
   async moveLocalToServer(id: string) {
     const opened = await LocalCopy.open(id).catch(() => null);
     if (!opened) return;
@@ -310,7 +345,10 @@ export class Session {
     if (m.room && (await api.room(m.room).catch(() => null))?.joinable) { this.joinRoom(m.room, null, { copy }); return; }
     const doc = await this.loadCopy(copy, opened.ops);
     try {
-      const info = await api.importRoom(await hiveCanvasBlob(doc, m.name), m.name, { ...m.share, visibility: 'private' });
+      const blob = await hiveCanvasBlob(doc, m.name);
+      this.booted();
+      const info = await this.cloudSave(`“${m.name}”`, blob.size * 1.4, () => api.importRoom(blob, m.name, { ...m.share, visibility: 'private' }, true));
+      if (!info || info === 'device') { this.startLocal(copy, doc); return; }
       await moveLapse(id, roomLapseKey(info.id)).catch(() => {});
       await deleteCanvas(id);
       this.joinRoom(info.id);
@@ -346,7 +384,9 @@ export class Session {
       if (format === 'hivelapse') { timelapseDialog(lapseFromFiles(files)); return; }
       const { manifest, ops } = hiveCanvasOps(files);
       const name = manifest.name || (file.name ?? '').replace(/\.hivecanvas$/i, '') || 'Opened canvas';
-      if (this.me.premium) { this.joinRoom((await api.importRoom(file, name, { ...DEFAULT_SHARE, visibility: 'private' })).id); return; }
+      const made = await this.cloudSave(`“${name}”`, file.size * 1.4, () => api.importRoom(file, name, { ...DEFAULT_SHARE, visibility: 'private' }, true));
+      if (made === null) return;
+      if (made !== 'device') { this.joinRoom(made.id); return; }
       const copy = await LocalCopy.create(this.me.id, name, manifest.settings, { ...DEFAULT_SHARE, visibility: 'private' });
       const doc = await copy.toDoc(ops, (f) => this.progress(f));
       await copy.replaceWith(doc.log);
@@ -443,6 +483,12 @@ export class Session {
         this.booted();
         if (e.first && (room.spectator || !room.info?.private)) this.app.toast(`${room.spectator ? 'Watching' : 'Joined'} ${room.info?.name ?? 'room'}`);
         if (e.first && opts.takeLocal) api.updateRoom(id, { ephemeral: true }).catch(() => {});
+        // A free account drawing in its own cloud canvas: keep an eye on the allowance.
+        if (e.first && !this.me?.premium && room.info?.ownerId === room.you && !room.info.ephemeral && !opts.takeLocal) {
+          this.checkStorage();
+          clearInterval(this.storageTimer);
+          this.storageTimer = window.setInterval(() => { if (this.ed.room === room && !document.hidden) this.checkStorage(); }, STORAGE_CHECK_MS);
+        }
         this.syncCopy(room, this.local, !!opts.takeLocal);
       } else if (e.kind === 'progress') {
         this.progress(e.done / e.total);
@@ -511,6 +557,7 @@ export class Session {
 
   private closeAll(keep: LocalCopy | null) {
     this.rememberTurn();
+    clearInterval(this.storageTimer);
     const room = this.ed.room, saving = this.flushThumb();
     lapse.detach();
     if (room) {

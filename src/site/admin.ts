@@ -2,6 +2,7 @@ import './site.css';
 import { ApiError, api } from '../net/api';
 import { BADGES, type Badge, type PublicProfile } from '../shared/profile';
 import { NOTICE_MAX, type SiteSettings } from '../shared/site';
+import { FREE_CLOUD_MB_MAX } from '../shared/storage';
 import { initTheme } from '../ui/theme';
 import { initTooltips } from '../ui/tooltip';
 import { brandHtml } from './brand';
@@ -179,6 +180,10 @@ async function sitePage() {
     <button class="btn small" id="sync-now">Copy live data now</button>` : ''}
     <h2>New accounts</h2>
     <label class="site-row"><input type="checkbox" id="early-badge" ${site.earlyBadge ? 'checked' : ''}> Every new account gets the ${esc(BADGES.early)} badge</label>
+    <h2>Cloud storage</h2>
+    <form class="site-row" id="cloud-form"><label>Free accounts get <input type="number" name="mb" min="0" max="${FREE_CLOUD_MB_MAX}" step="1" value="${site.freeCloudMB}" style="width:90px"> MB</label>
+      <button class="btn small primary" type="submit">Save</button></form>
+    <p class="fine">Premium has no cap. Lowering it never deletes anything: people over it keep their canvases and can't add new ones to the cloud until they move some off.</p>
     <h2>Home screen message</h2>
     <form class="site-form" id="notice-form">
       <input name="text" placeholder="What everyone sees at the top of the home screen" maxlength="${NOTICE_MAX}" value="${esc(nt.text)}" autocomplete="off">
@@ -194,6 +199,11 @@ async function sitePage() {
   });
   page.querySelector('#early-badge')!.addEventListener('change', async (e) => {
     try { await call('PATCH', '/api/admin/site', { earlyBadge: (e.target as HTMLInputElement).checked }); say('Saved'); } catch (ex) { failing(ex); }
+  });
+  page.querySelector<HTMLFormElement>('#cloud-form')!.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const mb = Number(new FormData(e.target as HTMLFormElement).get('mb'));
+    try { await call('PATCH', '/api/admin/site', { freeCloudMB: mb }); say('Saved'); } catch (ex) { failing(ex); }
   });
   const form = page.querySelector<HTMLFormElement>('#notice-form')!, bar = page.querySelector<HTMLElement>('.notice-preview .site-notice')!;
   const read = () => { const f = new FormData(form); return { text: String(f.get('text')), bg: String(f.get('bg')), fg: String(f.get('fg')), on: f.get('on') === 'on' }; };
