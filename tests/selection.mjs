@@ -39,6 +39,23 @@ await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(
 const corners = await ed((e) => { const M = e.view.viewport.matrix(), p = e.selection.pts, out = []; for (let i = 0; i < p.length; i += 2) { const q = M.transformPoint({ x: p[i], y: p[i + 1] }); out.push([q.x, q.y]); } return out; });
 const upright = corners.length === 4 && Math.abs(corners[0][0] - corners[3][0]) < 0.5 && Math.abs(corners[1][0] - corners[2][0]) < 0.5 && Math.abs(corners[0][1] - corners[1][1]) < 0.5 && Math.abs(corners[2][1] - corners[3][1]) < 0.5;
 check(upright, `rectangle select follows the screen on a rotated view (${corners.map((c) => c.map(Math.round)).join(' ')})`);
+// Its handles sit on that box: corners on its corners, edges on its sides.
+const hs = await ed((e) => { const M = e.view.viewport.matrix(); return e.tools.select.handles().filter((h) => h.kind !== 'rotate').map((h) => { const q = M.transformPoint(h.pos); return [q.x, q.y]; }); });
+const near = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1;
+const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+const wantHs = [...corners, ...corners.map((c, i) => mid(c, corners[(i + 1) % 4]))];
+check(hs.length === 8 && wantHs.every((w) => hs.some((h) => near(h, w))), `handles line up with the box on a rotated view (${hs.map((c) => c.map(Math.round)).join(' ')})`);
+// Dragging the bottom-right corner handle scales the box and keeps it upright on screen.
+const sb0 = await page.locator('canvas.stage').boundingBox();
+const br = corners.reduce((a, c) => (c[0] + c[1] > a[0] + a[1] ? c : a));
+await page.mouse.move(sb0.x + br[0], sb0.y + br[1]); await page.mouse.down(); await page.mouse.move(sb0.x + br[0] + 70, sb0.y + br[1] + 50, { steps: 5 }); await page.mouse.up();
+await ed((e) => e.tools.select.commit());
+const after = await ed((e) => { const M = e.view.viewport.matrix(), p = e.selection.pts, out = []; for (let i = 0; i < p.length; i += 2) { const q = M.transformPoint({ x: p[i], y: p[i + 1] }); out.push([q.x, q.y]); } return out; });
+const xs = after.map((c) => c[0]), ys = after.map((c) => c[1]);
+const sidesUpright = after.every((c, i) => { const d = after[(i + 1) % 4]; return Math.abs(c[0] - d[0]) < 0.5 || Math.abs(c[1] - d[1]) < 0.5; });
+check(after.length === 4 && sidesUpright && Math.max(...xs) - Math.min(...xs) > 160 && after.some((c) => near(c, corners.reduce((a, c) => (c[0] + c[1] < a[0] + a[1] ? c : a)))),
+  `scaling from a corner handle keeps the box upright and anchored (${after.map((c) => c.map(Math.round)).join(' ')})`);
+await ed((e) => e.tools.select.set(null));
 await ed((e) => { e.settings.selectMode = 'ellipse'; e.emit('tool'); });
 await page.mouse.move(500, 300); await page.mouse.down(); await page.mouse.move(640, 400, { steps: 4 }); await page.mouse.up();
 const ell = await ed((e) => { const M = e.view.viewport.matrix(), p = e.selection.pts; let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let i = 0; i < p.length; i += 2) { const q = M.transformPoint({ x: p[i], y: p[i + 1] }); x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); } return [x0, y0, x1, y1]; });

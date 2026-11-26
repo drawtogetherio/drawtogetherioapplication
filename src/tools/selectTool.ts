@@ -15,9 +15,18 @@ interface Xform {
   layerId: string;
   sel: Selection; // original selection, before transforming
   float: Floating;
-  b: Rect; // local bounds of the selection
+  b: Rect; // bounds of the selection in its frame (the doc turned by `frame`)
+  frame: number; // angle of the box's axes: upright on screen when the canvas is turned
   mask?: true;
-  T: Point; rot: number; sx: number; sy: number; // M = translate(T) rotate(rot) scale(sx,sy) translate(-centre)
+  T: Point; rot: number; sx: number; sy: number; // M = translate(T) rotate(rot) scale(sx,sy) translate(-centre) rotate(frame)
+}
+
+/** Turns doc points into the frame `a` (the same turn the viewport applies). */
+function turnPts(pts: number[], a: number): number[] {
+  if (!a) return pts;
+  const c = Math.cos(a), s = Math.sin(a), out: number[] = [];
+  for (let i = 0; i + 1 < pts.length; i += 2) out.push(pts[i] * c - pts[i + 1] * s, pts[i] * s + pts[i + 1] * c);
+  return out;
 }
 
 type Drag =
@@ -49,8 +58,27 @@ export class SelectTool implements Tool {
   }
 
   matrix(x: Xform = this.xf!): DOMMatrix {
+    return this.frameMatrix(x).rotateSelf((x.frame * 180) / Math.PI);
+  }
+
+  /** Maps the box's own frame (where `b` lives) to the doc. */
+  private frameMatrix(x: Xform): DOMMatrix {
     const cx = x.b.x + x.b.w / 2, cy = x.b.y + x.b.h / 2;
     return new DOMMatrix().translateSelf(x.T.x, x.T.y).rotateSelf((x.rot * 180) / Math.PI).scaleSelf(x.sx, x.sy).translateSelf(-cx, -cy);
+  }
+
+  /**
+   * The angle the transform box stands at. A rectangle keeps its own sides (picking the
+   * quarter turn nearest the screen's), anything else stands upright on screen.
+   */
+  private frameOf(sel: Selection): number {
+    const view = this.ed.view.viewport.rot, p = sel.pts;
+    if (p.length !== 8 || sel.holes?.length) return view;
+    const ex = p[2] - p[0], ey = p[3] - p[1], fx = p[4] - p[2], fy = p[5] - p[3];
+    const le = Math.hypot(ex, ey), lf = Math.hypot(fx, fy);
+    if (!le || !lf || Math.abs(ex * fx + ey * fy) > 1e-3 * le * lf) return view;
+    const q = Math.PI / 2, a = -Math.atan2(ey, ex);
+    return a + Math.round((view - a) / q) * q;
   }
 
   outline(): Selection | null {
@@ -61,8 +89,9 @@ export class SelectTool implements Tool {
   private handles(): { pos: Point; local: Point; kind: 'corner' | 'edge' | 'rotate' }[] {
     const sel = this.ed.selection;
     if (!sel) return [];
-    const b = this.xf ? this.xf.b : rectFromPoints(sel.pts)!;
-    const m = this.xf ? this.matrix() : new DOMMatrix();
+    let b: Rect, m: DOMMatrix;
+    if (this.xf) { b = this.xf.b; m = this.frameMatrix(this.xf); }
+    else { const f = this.frameOf(sel); b = rectFromPoints(turnPts(sel.pts, f))!; m = new DOMMatrix().rotateSelf((-f * 180) / Math.PI); }
     const out: { pos: Point; local: Point; kind: 'corner' | 'edge' | 'rotate' }[] = [];
     const xs = [b.x, b.x + b.w / 2, b.x + b.w], ys = [b.y, b.y + b.h / 2, b.y + b.h];
     for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) {
@@ -89,10 +118,11 @@ export class SelectTool implements Tool {
     if (!sel) return null;
     const layer = this.ed.paintableLayer();
     if (!layer) return null;
-    const b = rectFromPoints(sel.pts)!;
+    const frame = this.frameOf(sel), b = rectFromPoints(turnPts(sel.pts, frame))!;
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2, c = Math.cos(frame), s = Math.sin(frame);
     this.xf = {
-      layerId: layer.props.id, sel, float: liftSelection(this.ed.editSurface(layer), sel), b, mask: this.ed.onMask,
-      T: { x: b.x + b.w / 2, y: b.y + b.h / 2 }, rot: 0, sx: 1, sy: 1,
+      layerId: layer.props.id, sel, float: liftSelection(this.ed.editSurface(layer), sel), b, frame, mask: this.ed.onMask,
+      T: { x: cx * c + cy * s, y: -cx * s + cy * c }, rot: -frame, sx: 1, sy: 1,
     };
     this.updateLive();
     this.ed.emit('tool');
@@ -116,7 +146,7 @@ export class SelectTool implements Tool {
       if (hit) {
         const x = this.ensureXform();
         if (!x) return;
-        const m = this.matrix();
+        const m = this.frameMatrix(x);
         if (hit.kind === 'rotate') {
           this.drag = { kind: 'rotate', a0: Math.atan2(p.y - x.T.y, p.x - x.T.x), rot0: x.rot };
         } else {
@@ -162,7 +192,7 @@ export class SelectTool implements Tool {
       x.T = { x: d.T0.x + p.x - d.p0.x, y: d.T0.y + p.y - d.p0.y };
     } else if (d.kind === 'rotate') {
       let r = d.rot0 + Math.atan2(p.y - x.T.y, p.x - x.T.x) - d.a0;
-      if (p.shift) r = Math.round(r / (Math.PI / 12)) * (Math.PI / 12);
+      if (p.shift) r = Math.round((r + x.frame) / (Math.PI / 12)) * (Math.PI / 12) - x.frame;
       x.rot = r;
     } else {
       const cos = Math.cos(-x.rot), sin = Math.sin(-x.rot);
