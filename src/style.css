@@ -68,7 +68,7 @@ input, select { font: inherit; }
 .bar-group { display: flex; align-items: center; gap: 2px; min-width: 0; }
 /* Desktop app: the bar drags the window; buttons stay clickable */
 .drag { -webkit-app-region: drag; }
-.drag button, .drag a, .drag .save-badge, .drag .zoom-label { -webkit-app-region: no-drag; }
+.drag button, .drag a, .drag .save-badge { -webkit-app-region: no-drag; }
 .mac-inset { padding-left: 84px; }
 .win-controls { display: inline-flex; margin-left: 6px; flex: none; }
 .grow { flex: 1; }
@@ -103,7 +103,6 @@ input, select { font: inherit; }
 .icon-btn:hover { background: var(--hover); }
 .icon-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
 .icon-btn.active, .icon-btn.on { color: var(--accent-ink); background: var(--accent-soft); }
-.zoom-label { border: 0; background: transparent; color: var(--muted); font-size: 12px; padding: 0 8px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .color-drop {
   position: fixed; left: 0; top: 0; z-index: 60; width: 44px; height: 44px; border-radius: 50%; pointer-events: none;
@@ -330,7 +329,6 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-radius: 
 
 @media (max-width: 900px) {
   .brand { display: none; }
-  .zoom-label { display: none; }
   .icon-btn { width: 36px; height: 36px; }
 }
 @media (max-width: 640px) {

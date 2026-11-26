@@ -79,7 +79,6 @@ export class App {
   private historyBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
   colorBtn: HTMLButtonElement;
-  private zoomLabel = h('button.zoom-label', { title: 'Fit to screen' });
   private toastEl = h('div.toast', { role: 'status' });
   private loadEl = h('div.load-bar', { hidden: true, role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('span'), h('div.track', {}, h('i')));
   private toastTimer = 0;
@@ -151,8 +150,7 @@ export class App {
     stage.append(this.reference.el);
 
     // Export, flip, centre, effects and guides live in the menu's icon row; the bar keeps the menu and the zoom.
-    const left = h('div.bar-group', {}, menuBtn, this.zoomLabel);
-    this.zoomLabel.addEventListener('click', () => ed.fitView());
+    const left = h('div.bar-group', {}, menuBtn);
 
     const right = h('div.bar-group');
     this.toolsSlot = h('span.sep.edit-only');
@@ -218,7 +216,7 @@ export class App {
     dismissOnOutside(this.toolPop, [...this.toolButtons.values(), this.options], () => this.closePicker());
 
     ed.on((w) => this.onChange(w));
-    ed.view.viewport.onChange = () => { ed.view.requestRender(); this.updateZoom(); this.syncFlips(); this.minimap.place(); };
+    ed.view.viewport.onChange = () => { ed.view.requestRender(); this.syncFlips(); this.minimap.place(); };
     this.bindKeys();
     this.applyPrefs();
     this.onChange('tool');
@@ -621,12 +619,6 @@ export class App {
   private syncSliders() {
     const p = this.ed.sizeParams;
     this.sliders.forEach((s, i) => s.set(i % 2 ? p.opacity : p.size));
-  }
-
-  private updateZoom() {
-    const vp = this.ed.view.viewport;
-    const deg = Math.round((((vp.rot * 180) / Math.PI) % 360 + 360) % 360);
-    this.zoomLabel.textContent = `${Math.round(vp.zoom * 100)}%${deg ? ` · ${deg}°` : ''}${vp.flipX < 0 || vp.flipY < 0 ? ' · flipped' : ''}`;
   }
 
   toast(msg: string) {
